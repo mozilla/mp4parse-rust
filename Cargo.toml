@@ -1,0 +1,5 @@
+[package]
+
+name = "mp4parse"
+version = "0.0.1"
+authors = ["giles <giles@mozilla.com>"]
