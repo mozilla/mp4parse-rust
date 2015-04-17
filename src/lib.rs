@@ -29,6 +29,11 @@ fn read_box<T: ReadBytesExt>(src: &mut T) -> Option<Mp4Box> {
     })
 }
 
+
 #[test]
-fn it_works() {
+fn test_parse() {
+    use std::io::Cursor;
+    let test = vec!('t' as u8, 'e' as u8, 's' as u8, 't' as u8, 0, 0, 0, 8);
+    let mut stream = Cursor::new(test);
+    let parsed = read_box(&mut stream);
 }
