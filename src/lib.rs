@@ -29,6 +29,12 @@ fn read_box<T: ReadBytesExt>(src: &mut T) -> Option<Mp4Box> {
     })
 }
 
+use std::fmt;
+impl fmt::Display for Mp4Box {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} {} bytes", self.name, self.size)
+    }
+}
 
 #[test]
 fn test_parse() {
@@ -36,4 +42,5 @@ fn test_parse() {
     let test = vec!('t' as u8, 'e' as u8, 's' as u8, 't' as u8, 0, 0, 0, 8);
     let mut stream = Cursor::new(test);
     let parsed = read_box(&mut stream);
+    println!("box {}", parsed.unwrap());
 }
