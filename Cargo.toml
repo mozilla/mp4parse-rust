@@ -5,4 +5,4 @@ version = "0.0.1"
 authors = ["Ralph Giles <giles@mozilla.com>"]
 
 [dependencies]
-byteorder = "0.3.7"
+byteorder = "0.3.8"
