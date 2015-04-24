@@ -47,6 +47,8 @@ fn test_parse() {
     use std::io::Cursor;
     let test = vec!('t' as u8, 'e' as u8, 's' as u8, 't' as u8, 0, 0, 0, 8);
     let mut stream = Cursor::new(test);
-    let parsed = read_box(&mut stream);
-    println!("box {}", parsed.unwrap());
+    let parsed = read_box(&mut stream).unwrap();
+    assert!(parsed.name == 1952805748);
+    assert!(parsed.size == 8);
+    println!("box {}", parsed);
 }
