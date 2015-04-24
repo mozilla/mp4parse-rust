@@ -12,6 +12,15 @@ pub struct Mp4Box {
     size: u64,
 }
 
+/// File type box 'ftyp'.
+pub struct Mp4FileTypeBox {
+    name: u32,
+    size: u64,
+    major_brand: u32,
+    minor_version: u32,
+    compatible_brands: Vec<u32>,
+}
+
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 
@@ -26,6 +35,26 @@ pub fn read_box<T: ReadBytesExt>(src: &mut T) -> Option<Mp4Box> {
     Some(Mp4Box{
         name: name,
         size: size,
+    })
+}
+
+/// Parse an ftype box.
+pub fn read_ftype<T: ReadBytesExt>(src: &mut T) -> Option<Mp4FileTypeBox> {
+    let head = read_box(src).unwrap();
+    let major = src.read_u32::<BigEndian>().unwrap();
+    let minor = src.read_u32::<BigEndian>().unwrap();
+    let brand_count = (head.size - 8) /4;
+//    let mut brands = Vec<u32>::with_capacity(brand_count);
+    let mut brands = Vec::new();
+    for _ in 0..brand_count {
+        brands.push(src.read_u32::<BigEndian>().unwrap());
+    }
+    Some(Mp4FileTypeBox{
+        name: head.name,
+        size: head.size,
+        major_brand: major,
+        minor_version: minor,
+        compatible_brands: brands,
     })
 }
 
