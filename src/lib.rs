@@ -5,7 +5,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /// Basic ISO box structure.
-struct Mp4Box {
+pub struct Mp4Box {
     /// Four character box type
     name: u32,
     /// Size of the box in bytes
@@ -16,7 +16,7 @@ extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 
 /// Parse a box out of a data buffer.
-fn read_box<T: ReadBytesExt>(src: &mut T) -> Option<Mp4Box> {
+pub fn read_box<T: ReadBytesExt>(src: &mut T) -> Option<Mp4Box> {
     let name = src.read_u32::<BigEndian>().unwrap();
     let tmp_size = src.read_u32::<BigEndian>().unwrap();
     let size = match tmp_size {
