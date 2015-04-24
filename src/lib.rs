@@ -55,3 +55,18 @@ fn test_read_box() {
     assert_eq!(parsed.size, 8);
     println!("box {}", parsed);
 }
+
+
+#[test]
+fn test_read_box_long() {
+    use std::io::Cursor;
+    let mut test = "long".to_string().into_bytes();
+    for x in [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 16, 0].iter() {
+        test.push(*x);
+    }
+    let mut stream = Cursor::new(test);
+    let parsed = read_box(&mut stream).unwrap();
+    assert_eq!(parsed.name, 1819242087);
+    assert_eq!(parsed.size, 4096);
+    println!("box {}", parsed);
+}
