@@ -43,9 +43,12 @@ impl fmt::Display for Mp4Box {
 }
 
 #[test]
-fn test_parse() {
+fn test_read_box() {
     use std::io::Cursor;
-    let test = vec!('t' as u8, 'e' as u8, 's' as u8, 't' as u8, 0, 0, 0, 8);
+    let mut test = "test".to_string().into_bytes();
+    for x in [0, 0, 0, 8].iter() {
+        test.push(*x);
+    }
     let mut stream = Cursor::new(test);
     let parsed = read_box(&mut stream).unwrap();
     assert_eq!(parsed.name, 1952805748);
