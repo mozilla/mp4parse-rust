@@ -32,7 +32,13 @@ fn read_box<T: ReadBytesExt>(src: &mut T) -> Option<Mp4Box> {
 use std::fmt;
 impl fmt::Display for Mp4Box {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {} bytes", self.name, self.size)
+        let to_vec = |x| vec!((x >> 24 & 0xffu32) as u8,
+                              (x >> 16 & 0xffu32) as u8,
+                              (x >>  8 & 0xffu32) as u8,
+                              (x & 0xffu32) as u8);
+        let name_bytes = to_vec(self.name);
+        let name = String::from_utf8_lossy(&name_bytes);
+        write!(f, "'{}' {} bytes", name, self.size)
     }
 }
 
