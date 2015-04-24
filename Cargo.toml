@@ -1,11 +1,11 @@
 [package]
 
 name = "mp4parse"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Ralph Giles <giles@mozilla.com>"]
 
 description = "Parser for ISO base media file format (mp4)"
-license = "https://mozilla.org/MPL/2.0/"
+license = "MPL-2.0"
 
 repository = "https://notabug.org/rillian/mp4parse-rust"
 
