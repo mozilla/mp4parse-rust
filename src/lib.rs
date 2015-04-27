@@ -39,7 +39,7 @@ pub fn read_box<T: ReadBytesExt>(src: &mut T) -> Option<Mp4Box> {
 }
 
 /// Parse an ftype box.
-pub fn read_ftype<T: ReadBytesExt>(src: &mut T) -> Option<Mp4FileTypeBox> {
+pub fn read_ftyp<T: ReadBytesExt>(src: &mut T) -> Option<Mp4FileTypeBox> {
     let head = read_box(src).unwrap();
     let major = src.read_u32::<BigEndian>().unwrap();
     let minor = src.read_u32::<BigEndian>().unwrap();
@@ -96,4 +96,26 @@ fn test_read_box_long() {
     assert_eq!(parsed.name, 1819242087);
     assert_eq!(parsed.size, 4096);
     println!("box {}", parsed);
+}
+
+#[test]
+fn test_read_ftyp() {
+    use std::io::Cursor;
+    use std::io::Write;
+    let mut test: Vec<u8> = vec![0, 0, 0, 24]; // size
+    write!(&mut test, "ftyp").unwrap(); // type
+    write!(&mut test, "mp42").unwrap(); // major brand
+    test.extend(vec![0, 0, 0, 0]);      // minor version
+    write!(&mut test, "isom").unwrap(); // compatible brands...
+    write!(&mut test, "mp42").unwrap();
+    assert_eq!(test.len(), 24);
+
+    let mut stream = Cursor::new(test);
+    let parsed = read_ftyp(&mut stream).unwrap();
+    println!("box {} size {}", parsed.name, parsed.size);
+    assert_eq!(parsed.name, 1718909296);
+    assert_eq!(parsed.size, 24);
+    assert_eq!(parsed.major_brand, 1836069938);
+    assert_eq!(parsed.minor_version, 0);
+    assert_eq!(parsed.compatible_brands.len(), 2);
 }
