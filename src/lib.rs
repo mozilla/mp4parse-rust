@@ -26,8 +26,8 @@ use byteorder::{BigEndian, ReadBytesExt};
 
 /// Parse a box out of a data buffer.
 pub fn read_box<T: ReadBytesExt>(src: &mut T) -> Option<Mp4Box> {
-    let name = src.read_u32::<BigEndian>().unwrap();
     let tmp_size = src.read_u32::<BigEndian>().unwrap();
+    let name = src.read_u32::<BigEndian>().unwrap();
     let size = match tmp_size {
         1 => src.read_u64::<BigEndian>().unwrap(),
         _ => tmp_size as u64,
@@ -74,10 +74,9 @@ impl fmt::Display for Mp4Box {
 #[test]
 fn test_read_box() {
     use std::io::Cursor;
-    let mut test = "test".to_string().into_bytes();
-    for x in [0, 0, 0, 8].iter() {
-        test.push(*x);
-    }
+    use std::io::Write;
+    let mut test: Vec<u8> = vec![0, 0, 0, 8];  // minimal box length
+    write!(&mut test, "test").unwrap(); // box type
     let mut stream = Cursor::new(test);
     let parsed = read_box(&mut stream).unwrap();
     assert_eq!(parsed.name, 1952805748);
@@ -89,10 +88,10 @@ fn test_read_box() {
 #[test]
 fn test_read_box_long() {
     use std::io::Cursor;
-    let mut test = "long".to_string().into_bytes();
-    for x in [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 16, 0].iter() {
-        test.push(*x);
-    }
+    let mut test: Vec<u8> = vec![0, 0, 0, 1]; // long box extension code
+    test.extend("long".to_string().into_bytes()); // box type
+    test.extend(vec![0, 0, 0, 0, 0, 0, 16, 0]); // 64 bit size
+    // Skip generating box content.
     let mut stream = Cursor::new(test);
     let parsed = read_box(&mut stream).unwrap();
     assert_eq!(parsed.name, 1819242087);
