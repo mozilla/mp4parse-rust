@@ -43,8 +43,7 @@ pub fn read_ftype<T: ReadBytesExt>(src: &mut T) -> Option<Mp4FileTypeBox> {
     let head = read_box(src).unwrap();
     let major = src.read_u32::<BigEndian>().unwrap();
     let minor = src.read_u32::<BigEndian>().unwrap();
-    let brand_count = (head.size - 8) /4;
-//    let mut brands = Vec<u32>::with_capacity(brand_count);
+    let brand_count = (head.size - 8 - 8) /4;
     let mut brands = Vec::new();
     for _ in 0..brand_count {
         brands.push(src.read_u32::<BigEndian>().unwrap());
