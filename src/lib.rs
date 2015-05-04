@@ -32,6 +32,10 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<Mp4BoxHeader> {
         1 => src.read_u64::<BigEndian>().unwrap(),
         _ => tmp_size as u64,
     };
+    assert!(size >= 8);
+    if tmp_size == 1 {
+        assert!(size >= 16);
+    }
     Some(Mp4BoxHeader{
         name: name,
         size: size,
