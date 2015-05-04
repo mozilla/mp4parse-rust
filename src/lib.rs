@@ -70,6 +70,21 @@ impl fmt::Display for Mp4Box {
     }
 }
 
+impl fmt::Display for Mp4FileTypeBox {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let to_vec = |x| vec!((x >> 24 & 0xffu32) as u8,
+                              (x >> 16 & 0xffu32) as u8,
+                              (x >>  8 & 0xffu32) as u8,
+                              (x & 0xffu32) as u8);
+        let name_bytes = to_vec(self.name);
+        let name = String::from_utf8_lossy(&name_bytes);
+        let brand_bytes = to_vec(self.major_brand);
+        let brand = String::from_utf8_lossy(&brand_bytes);
+        write!(f, "'{}' {} bytes '{}' v{}", name, self.size,
+            brand, self.minor_version)
+    }
+}
+
 #[test]
 fn test_read_box() {
     use std::io::Cursor;
@@ -118,4 +133,5 @@ fn test_read_ftyp() {
     assert_eq!(parsed.major_brand, 1836069938);
     assert_eq!(parsed.minor_version, 0);
     assert_eq!(parsed.compatible_brands.len(), 2);
+    println!("box {}", parsed);
 }
