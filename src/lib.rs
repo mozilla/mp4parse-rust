@@ -57,14 +57,18 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T) -> Option<Mp4FileTypeBox> {
     })
 }
 
+/// Split a u32 box type into a [u8].
+fn u32_to_vec(x: u32) -> Vec<u8> {
+    vec!((x >> 24 & 0xffu32) as u8,
+         (x >> 16 & 0xffu32) as u8,
+         (x >>  8 & 0xffu32) as u8,
+         (x & 0xffu32) as u8)
+}
+
 use std::fmt;
 impl fmt::Display for Mp4Box {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let to_vec = |x| vec!((x >> 24 & 0xffu32) as u8,
-                              (x >> 16 & 0xffu32) as u8,
-                              (x >>  8 & 0xffu32) as u8,
-                              (x & 0xffu32) as u8);
-        let name_bytes = to_vec(self.name);
+        let name_bytes = u32_to_vec(self.name);
         let name = String::from_utf8_lossy(&name_bytes);
         write!(f, "'{}' {} bytes", name, self.size)
     }
@@ -72,13 +76,9 @@ impl fmt::Display for Mp4Box {
 
 impl fmt::Display for Mp4FileTypeBox {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let to_vec = |x| vec!((x >> 24 & 0xffu32) as u8,
-                              (x >> 16 & 0xffu32) as u8,
-                              (x >>  8 & 0xffu32) as u8,
-                              (x & 0xffu32) as u8);
-        let name_bytes = to_vec(self.name);
+        let name_bytes = u32_to_vec(self.name);
         let name = String::from_utf8_lossy(&name_bytes);
-        let brand_bytes = to_vec(self.major_brand);
+        let brand_bytes = u32_to_vec(self.major_brand);
         let brand = String::from_utf8_lossy(&brand_bytes);
         write!(f, "'{}' {} bytes '{}' v{}", name, self.size,
             brand, self.minor_version)
