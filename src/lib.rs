@@ -127,7 +127,6 @@ fn test_read_ftyp() {
 
     let mut stream = Cursor::new(test);
     let parsed = read_ftyp(&mut stream).unwrap();
-    println!("box {} size {}", parsed.name, parsed.size);
     assert_eq!(parsed.name, 1718909296);
     assert_eq!(parsed.size, 24);
     assert_eq!(parsed.major_brand, 1836069938);
