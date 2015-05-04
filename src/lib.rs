@@ -5,7 +5,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /// Basic ISO box structure.
-pub struct Mp4Box {
+pub struct Mp4BoxHeader {
     /// Four character box type
     name: u32,
     /// Size of the box in bytes
@@ -25,14 +25,14 @@ extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 
 /// Parse a box out of a data buffer.
-pub fn read_box<T: ReadBytesExt>(src: &mut T) -> Option<Mp4Box> {
+pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<Mp4BoxHeader> {
     let tmp_size = src.read_u32::<BigEndian>().unwrap();
     let name = src.read_u32::<BigEndian>().unwrap();
     let size = match tmp_size {
         1 => src.read_u64::<BigEndian>().unwrap(),
         _ => tmp_size as u64,
     };
-    Some(Mp4Box{
+    Some(Mp4BoxHeader{
         name: name,
         size: size,
     })
@@ -40,7 +40,7 @@ pub fn read_box<T: ReadBytesExt>(src: &mut T) -> Option<Mp4Box> {
 
 /// Parse an ftype box.
 pub fn read_ftyp<T: ReadBytesExt>(src: &mut T) -> Option<Mp4FileTypeBox> {
-    let head = read_box(src).unwrap();
+    let head = read_box_header(src).unwrap();
     let major = src.read_u32::<BigEndian>().unwrap();
     let minor = src.read_u32::<BigEndian>().unwrap();
     let brand_count = (head.size - 8 - 8) /4;
@@ -66,7 +66,7 @@ fn u32_to_vec(x: u32) -> Vec<u8> {
 }
 
 use std::fmt;
-impl fmt::Display for Mp4Box {
+impl fmt::Display for Mp4BoxHeader {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let name_bytes = u32_to_vec(self.name);
         let name = String::from_utf8_lossy(&name_bytes);
@@ -86,13 +86,13 @@ impl fmt::Display for Mp4FileTypeBox {
 }
 
 #[test]
-fn test_read_box() {
+fn test_read_box_header() {
     use std::io::Cursor;
     use std::io::Write;
     let mut test: Vec<u8> = vec![0, 0, 0, 8];  // minimal box length
     write!(&mut test, "test").unwrap(); // box type
     let mut stream = Cursor::new(test);
-    let parsed = read_box(&mut stream).unwrap();
+    let parsed = read_box_header(&mut stream).unwrap();
     assert_eq!(parsed.name, 1952805748);
     assert_eq!(parsed.size, 8);
     println!("box {}", parsed);
@@ -100,14 +100,14 @@ fn test_read_box() {
 
 
 #[test]
-fn test_read_box_long() {
+fn test_read_box_header_long() {
     use std::io::Cursor;
     let mut test: Vec<u8> = vec![0, 0, 0, 1]; // long box extension code
     test.extend("long".to_string().into_bytes()); // box type
     test.extend(vec![0, 0, 0, 0, 0, 0, 16, 0]); // 64 bit size
     // Skip generating box content.
     let mut stream = Cursor::new(test);
-    let parsed = read_box(&mut stream).unwrap();
+    let parsed = read_box_header(&mut stream).unwrap();
     assert_eq!(parsed.name, 1819242087);
     assert_eq!(parsed.size, 4096);
     println!("box {}", parsed);
