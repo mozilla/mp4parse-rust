@@ -7,9 +7,9 @@
 /// Basic ISO box structure.
 pub struct Mp4BoxHeader {
     /// Four character box type
-    name: u32,
+pub name: u32,
     /// Size of the box in bytes
-    size: u64,
+pub size: u64,
 }
 
 /// File type box 'ftyp'.
