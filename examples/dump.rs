@@ -1,5 +1,6 @@
 extern crate mp4parse;
 
+use std::env;
 use std::fs::File;
 use std::io::{Seek,SeekFrom};
 
@@ -13,6 +14,8 @@ fn dump_file(filename: String) {
 }
 
 fn main() {
-    let filename = "test.mp4".to_string();
-    dump_file(filename);
+    for filename in env::args().skip(1) {
+        println!("-- dump of '{}' --", filename);
+        dump_file(filename);
+    }
 }
