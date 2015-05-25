@@ -2,13 +2,12 @@ extern crate mp4parse;
 
 use std::env;
 use std::fs::File;
-use std::io::{Seek,SeekFrom};
 
 fn dump_file(filename: String) {
     let mut f = File::open(filename).unwrap();
     let h = mp4parse::read_box_header(&mut f).unwrap();
     println!("{}", h);
-    f.seek(SeekFrom::Current((h.size - h.offset) as i64)).unwrap();
+    mp4parse::skip_box_content(&mut f, &h).unwrap();
     let h = mp4parse::read_box_header(&mut f).unwrap();
     println!("{}", h);
 }

@@ -25,6 +25,7 @@ pub struct Mp4FileTypeBox {
 
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
+use std::io::{Result, Seek, SeekFrom};
 
 /// Parse a box out of a data buffer.
 pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<Mp4BoxHeader> {
@@ -48,6 +49,14 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<Mp4BoxHeader> {
         size: size,
         offset: offset,
     })
+}
+
+/// Skip over the contents of a box.
+pub fn skip_box_content<T: ReadBytesExt + std::io::Seek>
+  (src: &mut T, header: &Mp4BoxHeader)
+  -> std::io::Result<u64>
+{
+    src.seek(SeekFrom::Current((header.size - header.offset) as i64))
 }
 
 /// Parse an ftype box.
