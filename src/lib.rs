@@ -10,6 +10,8 @@ pub struct Mp4BoxHeader {
 pub name: u32,
     /// Size of the box in bytes
 pub size: u64,
+    /// Offset to the start of the contained data (or header size).
+pub offset: u64,
 }
 
 /// File type box 'ftyp'.
@@ -36,9 +38,15 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<Mp4BoxHeader> {
     if tmp_size == 1 {
         assert!(size >= 16);
     }
+    let offset = match tmp_size {
+        1 => 4 + 4 + 8,
+        _ => 4 + 4,
+    };
+    assert!(offset <= size);
     Some(Mp4BoxHeader{
         name: name,
         size: size,
+        offset: offset,
     })
 }
 
