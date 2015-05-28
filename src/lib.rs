@@ -78,29 +78,29 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T) -> Option<Mp4FileTypeBox> {
     })
 }
 
-/// Split a u32 box type into a [u8].
-fn u32_to_vec(x: u32) -> Vec<u8> {
-    vec!((x >> 24 & 0xffu32) as u8,
-         (x >> 16 & 0xffu32) as u8,
-         (x >>  8 & 0xffu32) as u8,
-         (x & 0xffu32) as u8)
+/// Convert the 4-character Mp4Box type to a string.
+fn mp4_box_to_string(name: u32) -> String {
+    let u32_to_vec = |u| {
+        vec!((u >> 24 & 0xffu32) as u8,
+             (u >> 16 & 0xffu32) as u8,
+             (u >>  8 & 0xffu32) as u8,
+             (u & 0xffu32) as u8)
+    };
+    let name_bytes = u32_to_vec(name);
+    String::from_utf8_lossy(&name_bytes).into_owned()
 }
 
 use std::fmt;
 impl fmt::Display for Mp4BoxHeader {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let name_bytes = u32_to_vec(self.name);
-        let name = String::from_utf8_lossy(&name_bytes);
-        write!(f, "'{}' {} bytes", name, self.size)
+        write!(f, "'{}' {} bytes", mp4_box_to_string(self.name), self.size)
     }
 }
 
 impl fmt::Display for Mp4FileTypeBox {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let name_bytes = u32_to_vec(self.name);
-        let name = String::from_utf8_lossy(&name_bytes);
-        let brand_bytes = u32_to_vec(self.major_brand);
-        let brand = String::from_utf8_lossy(&brand_bytes);
+        let name = mp4_box_to_string(self.name);
+        let brand = mp4_box_to_string(self.major_brand);
         write!(f, "'{}' {} bytes '{}' v{}", name, self.size,
             brand, self.minor_version)
     }
