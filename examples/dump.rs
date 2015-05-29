@@ -2,14 +2,22 @@ extern crate mp4parse;
 
 use std::env;
 use std::fs::File;
+use std::thread;
 
 fn dump_file(filename: String) {
     let mut f = File::open(filename).unwrap();
-    let h = mp4parse::read_box_header(&mut f).unwrap();
-    println!("{}", h);
-    mp4parse::skip_box_content(&mut f, &h).unwrap();
-    let h = mp4parse::read_box_header(&mut f).unwrap();
-    println!("{}", h);
+    let task = thread::spawn(move || {
+        loop {
+            match mp4parse::read_box_header(&mut f) {
+                Some(h) => {
+                    println!("{}", h);
+                    mp4parse::skip_box_content(&mut f, &h).unwrap();
+                },
+                _ => break,
+            }
+        }
+    });
+    task.join();
 }
 
 fn main() {
