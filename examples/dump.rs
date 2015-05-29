@@ -5,7 +5,7 @@ use std::fs::File;
 use std::thread;
 
 fn dump_file(filename: String) {
-    let mut f = File::open(filename).unwrap();
+    let mut f = File::open(&filename).unwrap();
     let task = thread::spawn(move || {
         loop {
             match mp4parse::read_box_header(&mut f) {
@@ -17,7 +17,11 @@ fn dump_file(filename: String) {
             }
         }
     });
-    task.join();
+    // Catch any panics in the thread and return.
+    match task.join() {
+        Ok(_) => return,
+        Err(e) => println!("Error parsing '{}': {:?}", filename, e),
+    };
 }
 
 fn main() {
