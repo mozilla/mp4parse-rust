@@ -52,7 +52,7 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<Mp4BoxHeader> {
 }
 
 /// Skip over the contents of a box.
-pub fn skip_box_content<T: ReadBytesExt + std::io::Seek>
+pub fn skip_box_content<T: ReadBytesExt + Seek>
   (src: &mut T, header: &Mp4BoxHeader)
   -> std::io::Result<u64>
 {
