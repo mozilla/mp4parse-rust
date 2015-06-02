@@ -5,7 +5,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /// Basic ISO box structure.
-pub struct Mp4BoxHeader {
+pub struct BoxHeader {
     /// Four character box type
 pub name: u32,
     /// Size of the box in bytes
@@ -15,7 +15,7 @@ pub offset: u64,
 }
 
 /// File type box 'ftyp'.
-pub struct Mp4FileTypeBox {
+pub struct FileTypeBox {
     name: u32,
     size: u64,
     major_brand: u32,
@@ -28,7 +28,7 @@ use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Result, Seek, SeekFrom};
 
 /// Parse a box out of a data buffer.
-pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<Mp4BoxHeader> {
+pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<BoxHeader> {
     let tmp_size = src.read_u32::<BigEndian>().unwrap();
     let name = src.read_u32::<BigEndian>().unwrap();
     let size = match tmp_size {
@@ -44,7 +44,7 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<Mp4BoxHeader> {
         _ => 4 + 4,
     };
     assert!(offset <= size);
-    Some(Mp4BoxHeader{
+    Some(BoxHeader{
         name: name,
         size: size,
         offset: offset,
@@ -53,14 +53,14 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<Mp4BoxHeader> {
 
 /// Skip over the contents of a box.
 pub fn skip_box_content<T: ReadBytesExt + Seek>
-  (src: &mut T, header: &Mp4BoxHeader)
+  (src: &mut T, header: &BoxHeader)
   -> std::io::Result<u64>
 {
     src.seek(SeekFrom::Current((header.size - header.offset) as i64))
 }
 
 /// Parse an ftype box.
-pub fn read_ftyp<T: ReadBytesExt>(src: &mut T) -> Option<Mp4FileTypeBox> {
+pub fn read_ftyp<T: ReadBytesExt>(src: &mut T) -> Option<FileTypeBox> {
     let head = read_box_header(src).unwrap();
     let major = src.read_u32::<BigEndian>().unwrap();
     let minor = src.read_u32::<BigEndian>().unwrap();
@@ -69,7 +69,7 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T) -> Option<Mp4FileTypeBox> {
     for _ in 0..brand_count {
         brands.push(src.read_u32::<BigEndian>().unwrap());
     }
-    Some(Mp4FileTypeBox{
+    Some(FileTypeBox{
         name: head.name,
         size: head.size,
         major_brand: major,
@@ -78,7 +78,7 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T) -> Option<Mp4FileTypeBox> {
     })
 }
 
-/// Convert the 4-character Mp4Box type to a string.
+/// Convert the 4-character iso box type to a string.
 fn mp4_box_to_string(name: u32) -> String {
     let u32_to_vec = |u| {
         vec!((u >> 24 & 0xffu32) as u8,
@@ -91,13 +91,13 @@ fn mp4_box_to_string(name: u32) -> String {
 }
 
 use std::fmt;
-impl fmt::Display for Mp4BoxHeader {
+impl fmt::Display for BoxHeader {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "'{}' {} bytes", mp4_box_to_string(self.name), self.size)
     }
 }
 
-impl fmt::Display for Mp4FileTypeBox {
+impl fmt::Display for FileTypeBox {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let name = mp4_box_to_string(self.name);
         let brand = mp4_box_to_string(self.major_brand);
