@@ -79,7 +79,7 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T) -> Option<FileTypeBox> {
 }
 
 /// Convert the iso box type or other 4-character value to a string.
-fn fourcc_to_string(name: u32) -> String {
+pub fn fourcc_to_string(name: u32) -> String {
     let u32_to_vec = |u| {
         vec!((u >> 24 & 0xffu32) as u8,
              (u >> 16 & 0xffu32) as u8,
