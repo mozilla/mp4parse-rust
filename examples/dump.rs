@@ -10,22 +10,22 @@ fn limit<'a>(f: &'a mut File, h: &mp4parse::BoxHeader) -> Take<&'a mut File> {
 }
 
 fn read_box(f: &mut File) {
-    match mp4parse::read_box_header(f) {
-        Some(h) => {
-            match &(mp4parse::fourcc_to_string(h.name))[..] {
-                "ftyp" => {
-                    let mut content = limit(f, &h);
-                    let ftyp = mp4parse::read_ftyp(&mut content, &h).unwrap();
+    mp4parse::read_box_header(f).and_then(|h| {
+        match &(mp4parse::fourcc_to_string(h.name))[..] {
+            "ftyp" => {
+                let mut content = limit(f, &h);
+                mp4parse::read_ftyp(&mut content, &h).and_then(|ftyp| {
                     println!("{}", ftyp);
-                },
-                _ => {
-                    println!("{}", h);
-                    mp4parse::skip_box_content(f, &h).unwrap();
-                },
-            }
-        },
-        None => (),
-    }
+                    Some(ftyp)
+                })
+            },
+            _ => {
+                println!("{}", h);
+                mp4parse::skip_box_content(f, &h);
+                None
+            },
+        }
+    });
 }
 
 fn dump_file(filename: String) {
