@@ -2,14 +2,15 @@ extern crate mp4parse;
 
 use std::env;
 use std::fs::File;
-use std::io::{Read, Take};
+use std::io::{Read, Seek, Take};
+use std::io::Cursor;
 use std::thread;
 
-fn limit<'a>(f: &'a mut File, h: &mp4parse::BoxHeader) -> Take<&'a mut File> {
+fn limit<'a, T: Read>(f: &'a mut T, h: &mp4parse::BoxHeader) -> Take<&'a mut T> {
     f.take(h.size - h.offset)
 }
 
-fn read_box(f: &mut File) {
+fn read_box<T: Read + Seek>(f: &mut T) {
     mp4parse::read_box_header(f).and_then(|h| {
         match &(mp4parse::fourcc_to_string(h.name))[..] {
             "ftyp" => {
@@ -19,9 +20,20 @@ fn read_box(f: &mut File) {
                     Some(ftyp)
                 })
             },
+            "moov" => {
+                println!("{} -- recursing", h);
+                let buf: Vec<u8> = limit(f, &h)
+                    .bytes()
+                    .map(|u| u.unwrap())
+                    .collect();
+                let mut content = Cursor::new(buf);
+                read_box(&mut content);
+                println!("{} -- end", h);
+                None
+            },
             _ => {
                 println!("{}", h);
-                mp4parse::skip_box_content(f, &h);
+                mp4parse::skip_box_content(f, &h).unwrap();
                 None
             },
         }
