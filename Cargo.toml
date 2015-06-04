@@ -1,7 +1,7 @@
 [package]
 
 name = "mp4parse"
-version = "0.0.5"
+version = "0.0.6"
 authors = ["Ralph Giles <giles@mozilla.com>"]
 
 description = "Parser for ISO base media file format (mp4)"
