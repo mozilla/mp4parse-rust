@@ -60,8 +60,8 @@ pub fn skip_box_content<T: ReadBytesExt + Seek>
 }
 
 /// Parse an ftype box.
-pub fn read_ftyp<T: ReadBytesExt>(src: &mut T) -> Option<FileTypeBox> {
-    let head = read_box_header(src).unwrap();
+pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
+  -> Option<FileTypeBox> {
     let major = src.read_u32::<BigEndian>().unwrap();
     let minor = src.read_u32::<BigEndian>().unwrap();
     let brand_count = (head.size - 8 - 8) /4;
@@ -147,7 +147,8 @@ fn test_read_ftyp() {
     assert_eq!(test.len(), 24);
 
     let mut stream = Cursor::new(test);
-    let parsed = read_ftyp(&mut stream).unwrap();
+    let header = read_box_header(&mut stream).unwrap();
+    let parsed = read_ftyp(&mut stream, &header).unwrap();
     assert_eq!(parsed.name, 1718909296);
     assert_eq!(parsed.size, 24);
     assert_eq!(parsed.major_brand, 1836069938);
