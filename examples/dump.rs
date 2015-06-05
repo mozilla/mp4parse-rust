@@ -34,8 +34,9 @@ fn read_box<T: Read + Seek>(f: &mut T) {
                 println!("  {}", mvhd);
             },
             _ => {
+                // Skip the contents of unknown chunks.
                 println!("{}", h);
-                mp4parse::skip_box_content(f, &h);
+                mp4parse::skip_box_content(f, &h).unwrap();
             },
         };
         Some(()) // and_then needs a Option.
