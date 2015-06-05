@@ -15,10 +15,8 @@ fn read_box<T: Read + Seek>(f: &mut T) {
         match &(mp4parse::fourcc_to_string(h.name))[..] {
             "ftyp" => {
                 let mut content = limit(f, &h);
-                mp4parse::read_ftyp(&mut content, &h).and_then(|ftyp| {
-                    println!("{}", ftyp);
-                    Some(ftyp)
-                })
+                let ftyp = mp4parse::read_ftyp(&mut content, &h).unwrap();
+                println!("{}", ftyp);
             },
             "moov" => {
                 println!("{} -- recursing", h);
@@ -29,14 +27,18 @@ fn read_box<T: Read + Seek>(f: &mut T) {
                 let mut content = Cursor::new(buf);
                 read_box(&mut content);
                 println!("{} -- end", h);
-                None
+            },
+            "mvhd" => {
+                let mut content = limit(f, &h);
+                let mvhd = mp4parse::read_mvhd(&mut content, &h).unwrap();
+                println!("  {}", mvhd);
             },
             _ => {
                 println!("{}", h);
-                mp4parse::skip_box_content(f, &h).unwrap();
-                None
+                mp4parse::skip_box_content(f, &h);
             },
-        }
+        };
+        Some(()) // and_then needs a Option.
     });
 }
 
