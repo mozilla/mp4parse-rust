@@ -23,6 +23,15 @@ pub struct FileTypeBox {
     compatible_brands: Vec<u32>,
 }
 
+/// Movie header box 'mvhd'.
+pub struct MovieHeaderBox {
+    pub name: u32,
+    pub size: u64,
+    pub timescale: u32,
+    pub duration: u64,
+    // Ignore other fields.
+}
+
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Result, Seek, SeekFrom};
@@ -49,6 +58,17 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<BoxHeader> {
         size: size,
         offset: offset,
     })
+}
+
+/// Parse the extra header fields for a full box.
+fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> (u8, u32) {
+    let version = src.read_u8().unwrap();
+    let flags_a = src.read_u8().unwrap();
+    let flags_b = src.read_u8().unwrap();
+    let flags_c = src.read_u8().unwrap();
+    (version, (flags_a as u32) << 16 |
+              (flags_b as u32) <<  8 |
+              (flags_c as u32))
 }
 
 /// Skip over the contents of a box.
@@ -78,6 +98,40 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
     })
 }
 
+/// Parse an mvhd box.
+pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
+  -> Option<MovieHeaderBox> {
+    let (version, _) = read_fullbox_extra(src);
+    match version {
+        1 => {
+            // 64 bit creation and modification times.
+            let mut skip: Vec<u8> = vec![0; 16];
+            let r = src.read(&mut skip).unwrap();
+            assert!(r == skip.len());
+        },
+        0 => {
+            // 32 bit creation and modification times.
+            // 64 bit creation and modification times.
+            let mut skip: Vec<u8> = vec![0; 8];
+            let r = src.read(&mut skip).unwrap();
+            assert!(r == skip.len());
+        },
+        _ => panic!("invalid mhdr version"),
+    }
+    let timescale = src.read_u32::<BigEndian>().unwrap();
+    let duration = match version {
+        1 => src.read_u64::<BigEndian>().unwrap(),
+        0 => src.read_u32::<BigEndian>().unwrap() as u64,
+        _ => panic!("invalid mhdr version"),
+    };
+    Some(MovieHeaderBox {
+        name: head.name,
+        size: head.size,
+        timescale: timescale,
+        duration: duration,
+    })
+}
+
 /// Convert the iso box type or other 4-character value to a string.
 pub fn fourcc_to_string(name: u32) -> String {
     let u32_to_vec = |u| {
@@ -103,6 +157,14 @@ impl fmt::Display for FileTypeBox {
         let brand = fourcc_to_string(self.major_brand);
         write!(f, "'{}' {} bytes '{}' v{}", name, self.size,
             brand, self.minor_version)
+    }
+}
+
+impl fmt::Display for MovieHeaderBox {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let name = fourcc_to_string(self.name);
+        write!(f, "'{}' {} bytes duration {}s", name, self.size,
+            (self.duration as f64)/(self.timescale as f64))
     }
 }
 
