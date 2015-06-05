@@ -38,6 +38,11 @@ fn read_box<T: Read + Seek>(f: &mut T) {
                 println!("  {}", mvhd);
             },
             "trak" => recurse(f, &h),
+            "tkhd" => {
+                let mut content = limit(f, &h);
+                let tkhd = mp4parse::read_tkhd(&mut content, &h).unwrap();
+                println!("  {}", tkhd);
+            },
             _ => {
                 // Skip the contents of unknown chunks.
                 println!("{}", h);
