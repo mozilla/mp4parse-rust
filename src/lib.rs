@@ -124,6 +124,10 @@ pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
         0 => src.read_u32::<BigEndian>().unwrap() as u64,
         _ => panic!("invalid mhdr version"),
     };
+    // Skip remaining fields.
+    let mut skip: Vec<u8> = vec![0; 80];
+    let r = src.read(&mut skip).unwrap();
+    assert!(r == skip.len());
     Some(MovieHeaderBox {
         name: head.name,
         size: head.size,
