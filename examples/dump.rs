@@ -10,6 +10,19 @@ fn limit<'a, T: Read>(f: &'a mut T, h: &mp4parse::BoxHeader) -> Take<&'a mut T> 
     f.take(h.size - h.offset)
 }
 
+fn recurse<T: Read>(f: &mut T, h: &mp4parse::BoxHeader) {
+    println!("{} -- recursing", h);
+    let buf: Vec<u8> = limit(f, &h)
+        .bytes()
+        .map(|u| u.unwrap())
+        .collect();
+    let mut content = Cursor::new(buf);
+    loop {
+        read_box(&mut content);
+    }
+    println!("{} -- end", h);
+}
+
 fn read_box<T: Read + Seek>(f: &mut T) {
     mp4parse::read_box_header(f).and_then(|h| {
         match &(mp4parse::fourcc_to_string(h.name))[..] {
@@ -18,21 +31,13 @@ fn read_box<T: Read + Seek>(f: &mut T) {
                 let ftyp = mp4parse::read_ftyp(&mut content, &h).unwrap();
                 println!("{}", ftyp);
             },
-            "moov" => {
-                println!("{} -- recursing", h);
-                let buf: Vec<u8> = limit(f, &h)
-                    .bytes()
-                    .map(|u| u.unwrap())
-                    .collect();
-                let mut content = Cursor::new(buf);
-                read_box(&mut content);
-                println!("{} -- end", h);
-            },
+            "moov" => recurse(f, &h),
             "mvhd" => {
                 let mut content = limit(f, &h);
                 let mvhd = mp4parse::read_mvhd(&mut content, &h).unwrap();
                 println!("  {}", mvhd);
             },
+            "trak" => recurse(f, &h),
             _ => {
                 // Skip the contents of unknown chunks.
                 println!("{}", h);
