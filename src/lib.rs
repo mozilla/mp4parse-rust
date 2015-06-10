@@ -43,7 +43,8 @@ pub struct TrackHeaderBox {
 
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
-use std::io::{Result, Seek, SeekFrom};
+use std::io::{Read, Result, Seek, SeekFrom, Take};
+use std::io::Cursor;
 
 /// Parse a box out of a data buffer.
 pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<BoxHeader> {
@@ -87,6 +88,64 @@ pub fn skip_box_content<T: ReadBytesExt + Seek>
 {
     src.seek(SeekFrom::Current((header.size - header.offset) as i64))
 }
+
+/// Helper to construct a Take over the contents of a box.
+fn limit<'a, T: Read>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
+    f.take(h.size - h.offset)
+}
+
+/// Helper to construct a Cursor over the contents of a box.
+fn recurse<T: Read>(f: &mut T, h: &BoxHeader) {
+    println!("{} -- recursing", h);
+    // FIXME: I couldn't figure out how to do this without copying.
+    // We use Seek on the Read we return in skip_box_content, but
+    // that trait isn't implemented for a Take like our limit()
+    // returns. Slurping the buffer and wrapping it in a Cursor
+    // functions as a work around.
+    let buf: Vec<u8> = limit(f, &h)
+        .bytes()
+        .map(|u| u.unwrap())
+        .collect();
+    let mut content = Cursor::new(buf);
+    loop {
+        read_box(&mut content);
+    }
+    println!("{} -- end", h);
+}
+
+/// Read the contents of a box, including sub boxes.
+/// Right now it just prints the box value rather than
+/// returning anything.
+pub fn read_box<T: Read + Seek>(f: &mut T) {
+    read_box_header(f).and_then(|h| {
+        match &(fourcc_to_string(h.name))[..] {
+            "ftyp" => {
+                let mut content = limit(f, &h);
+                let ftyp = read_ftyp(&mut content, &h).unwrap();
+                println!("{}", ftyp);
+            },
+            "moov" => recurse(f, &h),
+            "mvhd" => {
+                let mut content = limit(f, &h);
+                let mvhd = read_mvhd(&mut content, &h).unwrap();
+                println!("  {}", mvhd);
+            },
+            "trak" => recurse(f, &h),
+            "tkhd" => {
+                let mut content = limit(f, &h);
+                let tkhd = read_tkhd(&mut content, &h).unwrap();
+                println!("  {}", tkhd);
+            },
+            _ => {
+                // Skip the contents of unknown chunks.
+                println!("{}", h);
+                skip_box_content(f, &h).unwrap();
+            },
+        };
+        Some(()) // and_then needs an Option to return.
+    });
+}
+
 
 /// Parse an ftype box.
 pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
