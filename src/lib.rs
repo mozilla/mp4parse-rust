@@ -257,7 +257,7 @@ pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
 }
 
 /// Convert the iso box type or other 4-character value to a string.
-pub fn fourcc_to_string(name: u32) -> String {
+fn fourcc_to_string(name: u32) -> String {
     let u32_to_vec = |u| {
         vec!((u >> 24 & 0xffu32) as u8,
              (u >> 16 & 0xffu32) as u8,
