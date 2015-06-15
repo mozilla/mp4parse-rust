@@ -146,6 +146,35 @@ pub fn read_box<T: Read + Seek>(f: &mut T) {
     });
 }
 
+/// Entry point for C language callers.
+/// Take a ptr, size and return a cursor over it.
+fn cursor_from_cbuf(buffer: *mut u8, size: usize) -> Cursor<Vec<u8>> {
+    unsafe {
+        let b = Vec::from_raw_parts(buffer, size, size);
+        Cursor::new(b)
+    }
+}
+
+/// Take a buffer and call read_box() on it.
+#[no_mangle]
+pub extern fn read_box_from_buffer(buffer: *mut u8, size: usize) -> bool {
+    use std::thread;
+
+    // Validate arguments from C.
+    if buffer.is_null() || size < 8 {
+        return false;
+    }
+
+    // Parse in a subthread.
+    let mut c = cursor_from_cbuf(buffer, size);
+    let task = thread::spawn(move || {
+        read_box(&mut c);
+        drop(c);
+    });
+    // Catch any panics.
+    task.join().is_ok()
+}
+
 
 /// Parse an ftype box.
 pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
