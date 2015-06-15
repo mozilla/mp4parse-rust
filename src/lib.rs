@@ -321,12 +321,17 @@ impl fmt::Display for MovieHeaderBox {
     }
 }
 
+use std::u16;
 impl fmt::Display for TrackHeaderBox {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let name = fourcc_to_string(self.name);
-        write!(f, "'{}' {} bytes id {} {}x{}",
-            name, self.size, self.track_id,
-            self.width, self.height)
+        // Dimensions are 16.16 fixed-point.
+        let base = u16::MAX as f64 + 1.0;
+        let width = (self.width as f64) / base;
+        let height = (self.height as f64) / base;
+        write!(f, "'{}' {} bytes duration {} id {} {}x{}",
+            name, self.size, self.duration, self.track_id,
+            width, height)
     }
 }
 
