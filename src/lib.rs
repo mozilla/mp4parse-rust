@@ -149,7 +149,8 @@ pub fn read_box<T: Read + Seek>(f: &mut T) -> Result<()> {
 /// Entry point for C language callers.
 /// Take a buffer and call read_box() on it.
 #[no_mangle]
-pub unsafe extern fn read_box_from_buffer(buffer: *const u8, size: usize) -> bool {
+pub unsafe extern fn read_box_from_buffer(buffer: *const u8, size: usize)
+  -> bool {
     use std::slice;
     use std::thread;
 
