@@ -159,6 +159,7 @@ fn cursor_from_cbuf(buffer: *mut u8, size: usize) -> Cursor<Vec<u8>> {
 #[no_mangle]
 pub extern fn read_box_from_buffer(buffer: *mut u8, size: usize) -> bool {
     use std::thread;
+    use std::mem;
 
     // Validate arguments from C.
     if buffer.is_null() || size < 8 {
@@ -169,7 +170,7 @@ pub extern fn read_box_from_buffer(buffer: *mut u8, size: usize) -> bool {
     let mut c = cursor_from_cbuf(buffer, size);
     let task = thread::spawn(move || {
         read_box(&mut c).unwrap();
-        drop(c);
+        mem::forget(c);
     });
     // Catch any panics.
     task.join().is_ok()
