@@ -108,7 +108,13 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader) {
         .collect();
     let mut content = Cursor::new(buf);
     loop {
-        read_box(&mut content).unwrap();
+        match read_box(&mut content) {
+            Ok(_) => {},
+            Err(e) => {
+                println!("Error '{:?}' reading box", e.kind());
+                break;
+            },
+        }
     }
     println!("{} -- end", h);
 }
