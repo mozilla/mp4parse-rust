@@ -157,7 +157,7 @@ fn cursor_from_cbuf(buffer: *mut u8, size: usize) -> Cursor<Vec<u8>> {
 
 /// Take a buffer and call read_box() on it.
 #[no_mangle]
-pub extern fn read_box_from_buffer(buffer: *mut u8, size: usize) -> bool {
+pub unsafe extern fn read_box_from_buffer(buffer: *mut u8, size: usize) -> bool {
     use std::thread;
     use std::mem;
 
