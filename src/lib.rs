@@ -148,9 +148,10 @@ pub fn read_box<T: Read + Seek>(f: &mut T) -> Result<()> {
 
 /// Entry point for C language callers.
 /// Take a ptr, size and return a cursor over it.
-fn cursor_from_cbuf(buffer: *mut u8, size: usize) -> Cursor<Vec<u8>> {
+fn cursor_from_cbuf<'a>(buffer: *const u8, size: usize) -> Cursor<&'a[u8]> {
+    use std::slice;
     unsafe {
-        let b = Vec::from_raw_parts(buffer, size, size);
+        let b = slice::from_raw_parts(buffer, size);
         Cursor::new(b)
     }
 }
@@ -159,7 +160,6 @@ fn cursor_from_cbuf(buffer: *mut u8, size: usize) -> Cursor<Vec<u8>> {
 #[no_mangle]
 pub unsafe extern fn read_box_from_buffer(buffer: *mut u8, size: usize) -> bool {
     use std::thread;
-    use std::mem;
 
     // Validate arguments from C.
     if buffer.is_null() || size < 8 {
@@ -170,7 +170,6 @@ pub unsafe extern fn read_box_from_buffer(buffer: *mut u8, size: usize) -> bool 
     let mut c = cursor_from_cbuf(buffer, size);
     let task = thread::spawn(move || {
         read_box(&mut c).unwrap();
-        mem::forget(c);
     });
     // Catch any panics.
     task.join().is_ok()
