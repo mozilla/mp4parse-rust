@@ -47,11 +47,11 @@ use std::io::{Read, Result, Seek, SeekFrom, Take};
 use std::io::Cursor;
 
 /// Parse a box out of a data buffer.
-pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<BoxHeader> {
-    let tmp_size = src.read_u32::<BigEndian>().unwrap();
-    let name = src.read_u32::<BigEndian>().unwrap();
+pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
+    let tmp_size = try!(src.read_u32::<BigEndian>());
+    let name = try!(src.read_u32::<BigEndian>());
     let size = match tmp_size {
-        1 => src.read_u64::<BigEndian>().unwrap(),
+        1 => try!(src.read_u64::<BigEndian>()),
         _ => tmp_size as u64,
     };
     assert!(size >= 8);
@@ -63,10 +63,10 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Option<BoxHeader> {
         _ => 4 + 4,
     };
     assert!(offset <= size);
-    Some(BoxHeader{
-        name: name,
-        size: size,
-        offset: offset,
+    Ok(BoxHeader{
+      name: name,
+      size: size,
+      offset: offset,
     })
 }
 
@@ -108,7 +108,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader) {
         .collect();
     let mut content = Cursor::new(buf);
     loop {
-        read_box(&mut content);
+        read_box(&mut content).unwrap();
     }
     println!("{} -- end", h);
 }
@@ -116,7 +116,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader) {
 /// Read the contents of a box, including sub boxes.
 /// Right now it just prints the box value rather than
 /// returning anything.
-pub fn read_box<T: Read + Seek>(f: &mut T) {
+pub fn read_box<T: Read + Seek>(f: &mut T) -> Result<()> {
     read_box_header(f).and_then(|h| {
         match &(fourcc_to_string(h.name))[..] {
             "ftyp" => {
@@ -138,12 +138,12 @@ pub fn read_box<T: Read + Seek>(f: &mut T) {
             },
             _ => {
                 // Skip the contents of unknown chunks.
-                println!("{}", h);
+                println!("{} (skipped)", h);
                 skip_box_content(f, &h).unwrap();
             },
         };
-        Some(()) // and_then needs an Option to return.
-    });
+        Ok(()) // and_then needs a Result to return.
+    })
 }
 
 /// Entry point for C language callers.
@@ -168,7 +168,7 @@ pub extern fn read_box_from_buffer(buffer: *mut u8, size: usize) -> bool {
     // Parse in a subthread.
     let mut c = cursor_from_cbuf(buffer, size);
     let task = thread::spawn(move || {
-        read_box(&mut c);
+        read_box(&mut c).unwrap();
         drop(c);
     });
     // Catch any panics.
