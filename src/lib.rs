@@ -247,36 +247,36 @@ pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
         1 => {
             // 64 bit creation and modification times.
             let mut skip: Vec<u8> = vec![0; 16];
-            let r = src.read(&mut skip).unwrap();
+            let r = try!(src.read(&mut skip));
             assert!(r == skip.len());
         },
         0 => {
             // 32 bit creation and modification times.
             // 64 bit creation and modification times.
             let mut skip: Vec<u8> = vec![0; 8];
-            let r = src.read(&mut skip).unwrap();
+            let r = try!(src.read(&mut skip));
             assert!(r == skip.len());
         },
         _ => panic!("invalid tkhd version"),
     }
-    let track_id = src.read_u32::<BigEndian>().unwrap();
-    let _reserved = src.read_u32::<BigEndian>().unwrap();
+    let track_id = try!(src.read_u32::<BigEndian>());
+    let _reserved = try!(src.read_u32::<BigEndian>());
     assert!(_reserved == 0);
     let duration = match version {
         1 => {
-            src.read_u64::<BigEndian>().unwrap()
+            try!(src.read_u64::<BigEndian>())
         },
-        0 => src.read_u32::<BigEndian>().unwrap() as u64,
+        0 => try!(src.read_u32::<BigEndian>()) as u64,
         _ => panic!("invalid tkhd version"),
     };
-    let _reserved = src.read_u32::<BigEndian>().unwrap();
-    let _reserved = src.read_u32::<BigEndian>().unwrap();
+    let _reserved = try!(src.read_u32::<BigEndian>());
+    let _reserved = try!(src.read_u32::<BigEndian>());
     // Skip uninterested fields.
     let mut skip: Vec<u8> = vec![0; 44];
-    let r = src.read(&mut skip).unwrap();
+    let r = try!(src.read(&mut skip));
     assert!(r == skip.len());
-    let width = src.read_u32::<BigEndian>().unwrap();
-    let height = src.read_u32::<BigEndian>().unwrap();
+    let width = try!(src.read_u32::<BigEndian>());
+    let height = try!(src.read_u32::<BigEndian>());
     Ok(TrackHeaderBox {
        name: head.name,
        size: head.size,
