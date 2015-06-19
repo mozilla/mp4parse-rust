@@ -134,13 +134,13 @@ pub fn read_box<T: Read + Seek>(f: &mut T) -> Result<()> {
             "moov" => try!(recurse(f, &h)),
             "mvhd" => {
                 let mut content = limit(f, &h);
-                let mvhd = read_mvhd(&mut content, &h).unwrap();
+                let mvhd = try!(read_mvhd(&mut content, &h));
                 println!("  {}", mvhd);
             },
             "trak" => try!(recurse(f, &h)),
             "tkhd" => {
                 let mut content = limit(f, &h);
-                let tkhd = read_tkhd(&mut content, &h).unwrap();
+                let tkhd = try!(read_tkhd(&mut content, &h));
                 println!("  {}", tkhd);
             },
             _ => {
