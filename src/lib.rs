@@ -43,7 +43,7 @@ pub struct TrackHeaderBox {
 
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
-use std::io::{Read, Result, Seek, SeekFrom, Take};
+use std::io::{Error, ErrorKind, Read, Result, Seek, SeekFrom, Take};
 use std::io::Cursor;
 
 /// Parse a box out of a data buffer.
@@ -238,11 +238,10 @@ pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
 
 /// Parse a tkhd box.
 pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
-  -> Option<TrackHeaderBox> {
+  -> Result<TrackHeaderBox> {
     let (version, flags) = read_fullbox_extra(src);
     if flags & 0x1u32 == 0 || flags & 0x2u32 == 0 {
-        // Track is disabled.
-        return None;
+        return Err(Error::new(ErrorKind::Other, "Track is disabled"));
     }
     match version {
         1 => {
@@ -278,13 +277,13 @@ pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
     assert!(r == skip.len());
     let width = src.read_u32::<BigEndian>().unwrap();
     let height = src.read_u32::<BigEndian>().unwrap();
-    Some(TrackHeaderBox {
-        name: head.name,
-        size: head.size,
-        track_id: track_id,
-        duration: duration,
-        width: width,
-        height: height,
+    Ok(TrackHeaderBox {
+       name: head.name,
+       size: head.size,
+       track_id: track_id,
+       duration: duration,
+       width: width,
+       height: height,
     })
 }
 
