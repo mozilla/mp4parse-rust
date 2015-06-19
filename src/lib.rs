@@ -95,7 +95,7 @@ fn limit<'a, T: Read>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
 }
 
 /// Helper to construct a Cursor over the contents of a box.
-fn recurse<T: Read>(f: &mut T, h: &BoxHeader) {
+fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> Result<()> {
     println!("{} -- recursing", h);
     // FIXME: I couldn't figure out how to do this without copying.
     // We use Seek on the Read we return in skip_box_content, but
@@ -112,11 +112,12 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader) {
             Ok(_) => {},
             Err(e) => {
                 println!("Error '{:?}' reading box", e.kind());
-                break;
+                return Err(e);
             },
         }
     }
     println!("{} -- end", h);
+    Ok(())
 }
 
 /// Read the contents of a box, including sub boxes.
@@ -130,13 +131,13 @@ pub fn read_box<T: Read + Seek>(f: &mut T) -> Result<()> {
                 let ftyp = read_ftyp(&mut content, &h).unwrap();
                 println!("{}", ftyp);
             },
-            "moov" => recurse(f, &h),
+            "moov" => try!(recurse(f, &h)),
             "mvhd" => {
                 let mut content = limit(f, &h);
                 let mvhd = read_mvhd(&mut content, &h).unwrap();
                 println!("  {}", mvhd);
             },
-            "trak" => recurse(f, &h),
+            "trak" => try!(recurse(f, &h)),
             "tkhd" => {
                 let mut content = limit(f, &h);
                 let tkhd = read_tkhd(&mut content, &h).unwrap();
