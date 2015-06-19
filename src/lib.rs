@@ -200,35 +200,35 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
 
 /// Parse an mvhd box.
 pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
-  -> Option<MovieHeaderBox> {
+  -> Result<MovieHeaderBox> {
     let (version, _) = read_fullbox_extra(src);
     match version {
         1 => {
             // 64 bit creation and modification times.
             let mut skip: Vec<u8> = vec![0; 16];
-            let r = src.read(&mut skip).unwrap();
+            let r = try!(src.read(&mut skip));
             assert!(r == skip.len());
         },
         0 => {
             // 32 bit creation and modification times.
             // 64 bit creation and modification times.
             let mut skip: Vec<u8> = vec![0; 8];
-            let r = src.read(&mut skip).unwrap();
+            let r = try!(src.read(&mut skip));
             assert!(r == skip.len());
         },
         _ => panic!("invalid mhdr version"),
     }
     let timescale = src.read_u32::<BigEndian>().unwrap();
     let duration = match version {
-        1 => src.read_u64::<BigEndian>().unwrap(),
-        0 => src.read_u32::<BigEndian>().unwrap() as u64,
+        1 => try!(src.read_u64::<BigEndian>()),
+        0 => try!(src.read_u32::<BigEndian>()) as u64,
         _ => panic!("invalid mhdr version"),
     };
     // Skip remaining fields.
     let mut skip: Vec<u8> = vec![0; 80];
-    let r = src.read(&mut skip).unwrap();
+    let r = try!(src.read(&mut skip));
     assert!(r == skip.len());
-    Some(MovieHeaderBox {
+    Ok(MovieHeaderBox {
         name: head.name,
         size: head.size,
         timescale: timescale,
