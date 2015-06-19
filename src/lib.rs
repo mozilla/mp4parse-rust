@@ -278,12 +278,12 @@ pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
     let width = try!(src.read_u32::<BigEndian>());
     let height = try!(src.read_u32::<BigEndian>());
     Ok(TrackHeaderBox {
-       name: head.name,
-       size: head.size,
-       track_id: track_id,
-       duration: duration,
-       width: width,
-       height: height,
+        name: head.name,
+        size: head.size,
+        track_id: track_id,
+        duration: duration,
+        width: width,
+        height: height,
     })
 }
 
