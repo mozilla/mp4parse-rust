@@ -128,7 +128,7 @@ pub fn read_box<T: Read + Seek>(f: &mut T) -> Result<()> {
         match &(fourcc_to_string(h.name))[..] {
             "ftyp" => {
                 let mut content = limit(f, &h);
-                let ftyp = read_ftyp(&mut content, &h).unwrap();
+                let ftyp = try!(read_ftyp(&mut content, &h));
                 println!("{}", ftyp);
             },
             "moov" => try!(recurse(f, &h)),
@@ -181,15 +181,15 @@ pub unsafe extern fn read_box_from_buffer(buffer: *const u8, size: usize)
 
 /// Parse an ftype box.
 pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
-  -> Option<FileTypeBox> {
-    let major = src.read_u32::<BigEndian>().unwrap();
-    let minor = src.read_u32::<BigEndian>().unwrap();
+  -> Result<FileTypeBox> {
+    let major = try!(src.read_u32::<BigEndian>());
+    let minor = try!(src.read_u32::<BigEndian>());
     let brand_count = (head.size - 8 - 8) /4;
     let mut brands = Vec::new();
     for _ in 0..brand_count {
-        brands.push(src.read_u32::<BigEndian>().unwrap());
+        brands.push( try!(src.read_u32::<BigEndian>()) );
     }
-    Some(FileTypeBox{
+    Ok(FileTypeBox{
         name: head.name,
         size: head.size,
         major_brand: major,
