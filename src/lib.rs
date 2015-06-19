@@ -146,7 +146,7 @@ pub fn read_box<T: Read + Seek>(f: &mut T) -> Result<()> {
             _ => {
                 // Skip the contents of unknown chunks.
                 println!("{} (skipped)", h);
-                skip_box_content(f, &h).unwrap();
+                try!(skip_box_content(f, &h).and(Ok(())));
             },
         };
         Ok(()) // and_then needs a Result to return.
