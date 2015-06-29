@@ -43,11 +43,11 @@ pub struct TrackHeaderBox {
 
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
-use std::io::{Error, ErrorKind, Read, Result, Seek, SeekFrom, Take};
+use std::io::{Error, ErrorKind, Read, Seek, SeekFrom, Take};
 use std::io::Cursor;
 
 /// Parse a box out of a data buffer.
-pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
+pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<BoxHeader> {
     let tmp_size = try!(src.read_u32::<BigEndian>());
     let name = try!(src.read_u32::<BigEndian>());
     let size = match tmp_size {
@@ -95,7 +95,7 @@ fn limit<'a, T: Read>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
 }
 
 /// Helper to construct a Cursor over the contents of a box.
-fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> Result<()> {
+fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
     println!("{} -- recursing", h);
     // FIXME: I couldn't figure out how to do this without copying.
     // We use Seek on the Read we return in skip_box_content, but
@@ -110,9 +110,15 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> Result<()> {
     loop {
         match read_box(&mut content) {
             Ok(_) => {},
-            Err(e) => {
+            Err(byteorder::Error::UnexpectedEOF) => {
+                // byteorder returns EOF at the end of the buffer.
+                // This isn't an error for us, just an signal to
+                // stop recursion.
+                break;
+            },
+            Err(byteorder::Error::Io(e)) => {
                 println!("Error '{:?}' reading box", e.kind());
-                return Err(e);
+                return Err(byteorder::Error::Io(e));
             },
         }
     }
@@ -123,7 +129,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> Result<()> {
 /// Read the contents of a box, including sub boxes.
 /// Right now it just prints the box value rather than
 /// returning anything.
-pub fn read_box<T: Read + Seek>(f: &mut T) -> Result<()> {
+pub fn read_box<T: Read + Seek>(f: &mut T) -> byteorder::Result<()> {
     read_box_header(f).and_then(|h| {
         match &(fourcc_to_string(h.name))[..] {
             "ftyp" => {
@@ -181,7 +187,7 @@ pub unsafe extern fn read_box_from_buffer(buffer: *const u8, size: usize)
 
 /// Parse an ftype box.
 pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
-  -> Result<FileTypeBox> {
+  -> byteorder::Result<FileTypeBox> {
     let major = try!(src.read_u32::<BigEndian>());
     let minor = try!(src.read_u32::<BigEndian>());
     let brand_count = (head.size - 8 - 8) /4;
@@ -200,7 +206,7 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
 
 /// Parse an mvhd box.
 pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
-  -> Result<MovieHeaderBox> {
+  -> byteorder::Result<MovieHeaderBox> {
     let (version, _) = read_fullbox_extra(src);
     match version {
         1 => {
@@ -238,10 +244,12 @@ pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
 
 /// Parse a tkhd box.
 pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
-  -> Result<TrackHeaderBox> {
+  -> byteorder::Result<TrackHeaderBox> {
     let (version, flags) = read_fullbox_extra(src);
     if flags & 0x1u32 == 0 || flags & 0x2u32 == 0 {
-        return Err(Error::new(ErrorKind::Other, "Track is disabled"));
+        return Err(byteorder::Error::Io(
+            Error::new(ErrorKind::Other, "Track is disabled")
+        ));
     }
     match version {
         1 => {
