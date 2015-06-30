@@ -182,7 +182,11 @@ pub unsafe extern fn read_box_from_buffer(buffer: *const u8, size: usize)
 
     // Parse in a subthread.
     let task = thread::spawn(move || {
-        read_box(&mut c)
+        read_box(&mut c).or_else(|e| { match e {
+            // Catch EOF. We naturally hit it at end-of-input.
+            byteorder::Error::UnexpectedEOF => { Ok(()) },
+            e => { Err(e) },
+        }})
     });
     // Catch any panics.
     task.join().is_ok()
