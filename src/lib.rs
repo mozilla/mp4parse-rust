@@ -36,6 +36,7 @@ pub struct TrackHeaderBox {
     pub name: u32,
     pub size: u64,
     pub track_id: u32,
+    pub enabled: bool,
     pub duration: u64,
     pub width: u32,
     pub height: u32,
@@ -249,11 +250,7 @@ pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
 pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
   -> byteorder::Result<TrackHeaderBox> {
     let (version, flags) = read_fullbox_extra(src);
-    if flags & 0x1u32 == 0 || flags & 0x2u32 == 0 {
-        return Err(byteorder::Error::Io(
-            std::io::Error::new(std::io::ErrorKind::Other, "Track is disabled")
-        ));
-    }
+    let disabled = flags & 0x1u32 == 0 || flags & 0x2u32 == 0;
     match version {
         1 => {
             // 64 bit creation and modification times.
@@ -292,6 +289,7 @@ pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
         name: head.name,
         size: head.size,
         track_id: track_id,
+        enabled: !disabled,
         duration: duration,
         width: width,
         height: height,
@@ -342,9 +340,10 @@ impl fmt::Display for TrackHeaderBox {
         let base = u16::MAX as f64 + 1.0;
         let width = (self.width as f64) / base;
         let height = (self.height as f64) / base;
-        write!(f, "'{}' {} bytes duration {} id {} {}x{}",
+        let disabled = if self.enabled { "" } else { " (disabled)" };
+        write!(f, "'{}' {} bytes duration {} id {} {}x{}{}",
             name, self.size, self.duration, self.track_id,
-            width, height)
+            width, height, disabled)
     }
 }
 
