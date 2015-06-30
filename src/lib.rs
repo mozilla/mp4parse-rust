@@ -186,7 +186,7 @@ pub unsafe extern fn read_box_from_buffer(buffer: *const u8, size: usize)
             // Catch EOF. We naturally hit it at end-of-input.
             byteorder::Error::UnexpectedEOF => { Ok(()) },
             e => { Err(e) },
-        }})
+        }}).unwrap();
     });
     // Catch any panics.
     task.join().is_ok()
