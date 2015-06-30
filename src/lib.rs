@@ -114,6 +114,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
                 // byteorder returns EOF at the end of the buffer.
                 // This isn't an error for us, just an signal to
                 // stop recursion.
+                println!("Caught byteorder::Error::UnexpectedEOF");
                 break;
             },
             Err(byteorder::Error::Io(e)) => {
