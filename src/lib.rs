@@ -96,6 +96,7 @@ fn limit<'a, T: Read>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
 
 /// Helper to construct a Cursor over the contents of a box.
 fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
+    use std::error::Error;
     println!("{} -- recursing", h);
     // FIXME: I couldn't figure out how to do this without copying.
     // We use Seek on the Read we return in skip_box_content, but
@@ -118,7 +119,8 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
                 break;
             },
             Err(byteorder::Error::Io(e)) => {
-                println!("Error '{:?}' reading box", e.kind());
+                println!("I/O Error '{:?}' reading box: {}",
+                         e.kind(), e.description());
                 return Err(byteorder::Error::Io(e));
             },
         }
