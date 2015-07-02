@@ -5,7 +5,7 @@
 
 #include <cassert>
 #include <cstdint>
-#include <fstream>
+#include <cstdio>
 #include <vector>
 
 extern "C" bool read_box_from_buffer(uint8_t *buffer, size_t size);
@@ -32,13 +32,15 @@ void test_arg_validation()
 
 void read_file(const char* filename)
 {
-  std::ifstream f(filename);
-  assert(f.is_open());
+  FILE* f = fopen(filename, "rb");
+  assert(f != nullptr);
 
   size_t len = 4096;
-  std::vector<uint8_t> buf;
-  buf.reserve(len);
-  f.read(reinterpret_cast<char*>(buf.data()), buf.size());
+  std::vector<uint8_t> buf(len);
+  size_t read = fread(buf.data(), sizeof(decltype(buf)::value_type), buf.size(), f);
+  buf.resize(read);
+  fclose(f);
+
   bool rv = read_box_from_buffer(buf.data(), buf.size());
   assert(!rv); // Expected fail: need to trap eof.
 }
