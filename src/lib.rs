@@ -399,5 +399,7 @@ fn test_read_ftyp() {
     assert_eq!(parsed.major_brand, 1836069938);
     assert_eq!(parsed.minor_version, 0);
     assert_eq!(parsed.compatible_brands.len(), 2);
+    assert_eq!(parsed.compatible_brands[0], 1769172845);
+    assert_eq!(fourcc_to_string(parsed.compatible_brands[1]), "mp42");
     println!("box {}", parsed);
 }
