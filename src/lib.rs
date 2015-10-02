@@ -323,8 +323,14 @@ impl fmt::Display for FileTypeBox {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let name = fourcc_to_string(self.name);
         let brand = fourcc_to_string(self.major_brand);
-        write!(f, "'{}' {} bytes '{}' v{}", name, self.size,
-            brand, self.minor_version)
+        let mut compat = String::from("compatible with");
+        for brand in &self.compatible_brands {
+            let brand_string = fourcc_to_string(*brand);
+            compat.push(' ');
+            compat.push_str(&brand_string);
+        }
+        write!(f, "'{}' {} bytes '{}' v{}\n  {}",
+            name, self.size, brand, self.minor_version, compat)
     }
 }
 
