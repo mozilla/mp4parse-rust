@@ -44,7 +44,7 @@ pub struct TrackHeaderBox {
 
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
-use std::io::{Read, Seek, SeekFrom, Take};
+use std::io::{Read, BufRead, Take};
 use std::io::Cursor;
 
 /// Parse a box out of a data buffer.
@@ -83,11 +83,13 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> (u8, u32) {
 }
 
 /// Skip over the contents of a box.
-pub fn skip_box_content<T: ReadBytesExt + Seek>
+pub fn skip_box_content<T: ReadBytesExt + BufRead>
   (src: &mut T, header: &BoxHeader)
-  -> std::io::Result<u64>
+  -> std::io::Result<usize>
 {
-    src.seek(SeekFrom::Current((header.size - header.offset) as i64))
+    let bytes_to_skip = (header.size - header.offset) as usize;
+    src.consume(bytes_to_skip);
+    Ok(bytes_to_skip)
 }
 
 /// Helper to construct a Take over the contents of a box.
@@ -133,7 +135,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
 /// Read the contents of a box, including sub boxes.
 /// Right now it just prints the box value rather than
 /// returning anything.
-pub fn read_box<T: Read + Seek>(f: &mut T) -> byteorder::Result<()> {
+pub fn read_box<T: Read + BufRead>(f: &mut T) -> byteorder::Result<()> {
     read_box_header(f).and_then(|h| {
         match &(fourcc_to_string(h.name))[..] {
             "ftyp" => {
