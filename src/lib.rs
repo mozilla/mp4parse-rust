@@ -83,7 +83,7 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> (u8, u32) {
 }
 
 /// Skip over the contents of a box.
-pub fn skip_box_content<T: ReadBytesExt + BufRead>
+pub fn skip_box_content<T: BufRead>
   (src: &mut T, header: &BoxHeader)
   -> std::io::Result<usize>
 {
