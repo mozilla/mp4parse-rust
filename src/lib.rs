@@ -168,7 +168,7 @@ pub fn read_box<T: Read + BufRead>(f: &mut T) -> byteorder::Result<()> {
 /// Entry point for C language callers.
 /// Take a buffer and call read_box() on it.
 #[no_mangle]
-pub unsafe extern fn read_box_from_buffer(buffer: *const u8, size: usize)
+pub extern fn read_box_from_buffer(buffer: *const u8, size: usize)
   -> bool {
     use std::slice;
     use std::thread;
@@ -179,7 +179,7 @@ pub unsafe extern fn read_box_from_buffer(buffer: *const u8, size: usize)
     }
 
     // Wrap the buffer we've been give in a slice.
-    let b = slice::from_raw_parts(buffer, size);
+    let b = unsafe { slice::from_raw_parts(buffer, size) };
     let mut c = Cursor::new(b);
 
     // Parse in a subthread.
