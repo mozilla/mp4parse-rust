@@ -45,6 +45,7 @@ pub struct TrackHeaderBox {
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Read, BufRead, Take};
+use std::io::Cursor;
 
 /// Parse a box out of a data buffer.
 pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<BoxHeader> {
@@ -92,60 +93,12 @@ pub fn skip_box_content<T: BufRead>
 }
 
 /// Helper to construct a Take over the contents of a box.
-fn limit<'a, T: BufRead>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
+fn limit<'a, T: Read>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
     f.take(h.size - h.offset)
 }
 
-struct Cursor<T> {
-    inner: T,
-    pos: u64
-}
-
-impl<T> Cursor<T> {
-    fn new(inner: T) -> Cursor<T> {
-        Cursor { inner: inner, pos: 0 }
-    }
-}
-
-macro_rules! read {
-    () => {
-        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            let n = try!(Read::read(&mut try!(self.fill_buf()), buf));
-            self.pos += n as u64;
-            Ok(n)
-        }
-    }
-}
-
-impl<'a> Read for Cursor<&'a [u8]> { read!(); }
-impl Read for Cursor<Vec<u8>> { read!(); }
-impl<T: BufRead> Read for Cursor<Take<T>> { read!(); }
-
-macro_rules! buffer {
-    () => {
-        fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
-            let amt = std::cmp::min(self.pos, self.inner.len() as u64);
-            Ok(&self.inner[(amt as usize)..])
-        }
-        fn consume(&mut self, amt: usize) { self.pos += amt as u64; }
-    }
-}
-
-macro_rules! take_buffer {
-    () => {
-        fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
-            self.inner.fill_buf()
-        }
-        fn consume(&mut self, amt: usize) { self.inner.consume(amt); self.pos += amt as u64; }
-    }
-}
-
-impl<'a> BufRead for Cursor<&'a [u8]> { buffer!(); }
-impl BufRead for Cursor<Vec<u8>> { buffer!(); }
-impl<T: BufRead> BufRead for Cursor<Take<T>> { take_buffer!(); }
-
 /// Helper to construct a Cursor over the contents of a box.
-fn recurse<T: BufRead>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
+fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
     use std::error::Error;
     println!("{} -- recursing", h);
     // FIXME: I couldn't figure out how to do this without copying.
@@ -153,7 +106,10 @@ fn recurse<T: BufRead>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
     // that trait isn't implemented for a Take like our limit()
     // returns. Slurping the buffer and wrapping it in a Cursor
     // functions as a work around.
-    let buf = limit(f, &h);
+    let buf: Vec<u8> = limit(f, &h)
+        .bytes()
+        .map(|u| u.unwrap())
+        .collect();
     let mut content = Cursor::new(buf);
     loop {
         match read_box(&mut content) {
@@ -179,7 +135,7 @@ fn recurse<T: BufRead>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
 /// Read the contents of a box, including sub boxes.
 /// Right now it just prints the box value rather than
 /// returning anything.
-pub fn read_box<T: BufRead>(f: &mut T) -> byteorder::Result<()> {
+pub fn read_box<T: Read + BufRead>(f: &mut T) -> byteorder::Result<()> {
     read_box_header(f).and_then(|h| {
         match &(fourcc_to_string(h.name))[..] {
             "ftyp" => {
