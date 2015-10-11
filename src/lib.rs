@@ -7,11 +7,11 @@
 /// Basic ISO box structure.
 pub struct BoxHeader {
     /// Four character box type
-pub name: u32,
+    pub name: u32,
     /// Size of the box in bytes
-pub size: u64,
+    pub size: u64,
     /// Offset to the start of the contained data (or header size).
-pub offset: u64,
+    pub offset: u64,
 }
 
 /// File type box 'ftyp'.
@@ -83,10 +83,7 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> (u8, u32) {
 }
 
 /// Skip over the contents of a box.
-pub fn skip_box_content<T: BufRead>
-  (src: &mut T, header: &BoxHeader)
-  -> std::io::Result<usize>
-{
+pub fn skip_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> std::io::Result<usize> {
     let bytes_to_skip = (header.size - header.offset) as usize;
     src.consume(bytes_to_skip);
     Ok(bytes_to_skip)
@@ -168,8 +165,7 @@ pub fn read_box<T: Read + BufRead>(f: &mut T) -> byteorder::Result<()> {
 /// Entry point for C language callers.
 /// Take a buffer and call read_box() on it.
 #[no_mangle]
-pub extern fn read_box_from_buffer(buffer: *const u8, size: usize)
-  -> bool {
+pub extern fn read_box_from_buffer(buffer: *const u8, size: usize) -> bool {
     use std::slice;
     use std::thread;
 
@@ -194,10 +190,8 @@ pub extern fn read_box_from_buffer(buffer: *const u8, size: usize)
     task.join().is_ok()
 }
 
-
 /// Parse an ftype box.
-pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
-  -> byteorder::Result<FileTypeBox> {
+pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<FileTypeBox> {
     let major = try!(src.read_u32::<BigEndian>());
     let minor = try!(src.read_u32::<BigEndian>());
     let brand_count = (head.size - 8 - 8) /4;
@@ -215,8 +209,7 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
 }
 
 /// Parse an mvhd box.
-pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
-  -> byteorder::Result<MovieHeaderBox> {
+pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<MovieHeaderBox> {
     let (version, _) = read_fullbox_extra(src);
     match version {
         1 => {
@@ -253,8 +246,7 @@ pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
 }
 
 /// Parse a tkhd box.
-pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader)
-  -> byteorder::Result<TrackHeaderBox> {
+pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<TrackHeaderBox> {
     let (version, flags) = read_fullbox_extra(src);
     let disabled = flags & 0x1u32 == 0 || flags & 0x2u32 == 0;
     match version {
@@ -331,8 +323,8 @@ impl fmt::Display for FileTypeBox {
             compat.push(' ');
             compat.push_str(&brand_string);
         }
-        write!(f, "'{}' {} bytes '{}' v{}\n  {}",
-            name, self.size, brand, self.minor_version, compat)
+        write!(f, "'{}' {} bytes '{}' v{}\n {}",
+               name, self.size, brand, self.minor_version, compat)
     }
 }
 
@@ -340,7 +332,7 @@ impl fmt::Display for MovieHeaderBox {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let name = fourcc_to_string(self.name);
         write!(f, "'{}' {} bytes duration {}s", name, self.size,
-            (self.duration as f64)/(self.timescale as f64))
+               (self.duration as f64)/(self.timescale as f64))
     }
 }
 
@@ -354,8 +346,8 @@ impl fmt::Display for TrackHeaderBox {
         let height = (self.height as f64) / base;
         let disabled = if self.enabled { "" } else { " (disabled)" };
         write!(f, "'{}' {} bytes duration {} id {} {}x{}{}",
-            name, self.size, self.duration, self.track_id,
-            width, height, disabled)
+               name, self.size, self.duration, self.track_id,
+               width, height, disabled)
     }
 }
 
@@ -363,7 +355,7 @@ impl fmt::Display for TrackHeaderBox {
 fn test_read_box_header() {
     use std::io::Cursor;
     use std::io::Write;
-    let mut test: Vec<u8> = vec![0, 0, 0, 8];  // minimal box length
+    let mut test: Vec<u8> = vec![0, 0, 0, 8]; // minimal box length
     write!(&mut test, "test").unwrap(); // box type
     let mut stream = Cursor::new(test);
     let parsed = read_box_header(&mut stream).unwrap();
@@ -371,7 +363,6 @@ fn test_read_box_header() {
     assert_eq!(parsed.size, 8);
     println!("box {}", parsed);
 }
-
 
 #[test]
 fn test_read_box_header_long() {
