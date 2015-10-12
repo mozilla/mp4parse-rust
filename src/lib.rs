@@ -192,14 +192,14 @@ pub extern fn read_box_from_buffer(buffer: *const u8, size: usize) -> bool {
     task.join().is_ok()
 }
 
-/// Parse an ftype box.
+/// Parse an ftyp box.
 pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<FileTypeBox> {
     let major = try!(src.read_u32::<BigEndian>());
     let minor = try!(src.read_u32::<BigEndian>());
-    let brand_count = (head.size - 8 - 8) /4;
+    let brand_count = (head.size - 8 - 8) / 4;
     let mut brands = Vec::new();
     for _ in 0..brand_count {
-        brands.push( try!(src.read_u32::<BigEndian>()) );
+        brands.push(try!(src.read_u32::<BigEndian>()));
     }
     Ok(FileTypeBox{
         name: head.name,
