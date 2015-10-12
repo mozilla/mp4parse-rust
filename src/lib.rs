@@ -65,6 +65,13 @@ pub struct MediaHeaderBox {
     duration: u64,
 }
 
+// Chunk offset box 'stco' or 'co64'
+pub struct ChunkOffsetBox {
+    name: u32,
+    size: u64,
+    offsets: Vec<u64>,
+}
+
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Read, BufRead, Take};
@@ -198,6 +205,18 @@ pub fn read_box<T: Read + BufRead>(f: &mut T) -> byteorder::Result<()> {
                 let mut content = limit(f, &h);
                 let mdhd = try!(read_mdhd(&mut content, &h));
                 println!("  {}", mdhd);
+            },
+            "minf" => try!(recurse(f, &h)),
+            "stbl" => try!(recurse(f, &h)),
+            "stco" => {
+                let mut content = limit(f, &h);
+                let stco = try!(read_stco(&mut content, &h));
+                println!("  {}", stco);
+            },
+            "co64" => {
+                let mut content = limit(f, &h);
+                let co64 = try!(read_co64(&mut content, &h));
+                println!("  {}", co64);
             },
             _ => {
                 // Skip the contents of unknown chunks.
@@ -416,6 +435,38 @@ pub fn read_mdhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
     })
 }
 
+/// Parse a stco box.
+pub fn read_stco<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<ChunkOffsetBox> {
+    let (_, _) = read_fullbox_extra(src);
+    let offset_count = try!(src.read_u32::<BigEndian>());
+    let mut offsets = Vec::new();
+    for _ in 0..offset_count {
+        offsets.push(try!(src.read_u32::<BigEndian>()) as u64);
+    }
+
+    Ok(ChunkOffsetBox{
+        name: head.name,
+        size: head.size,
+        offsets: offsets,
+    })
+}
+
+/// Parse a stco box.
+pub fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<ChunkOffsetBox> {
+    let (_, _) = read_fullbox_extra(src);
+    let offset_count = try!(src.read_u32::<BigEndian>());
+    let mut offsets = Vec::new();
+    for _ in 0..offset_count {
+        offsets.push(try!(src.read_u64::<BigEndian>()));
+    }
+
+    Ok(ChunkOffsetBox{
+        name: head.name,
+        size: head.size,
+        offsets: offsets,
+    })
+}
+
 /// Convert the iso box type or other 4-character value to a string.
 fn fourcc_to_string(name: u32) -> String {
     let u32_to_vec = |u| {
@@ -489,6 +540,17 @@ impl fmt::Display for MediaHeaderBox {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "'{}' {} bytes timescale {} duration {}",
                fourcc_to_string(self.name), self.size, self.timescale, self.duration)
+    }
+}
+
+impl fmt::Display for ChunkOffsetBox {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut entries = String::new();
+        for entry in &self.offsets {
+            entries.push_str(&format!("\n  offset {}", entry));
+        }
+        write!(f, "'{}' {} bytes {}",
+               fourcc_to_string(self.name), self.size, entries)
     }
 }
 
