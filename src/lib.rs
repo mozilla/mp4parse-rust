@@ -43,6 +43,20 @@ pub struct TrackHeaderBox {
     pub height: u32,
 }
 
+/// Edit list box 'elst'
+pub struct EditListBox {
+    name: u32,
+    size: u64,
+    edits: Vec<Edit>,
+}
+
+pub struct Edit {
+    segment_duration: u64,
+    media_time: i64,
+    media_rate_integer: i16,
+    media_rate_fraction: i16,
+}
+
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Read, BufRead, Take};
@@ -164,6 +178,12 @@ pub fn read_box<T: Read + BufRead>(f: &mut T) -> byteorder::Result<()> {
                 let mut content = limit(f, &h);
                 let tkhd = try!(read_tkhd(&mut content, &h));
                 println!("  {}", tkhd);
+            },
+            "edts" => try!(recurse(f, &h)),
+            "elst" => {
+                let mut content = limit(f, &h);
+                let elst = try!(read_elst(&mut content, &h));
+                println!("  {}", elst);
             },
             _ => {
                 // Skip the contents of unknown chunks.
@@ -306,6 +326,42 @@ pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
     })
 }
 
+/// Parse a elst box.
+pub fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<EditListBox> {
+    let (version, _) = read_fullbox_extra(src);
+    let edit_count = try!(src.read_u32::<BigEndian>());
+    let mut edits = Vec::new();
+    for _ in 0..edit_count {
+        let (segment_duration, media_time) = match version {
+            1 => {
+                // 64 bit segment duration and media times.
+                (try!(src.read_u64::<BigEndian>()),
+                 try!(src.read_i64::<BigEndian>()))
+            },
+            0 => {
+                // 32 bit segment duration and media times.
+                (try!(src.read_u32::<BigEndian>()) as u64,
+                 try!(src.read_i32::<BigEndian>()) as i64)
+            },
+            _ => panic!("invalid elst version"),
+        };
+        let media_rate_integer = try!(src.read_i16::<BigEndian>());
+        let media_rate_fraction = try!(src.read_i16::<BigEndian>());
+        edits.push(Edit{
+            segment_duration: segment_duration,
+            media_time: media_time,
+            media_rate_integer: media_rate_integer,
+            media_rate_fraction: media_rate_fraction,
+        })
+    }
+
+    Ok(EditListBox{
+        name: head.name,
+        size: head.size,
+        edits: edits
+    })
+}
+
 /// Convert the iso box type or other 4-character value to a string.
 fn fourcc_to_string(name: u32) -> String {
     let u32_to_vec = |u| {
@@ -363,6 +419,18 @@ impl fmt::Display for TrackHeaderBox {
     }
 }
 
+impl fmt::Display for EditListBox {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut entries = String::new();
+        for entry in &self.edits {
+            entries.push_str(&format!("\n  duration {} time {} rate {}/{}",
+                                      entry.segment_duration, entry.media_time,
+                                      entry.media_rate_integer, entry.media_rate_fraction));
+        }
+        write!(f, "'{}' {} bytes {}", fourcc_to_string(self.name), self.size, entries)
+    }
+}
+
 #[test]
 fn test_read_box_header() {
     use std::io::Cursor;
@@ -412,5 +480,63 @@ fn test_read_ftyp() {
     assert_eq!(parsed.compatible_brands.len(), 2);
     assert_eq!(parsed.compatible_brands[0], 1769172845);
     assert_eq!(fourcc_to_string(parsed.compatible_brands[1]), "mp42");
+    println!("box {}", parsed);
+}
+
+#[test]
+fn test_read_elst_v0() {
+    use std::io::Cursor;
+    use std::io::Write;
+    let mut test: Vec<u8> = vec![0, 0, 0, 28]; // size
+    write!(&mut test, "elst").unwrap(); // type
+    test.extend(vec![0, 0, 0, 0]); // fullbox
+    test.extend(vec![0, 0, 0, 1]); // count
+    test.extend(vec![1, 2, 3, 4,
+                     5, 6, 7, 8,
+                     9, 10,
+                     11, 12]);
+    assert_eq!(test.len(), 28);
+
+    let mut stream = Cursor::new(test);
+    let header = read_box_header(&mut stream).unwrap();
+    let parsed = read_elst(&mut stream, &header).unwrap();
+    assert_eq!(parsed.name, 1701606260);
+    assert_eq!(parsed.size, 28);
+    assert_eq!(parsed.edits.len(), 1);
+    assert_eq!(parsed.edits[0].segment_duration, 16909060);
+    assert_eq!(parsed.edits[0].media_time, 84281096);
+    assert_eq!(parsed.edits[0].media_rate_integer, 2314);
+    assert_eq!(parsed.edits[0].media_rate_fraction, 2828);
+    println!("box {}", parsed);
+}
+
+#[test]
+fn test_read_elst_v1() {
+    use std::io::Cursor;
+    use std::io::Write;
+    let mut test: Vec<u8> = vec![0, 0, 0, 56]; // size
+    write!(&mut test, "elst").unwrap(); // type
+    test.extend(vec![1, 0, 0, 0]); // fullbox
+    test.extend(vec![0, 0, 0, 2]); // count
+    test.extend(vec![1, 2, 3, 4, 1, 2, 3, 4,
+                     5, 6, 7, 8, 5, 6, 7, 8,
+                     9, 10,
+                     11, 12]);
+    test.extend(vec![1, 2, 3, 4, 1, 2, 3, 4,
+                     5, 6, 7, 8, 5, 6, 7, 8,
+                     9, 10,
+                     11, 12]);
+    assert_eq!(test.len(), 56);
+
+    let mut stream = Cursor::new(test);
+    let header = read_box_header(&mut stream).unwrap();
+    let parsed = read_elst(&mut stream, &header).unwrap();
+    assert_eq!(parsed.name, 1701606260);
+    assert_eq!(parsed.size, 56);
+    assert_eq!(parsed.edits.len(), 2);
+    assert_eq!(parsed.edits[1].segment_duration, 72623859723010820);
+    assert_eq!(parsed.edits[1].media_time, 361984551075317512);
+    assert_eq!(parsed.edits[1].media_rate_integer, 2314);
+    assert_eq!(parsed.edits[1].media_rate_fraction, 2828);
     println!("box {}", parsed);
 }
