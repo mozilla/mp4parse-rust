@@ -100,6 +100,18 @@ pub struct SampleSizeBox {
     sample_sizes: Vec<u32>,
 }
 
+// Time to sample box 'stts'
+pub struct TimeToSampleBox {
+    name: u32,
+    size: u64,
+    samples: Vec<Sample>,
+}
+
+pub struct Sample {
+    sample_count: u32,
+    sample_delta: u32,
+}
+
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Read, BufRead, Take};
@@ -260,6 +272,11 @@ pub fn read_box<T: Read + BufRead>(f: &mut T) -> byteorder::Result<()> {
                 let mut content = limit(f, &h);
                 let stsz = try!(read_stsz(&mut content, &h));
                 println!("  {}", stsz);
+            },
+            "stts" => {
+                let mut content = limit(f, &h);
+                let stts = try!(read_stts(&mut content, &h));
+                println!("  {}", stts);
             },
             _ => {
                 // Skip the contents of unknown chunks.
@@ -569,6 +586,27 @@ pub fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
     })
 }
 
+/// Parse a stts box.
+pub fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<TimeToSampleBox> {
+    let (_, _) = read_fullbox_extra(src);
+    let sample_count = try!(src.read_u32::<BigEndian>());
+    let mut samples = Vec::new();
+    for _ in 0..sample_count {
+        let sample_count = try!(src.read_u32::<BigEndian>());
+        let sample_delta = try!(src.read_u32::<BigEndian>());
+        samples.push(Sample{
+            sample_count: sample_count,
+            sample_delta: sample_delta,
+        });
+    }
+
+    Ok(TimeToSampleBox{
+        name: head.name,
+        size: head.size,
+        samples: samples,
+    })
+}
+
 /// Convert the iso box type or other 4-character value to a string.
 fn fourcc_to_string(name: u32) -> String {
     let u32_to_vec = |u| {
@@ -687,6 +725,18 @@ impl fmt::Display for SampleSizeBox {
         }
         write!(f, "'{}' {} bytes sample size {} {}",
                fourcc_to_string(self.name), self.size, self.sample_size, entries)
+    }
+
+}
+
+impl fmt::Display for TimeToSampleBox {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut entries = String::new();
+        for entry in &self.samples {
+            entries.push_str(&format!("\n  sample count {} delta {}", entry.sample_count, entry.sample_delta));
+        }
+        write!(f, "'{}' {} bytes sample {}",
+               fourcc_to_string(self.name), self.size, entries)
     }
 
 }
