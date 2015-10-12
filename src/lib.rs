@@ -79,6 +79,27 @@ pub struct SyncSampleBox {
     samples: Vec<u32>,
 }
 
+// Sample to chunk box 'stsc'
+pub struct SampleToChunkBox {
+    name: u32,
+    size: u64,
+    samples: Vec<SampleToChunk>,
+}
+
+pub struct SampleToChunk {
+    first_chunk: u32,
+    samples_per_chunk: u32,
+    sample_description_index: u32,
+}
+
+// Sample size box 'stsz'
+pub struct SampleSizeBox {
+    name: u32,
+    size: u64,
+    sample_size: u32,
+    sample_sizes: Vec<u32>,
+}
+
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Read, BufRead, Take};
@@ -229,6 +250,16 @@ pub fn read_box<T: Read + BufRead>(f: &mut T) -> byteorder::Result<()> {
                 let mut content = limit(f, &h);
                 let stss = try!(read_stss(&mut content, &h));
                 println!("  {}", stss);
+            },
+            "stsc" => {
+                let mut content = limit(f, &h);
+                let stsc = try!(read_stsc(&mut content, &h));
+                println!("  {}", stsc);
+            },
+            "stsz" => {
+                let mut content = limit(f, &h);
+                let stsz = try!(read_stsz(&mut content, &h));
+                println!("  {}", stsz);
             },
             _ => {
                 // Skip the contents of unknown chunks.
@@ -495,6 +526,49 @@ pub fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
     })
 }
 
+/// Parse a stsc box.
+pub fn read_stsc<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<SampleToChunkBox> {
+    let (_, _) = read_fullbox_extra(src);
+    let sample_count = try!(src.read_u32::<BigEndian>());
+    let mut samples = Vec::new();
+    for _ in 0..sample_count {
+        let first_chunk = try!(src.read_u32::<BigEndian>());
+        let samples_per_chunk = try!(src.read_u32::<BigEndian>());
+        let sample_description_index = try!(src.read_u32::<BigEndian>());
+        samples.push(SampleToChunk{
+            first_chunk: first_chunk,
+            samples_per_chunk: samples_per_chunk,
+            sample_description_index: sample_description_index
+        });
+    }
+
+    Ok(SampleToChunkBox{
+        name: head.name,
+        size: head.size,
+        samples: samples,
+    })
+}
+
+/// Parse a stsz box.
+pub fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<SampleSizeBox> {
+    let (_, _) = read_fullbox_extra(src);
+    let sample_size = try!(src.read_u32::<BigEndian>());
+    let sample_count = try!(src.read_u32::<BigEndian>());
+    let mut sample_sizes = Vec::new();
+    if sample_size == 0 {
+        for _ in 0..sample_count {
+            sample_sizes.push(try!(src.read_u32::<BigEndian>()));
+        }
+    }
+
+    Ok(SampleSizeBox{
+        name: head.name,
+        size: head.size,
+        sample_size: sample_size,
+        sample_sizes: sample_sizes,
+    })
+}
+
 /// Convert the iso box type or other 4-character value to a string.
 fn fourcc_to_string(name: u32) -> String {
     let u32_to_vec = |u| {
@@ -591,6 +665,30 @@ impl fmt::Display for SyncSampleBox {
         write!(f, "'{}' {} bytes {}",
                fourcc_to_string(self.name), self.size, entries)
     }
+}
+
+impl fmt::Display for SampleToChunkBox {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut entries = String::new();
+        for entry in &self.samples {
+            entries.push_str(&format!("\n  sample chunk {} {} {}",
+                                      entry.first_chunk, entry.samples_per_chunk, entry.sample_description_index));
+        }
+        write!(f, "'{}' {} bytes {}",
+               fourcc_to_string(self.name), self.size, entries)
+    }
+}
+
+impl fmt::Display for SampleSizeBox {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut entries = String::new();
+        for entry in &self.sample_sizes {
+            entries.push_str(&format!("\n  sample size {}", entry));
+        }
+        write!(f, "'{}' {} bytes sample size {} {}",
+               fourcc_to_string(self.name), self.size, self.sample_size, entries)
+    }
+
 }
 
 #[test]
