@@ -771,7 +771,6 @@ impl fmt::Display for SampleSizeBox {
         write!(f, "'{}' {} bytes sample size {} {}",
                fourcc_to_string(self.name), self.size, self.sample_size, entries)
     }
-
 }
 
 impl fmt::Display for TimeToSampleBox {
