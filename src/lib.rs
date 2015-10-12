@@ -32,6 +32,7 @@ pub struct MovieHeaderBox {
     // Ignore other fields.
 }
 
+/// Track header box 'tkhd'
 pub struct TrackHeaderBox {
     pub name: u32,
     pub size: u64,
@@ -270,7 +271,6 @@ pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
         },
         0 => {
             // 32 bit creation and modification times.
-            // 64 bit creation and modification times.
             let mut skip: Vec<u8> = vec![0; 8];
             let r = try!(src.read(&mut skip));
             assert!(r == skip.len());
