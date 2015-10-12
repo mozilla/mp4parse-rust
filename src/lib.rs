@@ -57,6 +57,14 @@ pub struct Edit {
     media_rate_fraction: i16,
 }
 
+/// Media header box 'mdhd'
+pub struct MediaHeaderBox {
+    name: u32,
+    size: u64,
+    timescale: u32,
+    duration: u64,
+}
+
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Read, BufRead, Take};
@@ -184,6 +192,12 @@ pub fn read_box<T: Read + BufRead>(f: &mut T) -> byteorder::Result<()> {
                 let mut content = limit(f, &h);
                 let elst = try!(read_elst(&mut content, &h));
                 println!("  {}", elst);
+            },
+            "mdia" => try!(recurse(f, &h)),
+            "mdhd" => {
+                let mut content = limit(f, &h);
+                let mdhd = try!(read_mdhd(&mut content, &h));
+                println!("  {}", mdhd);
             },
             _ => {
                 // Skip the contents of unknown chunks.
@@ -362,6 +376,46 @@ pub fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
     })
 }
 
+/// Parse a mdhd box.
+pub fn read_mdhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<MediaHeaderBox> {
+    let (version, _) = read_fullbox_extra(src);
+    let (timescale, duration) = match version {
+        1 => {
+            // Skip 64-bit creation and modification times.
+            let mut skip: Vec<u8> = vec![0; 16];
+            let r = try!(src.read(&mut skip));
+            assert!(r == skip.len());
+
+            // 64 bit duration.
+            (try!(src.read_u32::<BigEndian>()),
+             try!(src.read_u64::<BigEndian>()))
+        },
+        0 => {
+            // Skip 32-bit creation and modification times.
+            let mut skip: Vec<u8> = vec![0; 8];
+            let r = try!(src.read(&mut skip));
+            assert!(r == skip.len());
+
+            // 32 bit duration.
+            (try!(src.read_u32::<BigEndian>()),
+             try!(src.read_u32::<BigEndian>()) as u64)
+        },
+        _ => panic!("invalid mdhd version"),
+    };
+
+    // Skip uninteresting fields.
+    let mut skip: Vec<u8> = vec![0; 4];
+    let r = try!(src.read(&mut skip));
+    assert!(r == skip.len());
+
+    Ok(MediaHeaderBox{
+        name: head.name,
+        size: head.size,
+        timescale: timescale,
+        duration: duration,
+    })
+}
+
 /// Convert the iso box type or other 4-character value to a string.
 fn fourcc_to_string(name: u32) -> String {
     let u32_to_vec = |u| {
@@ -428,6 +482,13 @@ impl fmt::Display for EditListBox {
                                       entry.media_rate_integer, entry.media_rate_fraction));
         }
         write!(f, "'{}' {} bytes {}", fourcc_to_string(self.name), self.size, entries)
+    }
+}
+
+impl fmt::Display for MediaHeaderBox {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "'{}' {} bytes timescale {} duration {}",
+               fourcc_to_string(self.name), self.size, self.timescale, self.duration)
     }
 }
 
@@ -538,5 +599,53 @@ fn test_read_elst_v1() {
     assert_eq!(parsed.edits[1].media_time, 361984551075317512);
     assert_eq!(parsed.edits[1].media_rate_integer, 2314);
     assert_eq!(parsed.edits[1].media_rate_fraction, 2828);
+    println!("box {}", parsed);
+}
+
+#[test]
+fn test_read_mdhd_v0() {
+    use std::io::Cursor;
+    use std::io::Write;
+    let mut test: Vec<u8> = vec![0, 0, 0, 32]; // size
+    write!(&mut test, "mdhd").unwrap(); // type
+    test.extend(vec![0, 0, 0, 0]); // fullbox
+    test.extend(vec![0, 0, 0, 0,
+                     0, 0, 0, 0,
+                     1, 2, 3, 4,
+                     5, 6, 7, 8,
+                     0, 0, 0, 0]);
+    assert_eq!(test.len(), 32);
+
+    let mut stream = Cursor::new(test);
+    let header = read_box_header(&mut stream).unwrap();
+    let parsed = read_mdhd(&mut stream, &header).unwrap();
+    assert_eq!(parsed.name, 1835296868);
+    assert_eq!(parsed.size, 32);
+    assert_eq!(parsed.timescale, 16909060);
+    assert_eq!(parsed.duration, 84281096);
+    println!("box {}", parsed);
+}
+
+#[test]
+fn test_read_mdhd_v1() {
+    use std::io::Cursor;
+    use std::io::Write;
+    let mut test: Vec<u8> = vec![0, 0, 0, 44]; // size
+    write!(&mut test, "mdhd").unwrap(); // type
+    test.extend(vec![1, 0, 0, 0]); // fullbox
+    test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
+                     0, 0, 0, 0, 0, 0, 0, 0,
+                     1, 2, 3, 4,
+                     5, 6, 7, 8, 5, 6, 7, 8,
+                     0, 0, 0, 0]);
+    assert_eq!(test.len(), 44);
+
+    let mut stream = Cursor::new(test);
+    let header = read_box_header(&mut stream).unwrap();
+    let parsed = read_mdhd(&mut stream, &header).unwrap();
+    assert_eq!(parsed.name, 1835296868);
+    assert_eq!(parsed.size, 44);
+    assert_eq!(parsed.timescale, 16909060);
+    assert_eq!(parsed.duration, 361984551075317512);
     println!("box {}", parsed);
 }
