@@ -112,6 +112,14 @@ pub struct Sample {
     sample_delta: u32,
 }
 
+// Handler reference box 'hdlr'
+pub struct HandlerBox {
+    name: u32,
+    size: u64,
+    handler_type: u32,
+    handler_name: String,
+}
+
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Read, BufRead, Take};
@@ -281,6 +289,11 @@ pub fn read_box<T: Read + BufRead>(f: &mut T) -> byteorder::Result<()> {
                 let mut content = limit(f, &h);
                 let stts = try!(read_stts(&mut content, &h));
                 println!("  {}", stts);
+            },
+            "hdlr" => {
+                let mut content = limit(f, &h);
+                let hdlr = try!(read_hdlr(&mut content, &h));
+                println!("  {}", hdlr);
             },
             _ => {
                 // Skip the contents of unknown chunks.
@@ -611,6 +624,34 @@ pub fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
     })
 }
 
+/// Parse a hdlr box.
+pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> byteorder::Result<HandlerBox> {
+    let (_, _) = read_fullbox_extra(src);
+
+    // Skip uninteresting fields.
+    let mut skip: Vec<u8> = vec![0; 4];
+    let r = try!(src.read(&mut skip));
+    assert!(r == skip.len());
+
+    let handler_type = try!(src.read_u32::<BigEndian>());
+
+    // Skip uninteresting fields.
+    let mut skip: Vec<u8> = vec![0; 12];
+    let r = try!(src.read(&mut skip));
+    assert!(r == skip.len());
+
+    // TODO(kinetik): Find a copy of ISO/IEC 14496-1 to work out how strings are encoded.
+    // As a hack, just consume the rest of the box.
+    try!(skip_box_content(src, head));
+
+    Ok(HandlerBox{
+        name: head.name,
+        size: head.size,
+        handler_type: handler_type,
+        handler_name: String::new(),
+    })
+}
+
 /// Convert the iso box type or other 4-character value to a string.
 fn fourcc_to_string(name: u32) -> String {
     let u32_to_vec = |u| {
@@ -742,7 +783,13 @@ impl fmt::Display for TimeToSampleBox {
         write!(f, "'{}' {} bytes sample {}",
                fourcc_to_string(self.name), self.size, entries)
     }
+}
 
+impl fmt::Display for HandlerBox {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "'{}' {} bytes handler_type '{}'",
+               fourcc_to_string(self.name), self.size, fourcc_to_string(self.handler_type))
+    }
 }
 
 #[test]
