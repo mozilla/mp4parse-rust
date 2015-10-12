@@ -49,17 +49,19 @@ use std::io::Cursor;
 
 /// Parse a box out of a data buffer.
 pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<BoxHeader> {
-    let tmp_size = try!(src.read_u32::<BigEndian>());
+    let size32 = try!(src.read_u32::<BigEndian>());
     let name = try!(src.read_u32::<BigEndian>());
-    let size = match tmp_size {
-        1 => try!(src.read_u64::<BigEndian>()),
-        _ => tmp_size as u64,
+    let size = match size32 {
+        0 => panic!("unknown box size not implemented"),
+        1 => {
+            let size64 = try!(src.read_u64::<BigEndian>());
+            assert!(size64 >= 16);
+            size64
+        },
+        2 ... 7 => panic!("invalid box size"),
+        _ => size32 as u64,
     };
-    assert!(size >= 8);
-    if tmp_size == 1 {
-        assert!(size >= 16);
-    }
-    let offset = match tmp_size {
+    let offset = match size32 {
         1 => 4 + 4 + 8,
         _ => 4 + 4,
     };
