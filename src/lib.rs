@@ -72,6 +72,13 @@ pub struct ChunkOffsetBox {
     offsets: Vec<u64>,
 }
 
+// Sync sample box 'stss'
+pub struct SyncSampleBox {
+    name: u32,
+    size: u64,
+    samples: Vec<u32>,
+}
+
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Read, BufRead, Take};
@@ -217,6 +224,11 @@ pub fn read_box<T: Read + BufRead>(f: &mut T) -> byteorder::Result<()> {
                 let mut content = limit(f, &h);
                 let co64 = try!(read_co64(&mut content, &h));
                 println!("  {}", co64);
+            },
+            "stss" => {
+                let mut content = limit(f, &h);
+                let stss = try!(read_stss(&mut content, &h));
+                println!("  {}", stss);
             },
             _ => {
                 // Skip the contents of unknown chunks.
@@ -467,6 +479,22 @@ pub fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
     })
 }
 
+/// Parse a stss box.
+pub fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<SyncSampleBox> {
+    let (_, _) = read_fullbox_extra(src);
+    let sample_count = try!(src.read_u32::<BigEndian>());
+    let mut samples = Vec::new();
+    for _ in 0..sample_count {
+        samples.push(try!(src.read_u32::<BigEndian>()));
+    }
+
+    Ok(SyncSampleBox{
+        name: head.name,
+        size: head.size,
+        samples: samples,
+    })
+}
+
 /// Convert the iso box type or other 4-character value to a string.
 fn fourcc_to_string(name: u32) -> String {
     let u32_to_vec = |u| {
@@ -548,6 +576,17 @@ impl fmt::Display for ChunkOffsetBox {
         let mut entries = String::new();
         for entry in &self.offsets {
             entries.push_str(&format!("\n  offset {}", entry));
+        }
+        write!(f, "'{}' {} bytes {}",
+               fourcc_to_string(self.name), self.size, entries)
+    }
+}
+
+impl fmt::Display for SyncSampleBox {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut entries = String::new();
+        for entry in &self.samples {
+            entries.push_str(&format!("\n  sample {}", entry));
         }
         write!(f, "'{}' {} bytes {}",
                fourcc_to_string(self.name), self.size, entries)
