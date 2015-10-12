@@ -46,6 +46,7 @@ extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Read, BufRead, Take};
 use std::io::Cursor;
+use std::cmp;
 
 /// Parse a box out of a data buffer.
 pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<BoxHeader> {
@@ -86,9 +87,18 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> (u8, u32) {
 
 /// Skip over the contents of a box.
 pub fn skip_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> std::io::Result<usize> {
-    let bytes_to_skip = (header.size - header.offset) as usize;
-    src.consume(bytes_to_skip);
-    Ok(bytes_to_skip)
+    let bytes_skipped = (header.size - header.offset) as usize;
+    let mut bytes_to_skip = bytes_skipped;
+    while bytes_to_skip > 0 {
+        let len = {
+            let buf = src.fill_buf().unwrap();
+            buf.len()
+        };
+        let discard = cmp::min(len, bytes_to_skip);
+        src.consume(discard);
+        bytes_to_skip -= discard;
+    }
+    Ok(bytes_skipped)
 }
 
 /// Helper to construct a Take over the contents of a box.
