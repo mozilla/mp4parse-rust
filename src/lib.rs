@@ -164,6 +164,10 @@ pub fn skip_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> std::io
             let buf = src.fill_buf().unwrap();
             buf.len()
         };
+        if len == 0 {
+            // TODO(kinetik): Work out how to return an io::ErrorKind::UnexpectedEOF.
+            return Ok(bytes_skipped)
+        }
         let discard = cmp::min(len, bytes_to_skip);
         src.consume(discard);
         bytes_to_skip -= discard;
