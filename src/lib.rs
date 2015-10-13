@@ -133,6 +133,7 @@ enum SampleEntry {
         channelcount: u16,
         samplesize: u16,
         samplerate: u32,
+        esds: ES_Descriptor,
     },
     Video {
         data_reference_index: u16,
@@ -143,6 +144,7 @@ enum SampleEntry {
         frame_count: u16,
         compressorname: String,
         depth: u16,
+        avcc: AVCDecoderConfigurationRecord,
         calp: Option<CleanApertureBox>,
         pasp: Option<PixelAspectRatioBox>,
     },
@@ -167,6 +169,15 @@ pub struct CleanApertureBox {
 pub struct PixelAspectRatioBox {
     hSpacing: u32,
     vSpacing: u32,
+}
+
+pub struct AVCDecoderConfigurationRecord {
+    data: Vec<u8>,
+}
+
+#[allow(non_camel_case_types)]
+pub struct ES_Descriptor {
+    data: Vec<u8>,
 }
 
 /// Internal data structures.
@@ -757,9 +768,19 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 // Skip uninteresting fields.
                 try!(skip(src, 2));
 
+                // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
+                let h = read_box_header(src).unwrap();
+                if fourcc_to_string(h.name) != "avcC" {
+                    panic!("expected avcC atom inside avc1");
+                }
+                let mut data: Vec<u8> = vec![0; (h.size - h.offset) as usize];
+                let r = try!(src.read(&mut data));
+                assert!(r == data.len());
+                let avcc = AVCDecoderConfigurationRecord { data: data };
+
                 // TODO(kinetik): Parse CleanApertureBox and PixelAspectRatioBox.
                 // How do you detect if they're present/optional?
-                // TODO(kinetik): Parse avcC atom.
+                // avc1 may also have MPEG4BitRateBox and MPEG4ExtensionDescriptionsBox.
                 try!(skip_box_content(src, head));
 
                 SampleEntry::Video {
@@ -771,6 +792,7 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                     frame_count: frame_count,
                     compressorname: compressorname,
                     depth: depth,
+                    avcc: avcc,
                     calp: None,
                     pasp: None
                 }
@@ -798,14 +820,23 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
 
                 let samplerate = try!(src.read_u32::<BigEndian>()); // template ({ samplerate of media } << 16)
 
-                // TODO(kinetik): Parse esds atom.
-                try!(skip_box_content(src, head));
+                // TODO(kinetik): Parse esds atom?  For now we just stash the data.
+                let h = read_box_header(src).unwrap();
+                if fourcc_to_string(h.name) != "esds" {
+                    panic!("expected esds atom inside mp4a");
+                }
+                let (_, _) = read_fullbox_extra(src);
+                let mut data: Vec<u8> = vec![0; (h.size - h.offset - 4) as usize];
+                let r = try!(src.read(&mut data));
+                assert!(r == data.len());
+                let esds = ES_Descriptor { data: data };
 
                 SampleEntry::Audio {
                     data_reference_index: data_reference_index,
                     channelcount: channelcount,
                     samplesize: samplesize,
                     samplerate: samplerate,
+                    esds: esds,
                 }
             },
         };
