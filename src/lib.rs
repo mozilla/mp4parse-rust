@@ -276,7 +276,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> byt
 /// returning anything.
 pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder::Result<()> {
     read_box_header(f).and_then(|h| {
-        match &(fourcc_to_string(h.name))[..] {
+        match &fourcc_to_string(h.name)[..] {
             "ftyp" => {
                 let mut content = limit(f, &h);
                 let ftyp = try!(read_ftyp(&mut content, &h));
@@ -341,7 +341,7 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder:
             "hdlr" => {
                 let mut content = limit(f, &h);
                 let hdlr = try!(read_hdlr(&mut content, &h));
-                let track_type = match &(fourcc_to_string(hdlr.handler_type)[..]) {
+                let track_type = match &fourcc_to_string(hdlr.handler_type)[..] {
                     "vide" => TrackType::Video,
                     "soun" => TrackType::Audio,
                     _ => panic!("unhandled handler type"),
