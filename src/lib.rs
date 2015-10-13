@@ -256,7 +256,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> byt
     // that trait isn't implemented for a Take like our limit()
     // returns. Slurping the buffer and wrapping it in a Cursor
     // functions as a work around.
-    let buf: Vec<u8> = limit(f, &h)
+    let buf: Vec<u8> = f
         .bytes()
         .map(|u| u.unwrap())
         .collect();
@@ -278,6 +278,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> byt
             },
         }
     }
+    assert!(content.position() == h.size - h.offset);
     println!("{} -- end", h);
     Ok(())
 }
@@ -287,70 +288,59 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> byt
 /// returning anything.
 pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder::Result<()> {
     read_box_header(f).and_then(|h| {
+        let mut content = limit(f, &h);
         match &fourcc_to_string(h.name)[..] {
             "ftyp" => {
-                let mut content = limit(f, &h);
                 let ftyp = try!(read_ftyp(&mut content, &h));
                 println!("{}", ftyp);
             },
-            "moov" => try!(recurse(f, &h, context)),
+            "moov" => try!(recurse(&mut content, &h, context)),
             "mvhd" => {
-                let mut content = limit(f, &h);
                 let mvhd = try!(read_mvhd(&mut content, &h));
                 println!("  {}", mvhd);
             },
-            "trak" => try!(recurse(f, &h, context)),
+            "trak" => try!(recurse(&mut content, &h, context)),
             "tkhd" => {
-                let mut content = limit(f, &h);
                 let tkhd = try!(read_tkhd(&mut content, &h));
                 println!("  {}", tkhd);
             },
-            "edts" => try!(recurse(f, &h, context)),
+            "edts" => try!(recurse(&mut content, &h, context)),
             "elst" => {
-                let mut content = limit(f, &h);
                 let elst = try!(read_elst(&mut content, &h));
                 println!("  {}", elst);
             },
-            "mdia" => try!(recurse(f, &h, context)),
+            "mdia" => try!(recurse(&mut content, &h, context)),
             "mdhd" => {
-                let mut content = limit(f, &h);
                 let mdhd = try!(read_mdhd(&mut content, &h));
                 println!("  {}", mdhd);
             },
-            "minf" => try!(recurse(f, &h, context)),
-            "stbl" => try!(recurse(f, &h, context)),
+            "minf" => try!(recurse(&mut content, &h, context)),
+            "stbl" => try!(recurse(&mut content, &h, context)),
             "stco" => {
-                let mut content = limit(f, &h);
                 let stco = try!(read_stco(&mut content, &h));
                 println!("  {}", stco);
             },
             "co64" => {
-                let mut content = limit(f, &h);
                 let co64 = try!(read_co64(&mut content, &h));
                 println!("  {}", co64);
             },
             "stss" => {
-                let mut content = limit(f, &h);
                 let stss = try!(read_stss(&mut content, &h));
                 println!("  {}", stss);
             },
             "stsc" => {
-                let mut content = limit(f, &h);
                 let stsc = try!(read_stsc(&mut content, &h));
                 println!("  {}", stsc);
             },
             "stsz" => {
-                let mut content = limit(f, &h);
                 let stsz = try!(read_stsz(&mut content, &h));
                 println!("  {}", stsz);
             },
             "stts" => {
-                let mut content = limit(f, &h);
                 let stts = try!(read_stts(&mut content, &h));
                 println!("  {}", stts);
             },
             "hdlr" => {
-                let mut content = limit(f, &h);
                 let hdlr = try!(read_hdlr(&mut content, &h));
                 let track_type = match &fourcc_to_string(hdlr.handler_type)[..] {
                     "vide" => TrackType::Video,
@@ -361,7 +351,6 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder:
                 println!("  {}", hdlr);
             },
             "stsd" => {
-                let mut content = limit(f, &h);
                 let track = &context.tracks[context.tracks.len() - 1];
                 let stsd = try!(read_stsd(&mut content, &h, &track));
                 println!("  {}", stsd);
@@ -369,9 +358,10 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder:
             _ => {
                 // Skip the contents of unknown chunks.
                 println!("{} (skipped)", h);
-                try!(skip_box_content(f, &h).and(Ok(())));
+                try!(skip_box_content(&mut content, &h).and(Ok(())));
             },
         };
+        assert!(content.limit() == 0);
         Ok(()) // and_then needs a Result to return.
     })
 }
