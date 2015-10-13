@@ -228,22 +228,7 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> (u8, u32) {
 
 /// Skip over the contents of a box.
 pub fn skip_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> std::io::Result<usize> {
-    let bytes_skipped = (header.size - header.offset) as usize;
-    let mut bytes_to_skip = bytes_skipped;
-    while bytes_to_skip > 0 {
-        let len = {
-            let buf = src.fill_buf().unwrap();
-            buf.len()
-        };
-        if len == 0 {
-            // TODO(kinetik): Work out how to return an io::ErrorKind::UnexpectedEOF.
-            return Ok(bytes_skipped)
-        }
-        let discard = cmp::min(len, bytes_to_skip);
-        src.consume(discard);
-        bytes_to_skip -= discard;
-    }
-    Ok(bytes_skipped)
+    skip(src, (header.size - header.offset) as usize)
 }
 
 /// Helper to construct a Take over the contents of a box.
@@ -465,7 +450,7 @@ pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 }
 
 /// Parse a tkhd box.
-pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<TrackHeaderBox> {
+pub fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> byteorder::Result<TrackHeaderBox> {
     let (version, flags) = read_fullbox_extra(src);
     let disabled = flags & 0x1u32 == 0 || flags & 0x2u32 == 0;
     match version {
@@ -547,7 +532,7 @@ pub fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 }
 
 /// Parse a mdhd box.
-pub fn read_mdhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<MediaHeaderBox> {
+pub fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> byteorder::Result<MediaHeaderBox> {
     let (version, _) = read_fullbox_extra(src);
     let (timescale, duration) = match version {
         1 => {
@@ -847,11 +832,23 @@ fn fourcc_to_string(name: u32) -> String {
 }
 
 /// Skip a number of bytes that we don't care to parse.
-fn skip<T: Read>(src: &mut T, bytes: usize) -> std::io::Result<usize> {
-    let mut skip: Vec<u8> = vec![0; bytes];
-    let r = try!(src.read(&mut skip));
-    assert!(r == skip.len());
-    Ok(skip.len())
+fn skip<T: BufRead>(src: &mut T, bytes: usize) -> std::io::Result<usize> {
+    let mut bytes_to_skip = bytes;
+    while bytes_to_skip > 0 {
+        let len = {
+            let buf = src.fill_buf().unwrap();
+            buf.len()
+        };
+        if len == 0 {
+            // TODO(kinetik): Work out how to return an io::ErrorKind::UnexpectedEOF.
+            return Ok(bytes - bytes_to_skip)
+        }
+        let discard = cmp::min(len, bytes_to_skip);
+        src.consume(discard);
+        bytes_to_skip -= discard;
+    }
+    assert!(bytes_to_skip == 0);
+    Ok(bytes)
 }
 
 use std::fmt;
