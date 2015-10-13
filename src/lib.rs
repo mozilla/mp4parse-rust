@@ -495,10 +495,8 @@ pub fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
     };
     let _reserved = try!(src.read_u32::<BigEndian>());
     let _reserved = try!(src.read_u32::<BigEndian>());
-    // Skip uninterested fields.
-    let mut skip: Vec<u8> = vec![0; 44];
-    let r = try!(src.read(&mut skip));
-    assert!(r == skip.len());
+    // Skip uninteresting fields.
+    try!(skip(src, 44));
     let width = try!(src.read_u32::<BigEndian>());
     let height = try!(src.read_u32::<BigEndian>());
     Ok(TrackHeaderBox {
@@ -576,9 +574,7 @@ pub fn read_mdhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
     };
 
     // Skip uninteresting fields.
-    let mut skip: Vec<u8> = vec![0; 4];
-    let r = try!(src.read(&mut skip));
-    assert!(r == skip.len());
+    try!(skip(src, 4));
 
     Ok(MediaHeaderBox{
         name: head.name,
@@ -705,16 +701,12 @@ pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
     let (_, _) = read_fullbox_extra(src);
 
     // Skip uninteresting fields.
-    let mut skip: Vec<u8> = vec![0; 4];
-    let r = try!(src.read(&mut skip));
-    assert!(r == skip.len());
+    try!(skip(src, 4));
 
     let handler_type = try!(src.read_u32::<BigEndian>());
 
     // Skip uninteresting fields.
-    let mut skip: Vec<u8> = vec![0; 12];
-    let r = try!(src.read(&mut skip));
-    assert!(r == skip.len());
+    try!(skip(src, 12));
 
     // TODO(kinetik): Find a copy of ISO/IEC 14496-1 to work out how strings are encoded.
     // As a hack, just consume the rest of the box.
@@ -744,16 +736,12 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 }
 
                 // Skip uninteresting fields.
-                let mut skip: Vec<u8> = vec![0; 6];
-                let r = try!(src.read(&mut skip));
-                assert!(r == skip.len());
+                try!(skip(src, 6));
 
                 let data_reference_index = try!(src.read_u16::<BigEndian>());
 
                 // Skip uninteresting fields.
-                let mut skip: Vec<u8> = vec![0; 16];
-                let r = try!(src.read(&mut skip));
-                assert!(r == skip.len());
+                try!(skip(src, 16));
 
                 let width = try!(src.read_u16::<BigEndian>());
                 let height = try!(src.read_u16::<BigEndian>());
@@ -762,9 +750,7 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 let vertresolution = try!(src.read_u32::<BigEndian>());
 
                 // Skip uninteresting fields.
-                let mut skip: Vec<u8> = vec![0; 4];
-                let r = try!(src.read(&mut skip));
-                assert!(r == skip.len());
+                try!(skip(src, 4));
 
                 let frame_count = try!(src.read_u16::<BigEndian>());
 
@@ -778,17 +764,13 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 assert!(r == buf.len());
                 let compressorname = String::from_utf8_lossy(&buf).into_owned();
 
-                // Skip rest of string[32] fields.
-                let mut skip: Vec<u8> = vec![0; 31 - compressorname_len as usize];
-                let r = try!(src.read(&mut skip));
-                assert!(r == skip.len());
+                // Skip rest of string[32] bytes.
+                try!(skip(src, 31 - compressorname_len as usize));
 
                 let depth = try!(src.read_u16::<BigEndian>());
 
                 // Skip uninteresting fields.
-                let mut skip: Vec<u8> = vec![0; 2];
-                let r = try!(src.read(&mut skip));
-                assert!(r == skip.len());
+                try!(skip(src, 2));
 
                 // TODO(kinetik): Parse CleanApertureBox and PixelAspectRatioBox.
                 // How do you detect if they're present/optional?
@@ -815,25 +797,19 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 }
 
                 // Skip uninteresting fields.
-                let mut skip: Vec<u8> = vec![0; 6];
-                let r = try!(src.read(&mut skip));
-                assert!(r == skip.len());
+                try!(skip(src, 6));
 
                 let data_reference_index = try!(src.read_u16::<BigEndian>());
 
                 // Skip uninteresting fields.
-                let mut skip: Vec<u8> = vec![0; 8];
-                let r = try!(src.read(&mut skip));
-                assert!(r == skip.len());
+                try!(skip(src, 8));
 
                 // TODO(kinetik): find the meaning of 'template' in MPEG-4 docs.
                 let channelcount = try!(src.read_u16::<BigEndian>()); // template 2
                 let samplesize = try!(src.read_u16::<BigEndian>()); // template 16
 
                 // Skip uninteresting fields.
-                let mut skip: Vec<u8> = vec![0; 4];
-                let r = try!(src.read(&mut skip));
-                assert!(r == skip.len());
+                try!(skip(src, 4));
 
                 let samplerate = try!(src.read_u32::<BigEndian>()); // template ({ samplerate of media } << 16)
 
@@ -868,6 +844,14 @@ fn fourcc_to_string(name: u32) -> String {
     };
     let name_bytes = u32_to_vec(name);
     String::from_utf8_lossy(&name_bytes).into_owned()
+}
+
+/// Skip a number of bytes that we don't care to parse.
+fn skip<T: Read>(src: &mut T, bytes: usize) -> std::io::Result<usize> {
+    let mut skip: Vec<u8> = vec![0; bytes];
+    let r = try!(src.read(&mut skip));
+    assert!(r == skip.len());
+    Ok(skip.len())
 }
 
 use std::fmt;
