@@ -226,7 +226,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
 /// Read the contents of a box, including sub boxes.
 /// Right now it just prints the box value rather than
 /// returning anything.
-pub fn read_box<T: Read + BufRead>(f: &mut T) -> byteorder::Result<()> {
+pub fn read_box<T: BufRead>(f: &mut T) -> byteorder::Result<()> {
     read_box_header(f).and_then(|h| {
         match &(fourcc_to_string(h.name))[..] {
             "ftyp" => {
