@@ -120,6 +120,20 @@ pub struct HandlerBox {
     handler_name: String,
 }
 
+/// Internal data structures.
+pub struct MediaContext {
+    pub tracks: Vec<Track>,
+}
+
+enum TrackType {
+    Video,
+    Audio
+}
+
+pub struct Track {
+    track_type: TrackType,
+}
+
 extern crate byteorder;
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Read, BufRead, Take};
@@ -189,7 +203,7 @@ fn limit<'a, T: Read>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
 }
 
 /// Helper to construct a Cursor over the contents of a box.
-fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
+fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> byteorder::Result<()> {
     use std::error::Error;
     println!("{} -- recursing", h);
     // FIXME: I couldn't figure out how to do this without copying.
@@ -203,7 +217,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
         .collect();
     let mut content = Cursor::new(buf);
     loop {
-        match read_box(&mut content) {
+        match read_box(&mut content, context) {
             Ok(_) => {},
             Err(byteorder::Error::UnexpectedEOF) => {
                 // byteorder returns EOF at the end of the buffer.
@@ -226,7 +240,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader) -> byteorder::Result<()> {
 /// Read the contents of a box, including sub boxes.
 /// Right now it just prints the box value rather than
 /// returning anything.
-pub fn read_box<T: BufRead>(f: &mut T) -> byteorder::Result<()> {
+pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder::Result<()> {
     read_box_header(f).and_then(|h| {
         match &(fourcc_to_string(h.name))[..] {
             "ftyp" => {
@@ -234,32 +248,32 @@ pub fn read_box<T: BufRead>(f: &mut T) -> byteorder::Result<()> {
                 let ftyp = try!(read_ftyp(&mut content, &h));
                 println!("{}", ftyp);
             },
-            "moov" => try!(recurse(f, &h)),
+            "moov" => try!(recurse(f, &h, context)),
             "mvhd" => {
                 let mut content = limit(f, &h);
                 let mvhd = try!(read_mvhd(&mut content, &h));
                 println!("  {}", mvhd);
             },
-            "trak" => try!(recurse(f, &h)),
+            "trak" => try!(recurse(f, &h, context)),
             "tkhd" => {
                 let mut content = limit(f, &h);
                 let tkhd = try!(read_tkhd(&mut content, &h));
                 println!("  {}", tkhd);
             },
-            "edts" => try!(recurse(f, &h)),
+            "edts" => try!(recurse(f, &h, context)),
             "elst" => {
                 let mut content = limit(f, &h);
                 let elst = try!(read_elst(&mut content, &h));
                 println!("  {}", elst);
             },
-            "mdia" => try!(recurse(f, &h)),
+            "mdia" => try!(recurse(f, &h, context)),
             "mdhd" => {
                 let mut content = limit(f, &h);
                 let mdhd = try!(read_mdhd(&mut content, &h));
                 println!("  {}", mdhd);
             },
-            "minf" => try!(recurse(f, &h)),
-            "stbl" => try!(recurse(f, &h)),
+            "minf" => try!(recurse(f, &h, context)),
+            "stbl" => try!(recurse(f, &h, context)),
             "stco" => {
                 let mut content = limit(f, &h);
                 let stco = try!(read_stco(&mut content, &h));
@@ -293,6 +307,12 @@ pub fn read_box<T: BufRead>(f: &mut T) -> byteorder::Result<()> {
             "hdlr" => {
                 let mut content = limit(f, &h);
                 let hdlr = try!(read_hdlr(&mut content, &h));
+                let track_type = match &(fourcc_to_string(hdlr.handler_type)[..]) {
+                    "vide" => TrackType::Video,
+                    "soun" => TrackType::Audio,
+                    _ => panic!("unhandled handler type"),
+                };
+                context.tracks.push(Track { track_type: track_type });
                 println!("  {}", hdlr);
             },
             _ => {
@@ -323,7 +343,8 @@ pub extern fn read_box_from_buffer(buffer: *const u8, size: usize) -> bool {
 
     // Parse in a subthread.
     let task = thread::spawn(move || {
-        read_box(&mut c).or_else(|e| { match e {
+        let mut context = MediaContext { tracks: Vec::new() };
+        read_box(&mut c, &mut context).or_else(|e| { match e {
             // Catch EOF. We naturally hit it at end-of-input.
             byteorder::Error::UnexpectedEOF => { Ok(()) },
             e => { Err(e) },

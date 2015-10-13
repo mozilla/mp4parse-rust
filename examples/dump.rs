@@ -11,7 +11,8 @@ fn dump_file(filename: &String) {
     let file = File::open(filename).unwrap();
     let mut reader = BufReader::new(file);
     loop {
-        match mp4parse::read_box(&mut reader) {
+        let mut context = mp4parse::MediaContext { tracks: Vec::new() };
+        match mp4parse::read_box(&mut reader, &mut context) {
             Ok(_) => {},
             Err(Error::UnexpectedEOF) => { break },
             Err(e) => { panic!(e); },
