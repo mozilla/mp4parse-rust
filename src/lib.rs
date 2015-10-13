@@ -120,6 +120,55 @@ pub struct HandlerBox {
     handler_name: String,
 }
 
+// Sample description box 'stsd'
+pub struct SampleDescriptionBox {
+    name: u32,
+    size: u64,
+    descriptions: Vec<SampleEntry>,
+}
+
+enum SampleEntry {
+    Audio {
+        data_reference_index: u16,
+        channelcount: u16,
+        samplesize: u16,
+        samplerate: u32,
+    },
+    Video {
+        data_reference_index: u16,
+        width: u16,
+        height: u16,
+        horizresolution: u32,
+        vertresolution: u32,
+        frame_count: u16,
+        compressorname: String,
+        depth: u16,
+        calp: Option<CleanApertureBox>,
+        pasp: Option<PixelAspectRatioBox>,
+    },
+}
+
+#[allow(non_snake_case)]
+pub struct CleanApertureBox {
+    cleanApertureWidthN: u32,
+    cleanApertureWidthD: u32,
+
+    cleanApertureHeightN: u32,
+    cleanApertureHeightD: u32,
+
+    horizOffN: u32,
+    horizOffD: u32,
+
+    vertOffN: u32,
+    vertOffD: u32,
+}
+
+#[allow(non_snake_case)]
+pub struct PixelAspectRatioBox {
+    hSpacing: u32,
+    vSpacing: u32,
+}
+
 /// Internal data structures.
 pub struct MediaContext {
     pub tracks: Vec<Track>,
@@ -314,6 +363,12 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder:
                 };
                 context.tracks.push(Track { track_type: track_type });
                 println!("  {}", hdlr);
+            },
+            "stsd" => {
+                let mut content = limit(f, &h);
+                let track = &context.tracks[context.tracks.len() - 1];
+                let stsd = try!(read_stsd(&mut content, &h, &track));
+                println!("  {}", stsd);
             },
             _ => {
                 // Skip the contents of unknown chunks.
@@ -673,6 +728,136 @@ pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
     })
 }
 
+/// Parse a stsd box.
+pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &Track) -> byteorder::Result<SampleDescriptionBox> {
+    let (_, _) = read_fullbox_extra(src);
+
+    let description_count = try!(src.read_u32::<BigEndian>());
+    let mut descriptions = Vec::new();
+
+    for _ in 0..description_count {
+        let description = match track.track_type {
+            TrackType::Video => {
+                let h = read_box_header(src).unwrap();
+                if fourcc_to_string(h.name) != "avc1" {
+                    panic!("unsupported VideoSampleEntry subtype");
+                }
+
+                // Skip uninteresting fields.
+                let mut skip: Vec<u8> = vec![0; 6];
+                let r = try!(src.read(&mut skip));
+                assert!(r == skip.len());
+
+                let data_reference_index = try!(src.read_u16::<BigEndian>());
+
+                // Skip uninteresting fields.
+                let mut skip: Vec<u8> = vec![0; 16];
+                let r = try!(src.read(&mut skip));
+                assert!(r == skip.len());
+
+                let width = try!(src.read_u16::<BigEndian>());
+                let height = try!(src.read_u16::<BigEndian>());
+
+                let horizresolution = try!(src.read_u32::<BigEndian>());
+                let vertresolution = try!(src.read_u32::<BigEndian>());
+
+                // Skip uninteresting fields.
+                let mut skip: Vec<u8> = vec![0; 4];
+                let r = try!(src.read(&mut skip));
+                assert!(r == skip.len());
+
+                let frame_count = try!(src.read_u16::<BigEndian>());
+
+                let compressorname_len = try!(src.read_u8());
+                if compressorname_len > 31 {
+                    panic!("invalid compressorname length");
+                }
+
+                let mut buf: Vec<u8> = vec![0; compressorname_len as usize];
+                let r = try!(src.read(&mut buf));
+                assert!(r == buf.len());
+                let compressorname = String::from_utf8_lossy(&buf).into_owned();
+
+                // Skip rest of string[32] fields.
+                let mut skip: Vec<u8> = vec![0; 31 - compressorname_len as usize];
+                let r = try!(src.read(&mut skip));
+                assert!(r == skip.len());
+
+                let depth = try!(src.read_u16::<BigEndian>());
+
+                // Skip uninteresting fields.
+                let mut skip: Vec<u8> = vec![0; 2];
+                let r = try!(src.read(&mut skip));
+                assert!(r == skip.len());
+
+                // TODO(kinetik): Parse CleanApertureBox and PixelAspectRatioBox.
+                // How do you detect if they're present/optional?
+                // TODO(kinetik): Parse avcC atom.
+                try!(skip_box_content(src, head));
+
+                SampleEntry::Video {
+                    data_reference_index: data_reference_index,
+                    width: width,
+                    height: height,
+                    horizresolution: horizresolution,
+                    vertresolution: vertresolution,
+                    frame_count: frame_count,
+                    compressorname: compressorname,
+                    depth: depth,
+                    calp: None,
+                    pasp: None
+                }
+            },
+            TrackType::Audio => {
+                let h = read_box_header(src).unwrap();
+                if fourcc_to_string(h.name) != "mp4a" {
+                    panic!("unsupported AudioSampleEntry subtype");
+                }
+
+                // Skip uninteresting fields.
+                let mut skip: Vec<u8> = vec![0; 6];
+                let r = try!(src.read(&mut skip));
+                assert!(r == skip.len());
+
+                let data_reference_index = try!(src.read_u16::<BigEndian>());
+
+                // Skip uninteresting fields.
+                let mut skip: Vec<u8> = vec![0; 8];
+                let r = try!(src.read(&mut skip));
+                assert!(r == skip.len());
+
+                // TODO(kinetik): find the meaning of 'template' in MPEG-4 docs.
+                let channelcount = try!(src.read_u16::<BigEndian>()); // template 2
+                let samplesize = try!(src.read_u16::<BigEndian>()); // template 16
+
+                // Skip uninteresting fields.
+                let mut skip: Vec<u8> = vec![0; 4];
+                let r = try!(src.read(&mut skip));
+                assert!(r == skip.len());
+
+                let samplerate = try!(src.read_u32::<BigEndian>()); // template ({ samplerate of media } << 16)
+
+                // TODO(kinetik): Parse esds atom.
+                try!(skip_box_content(src, head));
+
+                SampleEntry::Audio {
+                    data_reference_index: data_reference_index,
+                    channelcount: channelcount,
+                    samplesize: samplesize,
+                    samplerate: samplerate,
+                }
+            },
+        };
+        descriptions.push(description);
+    }
+
+    Ok(SampleDescriptionBox{
+        name: head.name,
+        size: head.size,
+        descriptions: descriptions,
+    })
+}
+
 /// Convert the iso box type or other 4-character value to a string.
 fn fourcc_to_string(name: u32) -> String {
     let u32_to_vec = |u| {
@@ -809,6 +994,13 @@ impl fmt::Display for HandlerBox {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "'{}' {} bytes handler_type '{}'",
                fourcc_to_string(self.name), self.size, fourcc_to_string(self.handler_type))
+    }
+}
+
+impl fmt::Display for SampleDescriptionBox {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "'{}' {} bytes descriptions {}",
+               fourcc_to_string(self.name), self.size, self.descriptions.len())
     }
 }
 
