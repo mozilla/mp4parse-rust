@@ -716,7 +716,7 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
     for _ in 0..description_count {
         let description = match track.track_type {
             TrackType::Video => {
-                let h = read_box_header(src).unwrap();
+                let h = try!(read_box_header(src));
                 if fourcc_to_string(h.name) != "avc1" {
                     panic!("unsupported VideoSampleEntry subtype");
                 }
@@ -759,7 +759,7 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 try!(skip(src, 2));
 
                 // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
-                let h = read_box_header(src).unwrap();
+                let h = try!(read_box_header(src));
                 if fourcc_to_string(h.name) != "avcC" {
                     panic!("expected avcC atom inside avc1");
                 }
@@ -788,7 +788,7 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 }
             },
             TrackType::Audio => {
-                let h = read_box_header(src).unwrap();
+                let h = try!(read_box_header(src));
                 if fourcc_to_string(h.name) != "mp4a" {
                     panic!("unsupported AudioSampleEntry subtype");
                 }
@@ -811,7 +811,7 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 let samplerate = try!(src.read_u32::<BigEndian>()); // template ({ samplerate of media } << 16)
 
                 // TODO(kinetik): Parse esds atom?  For now we just stash the data.
-                let h = read_box_header(src).unwrap();
+                let h = try!(read_box_header(src));
                 if fourcc_to_string(h.name) != "esds" {
                     panic!("expected esds atom inside mp4a");
                 }
