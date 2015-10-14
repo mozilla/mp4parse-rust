@@ -227,14 +227,14 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<BoxHea
 }
 
 /// Parse the extra header fields for a full box.
-fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> (u8, u32) {
-    let version = src.read_u8().unwrap();
-    let flags_a = src.read_u8().unwrap();
-    let flags_b = src.read_u8().unwrap();
-    let flags_c = src.read_u8().unwrap();
-    (version, (flags_a as u32) << 16 |
-              (flags_b as u32) <<  8 |
-              (flags_c as u32))
+fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<(u8, u32)> {
+    let version = try!(src.read_u8());
+    let flags_a = try!(src.read_u8());
+    let flags_b = try!(src.read_u8());
+    let flags_c = try!(src.read_u8());
+    Ok((version, (flags_a as u32) << 16 |
+                 (flags_b as u32) <<  8 |
+                 (flags_c as u32)))
 }
 
 /// Skip over the contents of a box.
@@ -415,7 +415,7 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 
 /// Parse an mvhd box.
 pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<MovieHeaderBox> {
-    let (version, _) = read_fullbox_extra(src);
+    let (version, _) = try!(read_fullbox_extra(src));
     match version {
         1 => {
             // 64 bit creation and modification times.
@@ -452,7 +452,7 @@ pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 
 /// Parse a tkhd box.
 pub fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> byteorder::Result<TrackHeaderBox> {
-    let (version, flags) = read_fullbox_extra(src);
+    let (version, flags) = try!(read_fullbox_extra(src));
     let disabled = flags & 0x1u32 == 0 || flags & 0x2u32 == 0;
     match version {
         1 => {
@@ -498,7 +498,7 @@ pub fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
 
 /// Parse a elst box.
 pub fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<EditListBox> {
-    let (version, _) = read_fullbox_extra(src);
+    let (version, _) = try!(read_fullbox_extra(src));
     let edit_count = try!(src.read_u32::<BigEndian>());
     let mut edits = Vec::new();
     for _ in 0..edit_count {
@@ -534,7 +534,7 @@ pub fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 
 /// Parse a mdhd box.
 pub fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> byteorder::Result<MediaHeaderBox> {
-    let (version, _) = read_fullbox_extra(src);
+    let (version, _) = try!(read_fullbox_extra(src));
     let (timescale, duration) = match version {
         1 => {
             // Skip 64-bit creation and modification times.
@@ -572,7 +572,7 @@ pub fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
 
 /// Parse a stco box.
 pub fn read_stco<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<ChunkOffsetBox> {
-    let (_, _) = read_fullbox_extra(src);
+    let (_, _) = try!(read_fullbox_extra(src));
     let offset_count = try!(src.read_u32::<BigEndian>());
     let mut offsets = Vec::new();
     for _ in 0..offset_count {
@@ -588,7 +588,7 @@ pub fn read_stco<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 
 /// Parse a stco box.
 pub fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<ChunkOffsetBox> {
-    let (_, _) = read_fullbox_extra(src);
+    let (_, _) = try!(read_fullbox_extra(src));
     let offset_count = try!(src.read_u32::<BigEndian>());
     let mut offsets = Vec::new();
     for _ in 0..offset_count {
@@ -604,7 +604,7 @@ pub fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 
 /// Parse a stss box.
 pub fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<SyncSampleBox> {
-    let (_, _) = read_fullbox_extra(src);
+    let (_, _) = try!(read_fullbox_extra(src));
     let sample_count = try!(src.read_u32::<BigEndian>());
     let mut samples = Vec::new();
     for _ in 0..sample_count {
@@ -620,7 +620,7 @@ pub fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 
 /// Parse a stsc box.
 pub fn read_stsc<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<SampleToChunkBox> {
-    let (_, _) = read_fullbox_extra(src);
+    let (_, _) = try!(read_fullbox_extra(src));
     let sample_count = try!(src.read_u32::<BigEndian>());
     let mut samples = Vec::new();
     for _ in 0..sample_count {
@@ -643,7 +643,7 @@ pub fn read_stsc<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 
 /// Parse a stsz box.
 pub fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<SampleSizeBox> {
-    let (_, _) = read_fullbox_extra(src);
+    let (_, _) = try!(read_fullbox_extra(src));
     let sample_size = try!(src.read_u32::<BigEndian>());
     let sample_count = try!(src.read_u32::<BigEndian>());
     let mut sample_sizes = Vec::new();
@@ -663,7 +663,7 @@ pub fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 
 /// Parse a stts box.
 pub fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<TimeToSampleBox> {
-    let (_, _) = read_fullbox_extra(src);
+    let (_, _) = try!(read_fullbox_extra(src));
     let sample_count = try!(src.read_u32::<BigEndian>());
     let mut samples = Vec::new();
     for _ in 0..sample_count {
@@ -684,7 +684,7 @@ pub fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 
 /// Parse a hdlr box.
 pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> byteorder::Result<HandlerBox> {
-    let (_, _) = read_fullbox_extra(src);
+    let (_, _) = try!(read_fullbox_extra(src));
 
     // Skip uninteresting fields.
     try!(skip(src, 4));
@@ -708,7 +708,7 @@ pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
 
 /// Parse a stsd box.
 pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &Track) -> byteorder::Result<SampleDescriptionBox> {
-    let (_, _) = read_fullbox_extra(src);
+    let (_, _) = try!(read_fullbox_extra(src));
 
     let description_count = try!(src.read_u32::<BigEndian>());
     let mut descriptions = Vec::new();
@@ -815,7 +815,7 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 if fourcc_to_string(h.name) != "esds" {
                     panic!("expected esds atom inside mp4a");
                 }
-                let (_, _) = read_fullbox_extra(src);
+                let (_, _) = try!(read_fullbox_extra(src));
                 let mut data: Vec<u8> = vec![0; (h.size - h.offset - 4) as usize];
                 let r = try!(src.read(&mut data));
                 assert!(r == data.len());
