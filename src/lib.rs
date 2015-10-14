@@ -994,8 +994,9 @@ impl fmt::Display for TimeToSampleBox {
 
 impl fmt::Display for HandlerBox {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "'{}' {} bytes handler_type '{}'",
-               fourcc_to_string(self.name), self.size, fourcc_to_string(self.handler_type))
+        write!(f, "'{}' {} bytes handler_type '{}' {}",
+               fourcc_to_string(self.name), self.size,
+               fourcc_to_string(self.handler_type), self.handler_name)
     }
 }
 
