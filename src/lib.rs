@@ -127,6 +127,7 @@ pub struct SampleDescriptionBox {
     descriptions: Vec<SampleEntry>,
 }
 
+#[allow(dead_code)]
 enum SampleEntry {
     Audio {
         data_reference_index: u16,
@@ -151,6 +152,7 @@ enum SampleEntry {
 }
 
 #[allow(non_snake_case)]
+#[allow(dead_code)]
 pub struct CleanApertureBox {
     cleanApertureWidthN: u32,
     cleanApertureWidthD: u32,
@@ -166,16 +168,19 @@ pub struct CleanApertureBox {
 }
 
 #[allow(non_snake_case)]
+#[allow(dead_code)]
 pub struct PixelAspectRatioBox {
     hSpacing: u32,
     vSpacing: u32,
 }
 
+#[allow(dead_code)]
 pub struct AVCDecoderConfigurationRecord {
     data: Vec<u8>,
 }
 
 #[allow(non_camel_case_types)]
+#[allow(dead_code)]
 pub struct ES_Descriptor {
     data: Vec<u8>,
 }
