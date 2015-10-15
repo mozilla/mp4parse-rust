@@ -139,37 +139,8 @@ enum SampleEntry {
         data_reference_index: u16,
         width: u16,
         height: u16,
-        horizresolution: u32,
-        vertresolution: u32,
-        frame_count: u16,
-        depth: u16,
         avcc: AVCDecoderConfigurationRecord,
-        calp: Option<CleanApertureBox>,
-        pasp: Option<PixelAspectRatioBox>,
     },
-}
-
-#[allow(non_snake_case)]
-#[allow(dead_code)]
-pub struct CleanApertureBox {
-    cleanApertureWidthN: u32,
-    cleanApertureWidthD: u32,
-
-    cleanApertureHeightN: u32,
-    cleanApertureHeightD: u32,
-
-    horizOffN: u32,
-    horizOffD: u32,
-
-    vertOffN: u32,
-    vertOffD: u32,
-}
-
-#[allow(non_snake_case)]
-#[allow(dead_code)]
-pub struct PixelAspectRatioBox {
-    hSpacing: u32,
-    vSpacing: u32,
 }
 
 #[allow(dead_code)]
@@ -719,21 +690,8 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 let width = try!(be_u16(src));
                 let height = try!(be_u16(src));
 
-                let horizresolution = try!(be_u32(src));
-                let vertresolution = try!(be_u32(src));
-
                 // Skip uninteresting fields.
-                try!(skip(src, 4));
-
-                let frame_count = try!(be_u16(src));
-
-                // Skip compressorname string.
-                try!(skip(src, 32));
-
-                let depth = try!(be_u16(src));
-
-                // Skip uninteresting fields.
-                try!(skip(src, 2));
+                try!(skip(src, 50));
 
                 // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
                 let h = try!(read_box_header(src));
@@ -745,22 +703,13 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 assert!(r == data.len());
                 let avcc = AVCDecoderConfigurationRecord { data: data };
 
-                // TODO(kinetik): Parse CleanApertureBox and PixelAspectRatioBox.
-                // How do you detect if they're present/optional?
-                // avc1 may also have MPEG4BitRateBox and MPEG4ExtensionDescriptionsBox.
                 try!(skip_remaining_box_content(src, head));
 
                 SampleEntry::Video {
                     data_reference_index: data_reference_index,
                     width: width,
                     height: height,
-                    horizresolution: horizresolution,
-                    vertresolution: vertresolution,
-                    frame_count: frame_count,
-                    depth: depth,
                     avcc: avcc,
-                    calp: None,
-                    pasp: None
                 }
             },
             TrackType::Audio => {
