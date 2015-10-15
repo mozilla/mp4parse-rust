@@ -466,19 +466,14 @@ pub fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
         _ => panic!("invalid tkhd version"),
     }
     let track_id = try!(be_u32(src));
-    let _reserved = try!(be_u32(src));
-    assert!(_reserved == 0);
+    try!(skip(src, 4));
     let duration = match version {
-        1 => {
-            try!(be_u64(src))
-        },
+        1 => try!(be_u64(src)),
         0 => try!(be_u32(src)) as u64,
         _ => panic!("invalid tkhd version"),
     };
-    let _reserved = try!(be_u32(src));
-    let _reserved = try!(be_u32(src));
     // Skip uninteresting fields.
-    try!(skip(src, 44));
+    try!(skip(src, 52));
     let width = try!(be_u32(src));
     let height = try!(be_u32(src));
     Ok(TrackHeaderBox {
