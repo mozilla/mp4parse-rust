@@ -1,13 +1,16 @@
 [package]
 
 name = "mp4parse"
-version = "0.0.9"
-authors = ["Ralph Giles <giles@mozilla.com>"]
+version = "0.1.0"
+authors = [
+  "Ralph Giles <giles@mozilla.com>",
+  "Matthew Gregan <kinetik@flim.org>",
+]
 
 description = "Parser for ISO base media file format (mp4)"
 license = "MPL-2.0"
 
-repository = "https://notabug.org/rillian/mp4parse-rust"
+repository = "https://github.com/mozilla/mp4parse-rust"
 
 [dependencies]
 byteorder = "0.3.8"
