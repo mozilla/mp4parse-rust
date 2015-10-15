@@ -674,9 +674,9 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
         let description = match track.track_type {
             TrackType::Video => {
                 let h = try!(read_box_header(src));
-                // TODO(kinetik): avc3 here also?
+                // TODO(kinetik): avc3 and encv here also?
                 if fourcc_to_string(h.name) != "avc1" {
-                    panic!("unsupported VideoSampleEntry subtype");
+                    panic!("unsupported SampleEntry::Video subtype");
                 }
 
                 // Skip uninteresting fields.
@@ -714,8 +714,9 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
             },
             TrackType::Audio => {
                 let h = try!(read_box_header(src));
+                // TODO(kinetik): enca here also?
                 if fourcc_to_string(h.name) != "mp4a" {
-                    panic!("unsupported AudioSampleEntry subtype");
+                    panic!("unsupported SampleEntry::Audio subtype");
                 }
 
                 // Skip uninteresting fields.
