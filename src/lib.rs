@@ -117,7 +117,6 @@ pub struct HandlerBox {
     name: u32,
     size: u64,
     handler_type: u32,
-    handler_name: String,
 }
 
 // Sample description box 'stsd'
@@ -143,7 +142,6 @@ enum SampleEntry {
         horizresolution: u32,
         vertresolution: u32,
         frame_count: u16,
-        compressorname: String,
         depth: u16,
         avcc: AVCDecoderConfigurationRecord,
         calp: Option<CleanApertureBox>,
@@ -711,7 +709,6 @@ pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
         name: head.name,
         size: head.size,
         handler_type: handler_type,
-        handler_name: String::new(),
     })
 }
 
@@ -726,6 +723,7 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
         let description = match track.track_type {
             TrackType::Video => {
                 let h = try!(read_box_header(src));
+                // TODO(kinetik): avc3 here also?
                 if fourcc_to_string(h.name) != "avc1" {
                     panic!("unsupported VideoSampleEntry subtype");
                 }
@@ -749,18 +747,8 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
 
                 let frame_count = try!(src.read_u16::<BigEndian>());
 
-                let compressorname_len = try!(src.read_u8());
-                if compressorname_len > 31 {
-                    panic!("invalid compressorname length");
-                }
-
-                let mut buf: Vec<u8> = vec![0; compressorname_len as usize];
-                let r = try!(src.read(&mut buf));
-                assert!(r == buf.len());
-                let compressorname = String::from_utf8_lossy(&buf).into_owned();
-
-                // Skip rest of string[32] bytes.
-                try!(skip(src, 31 - compressorname_len as usize));
+                // Skip compressorname string.
+                try!(skip(src, 32));
 
                 let depth = try!(src.read_u16::<BigEndian>());
 
@@ -789,7 +777,6 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                     horizresolution: horizresolution,
                     vertresolution: vertresolution,
                     frame_count: frame_count,
-                    compressorname: compressorname,
                     depth: depth,
                     avcc: avcc,
                     calp: None,
@@ -1009,9 +996,8 @@ impl fmt::Display for TimeToSampleBox {
 
 impl fmt::Display for HandlerBox {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "'{}' {} bytes handler_type '{}' {}",
-               fourcc_to_string(self.name), self.size,
-               fourcc_to_string(self.handler_type), self.handler_name)
+        write!(f, "'{}' {} bytes handler_type '{}'",
+               fourcc_to_string(self.name), self.size, fourcc_to_string(self.handler_type))
     }
 }
 
