@@ -240,9 +240,17 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<(u8, u3
                  (flags_c as u32)))
 }
 
-/// Skip over the contents of a box.
-pub fn skip_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> std::io::Result<usize> {
+/// Skip over the entire contents of a box.
+pub fn skip_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> byteorder::Result<usize> {
     skip(src, (header.size - header.offset) as usize)
+}
+
+/// Skip over the remaining contents of a box.
+pub fn skip_remaining_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> byteorder::Result<()> {
+    match skip(src, (header.size - header.offset) as usize) {
+        Ok(_) | Err(byteorder::Error::UnexpectedEOF) => Ok(()),
+        e @ _ => Err(e.err().unwrap())
+    }
 }
 
 /// Helper to construct a Take over the contents of a box.
@@ -703,7 +711,7 @@ pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
 
     // TODO(kinetik): Find a copy of ISO/IEC 14496-1 to work out how strings are encoded.
     // As a hack, just consume the rest of the box.
-    try!(skip_box_content(src, head));
+    try!(skip_remaining_box_content(src, head));
 
     Ok(HandlerBox{
         name: head.name,
@@ -768,7 +776,7 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 // TODO(kinetik): Parse CleanApertureBox and PixelAspectRatioBox.
                 // How do you detect if they're present/optional?
                 // avc1 may also have MPEG4BitRateBox and MPEG4ExtensionDescriptionsBox.
-                try!(skip_box_content(src, head));
+                try!(skip_remaining_box_content(src, head));
 
                 SampleEntry::Video {
                     data_reference_index: data_reference_index,
@@ -849,7 +857,7 @@ fn fourcc_to_string(name: u32) -> String {
 }
 
 /// Skip a number of bytes that we don't care to parse.
-fn skip<T: BufRead>(src: &mut T, bytes: usize) -> std::io::Result<usize> {
+fn skip<T: BufRead>(src: &mut T, bytes: usize) -> byteorder::Result<usize> {
     let mut bytes_to_skip = bytes;
     while bytes_to_skip > 0 {
         let len = {
@@ -857,8 +865,7 @@ fn skip<T: BufRead>(src: &mut T, bytes: usize) -> std::io::Result<usize> {
             buf.len()
         };
         if len == 0 {
-            // TODO(kinetik): Work out how to return an io::ErrorKind::UnexpectedEOF.
-            return Ok(bytes - bytes_to_skip)
+            return Err(byteorder::Error::UnexpectedEOF)
         }
         let discard = cmp::min(len, bytes_to_skip);
         src.consume(discard);
