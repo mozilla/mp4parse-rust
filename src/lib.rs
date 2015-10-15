@@ -348,11 +348,14 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder:
             "hdlr" => {
                 let hdlr = try!(read_hdlr(&mut content, &h));
                 let track_type = match &fourcc_to_string(hdlr.handler_type)[..] {
-                    "vide" => TrackType::Video,
-                    "soun" => TrackType::Audio,
-                    _ => panic!("unhandled handler type"),
+                    "vide" => Some(TrackType::Video),
+                    "soun" => Some(TrackType::Audio),
+                    _ => None
                 };
-                context.tracks.push(Track { track_type: track_type });
+                // Ignore unrecognized track types.
+                track_type.map(|track_type|
+                    context.tracks.push(Track { track_type: track_type }))
+                .or_else(|| { println!("unknown track type!"); None } );
                 println!("  {}", hdlr);
             },
             "stsd" => {
