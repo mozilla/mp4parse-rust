@@ -367,6 +367,7 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder:
             },
         };
         assert!(content.limit() == 0);
+        println!("Parse result: {}", context);
         Ok(()) // and_then needs a Result to return.
     })
 }
@@ -904,6 +905,12 @@ impl fmt::Display for MovieHeaderBox {
         let name = fourcc_to_string(self.name);
         write!(f, "'{}' {} bytes duration {}s", name, self.size,
                (self.duration as f64)/(self.timescale as f64))
+    }
+}
+
+impl fmt::Display for MediaContext {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Found {} tracks.", self.tracks.len())
     }
 }
 
