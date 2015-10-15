@@ -8,26 +8,26 @@
 #include <cstdio>
 #include <vector>
 
-extern "C" bool read_box_from_buffer(uint8_t *buffer, size_t size);
+extern "C" int32_t read_box_from_buffer(uint8_t *buffer, size_t size);
 
 
 void test_arg_validation()
 {
-  bool rv;
+  int32_t rv;
   rv = read_box_from_buffer(nullptr, 0);
-  assert(!rv);
+  assert(rv < 0);
 
   size_t len = 4097;
   rv = read_box_from_buffer(nullptr, len);
-  assert(!rv);
+  assert(rv < 0);
 
   std::vector<uint8_t> buf;
   rv = read_box_from_buffer(buf.data(), buf.size());
-  assert(!rv);
+  assert(rv < 0);
 
   buf.reserve(len);
   rv = read_box_from_buffer(buf.data(), buf.size());
-  assert(!rv);
+  assert(rv < 0);
 }
 
 void read_file(const char* filename)
@@ -41,8 +41,10 @@ void read_file(const char* filename)
   buf.resize(read);
   fclose(f);
 
-  bool rv = read_box_from_buffer(buf.data(), buf.size());
-  assert(!rv); // Expected fail: need to trap eof.
+  fprintf(stderr, "Parsing %lu byte buffer.\n", (unsigned long)read);
+  int32_t rv = read_box_from_buffer(buf.data(), buf.size());
+  assert(rv >= 0);
+  fprintf(stderr, "%d tracks returned to C code.\n", rv);
 }
 
 int main(int argc, char* argv[])

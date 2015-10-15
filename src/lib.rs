@@ -353,15 +353,17 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder:
 }
 
 /// Entry point for C language callers.
-/// Take a buffer and call read_box() on it.
+/// Take a buffer and call read_box() on it,
+/// returning the number of detected tracks.
 #[no_mangle]
-pub extern fn read_box_from_buffer(buffer: *const u8, size: usize) -> bool {
+pub extern fn read_box_from_buffer(buffer: *const u8, size: usize) -> i32 {
     use std::slice;
     use std::thread;
+    use std::i32;
 
     // Validate arguments from C.
     if buffer.is_null() || size < 8 {
-        return false;
+        return -1;
     }
 
     // Wrap the buffer we've been give in a slice.
@@ -371,14 +373,21 @@ pub extern fn read_box_from_buffer(buffer: *const u8, size: usize) -> bool {
     // Parse in a subthread.
     let task = thread::spawn(move || {
         let mut context = MediaContext { tracks: Vec::new() };
-        read_box(&mut c, &mut context).or_else(|e| { match e {
+        read_box(&mut c, &mut context)
+        .or_else(|e| { match e {
+            // TODO: Catch EOF earlier so we can get the return value.
             // Catch EOF. We naturally hit it at end-of-input.
             byteorder::Error::UnexpectedEOF => { Ok(()) },
             e => { Err(e) },
-        }}).unwrap();
+        }})
+        .unwrap();
+        // Make sure the track count fits in an i32 so we can use
+        // negative values for failure.
+        assert!(context.tracks.len() < i32::MAX as usize);
+        context.tracks.len() as i32
     });
     // Catch any panics.
-    task.join().is_ok()
+    task.join().unwrap_or(-1)
 }
 
 /// Parse an ftyp box.
