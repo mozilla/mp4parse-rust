@@ -447,7 +447,7 @@ pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
         },
         _ => panic!("invalid mhdr version"),
     }
-    let timescale = src.read_u32::<BigEndian>().unwrap();
+    let timescale = try!(src.read_u32::<BigEndian>());
     let duration = match version {
         1 => try!(src.read_u64::<BigEndian>()),
         0 => try!(src.read_u32::<BigEndian>()) as u64,
