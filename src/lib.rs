@@ -429,22 +429,13 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 }
 
 /// Parse an mvhd box.
-pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<MovieHeaderBox> {
+pub fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> byteorder::Result<MovieHeaderBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     match version {
-        1 => {
-            // 64 bit creation and modification times.
-            let mut skip: Vec<u8> = vec![0; 16];
-            let r = try!(src.read(&mut skip));
-            assert!(r == skip.len());
-        },
-        0 => {
-            // 32 bit creation and modification times.
-            // 64 bit creation and modification times.
-            let mut skip: Vec<u8> = vec![0; 8];
-            let r = try!(src.read(&mut skip));
-            assert!(r == skip.len());
-        },
+        // 64 bit creation and modification times.
+        1 => { try!(skip(src, 16)); },
+        // 32 bit creation and modification times.
+        0 => { try!(skip(src, 8)); },
         _ => panic!("invalid mhdr version"),
     }
     let timescale = try!(be_u32(src));
@@ -454,9 +445,7 @@ pub fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
         _ => panic!("invalid mhdr version"),
     };
     // Skip remaining fields.
-    let mut skip: Vec<u8> = vec![0; 80];
-    let r = try!(src.read(&mut skip));
-    assert!(r == skip.len());
+    try!(skip(src, 80));
     Ok(MovieHeaderBox {
         name: head.name,
         size: head.size,
@@ -470,18 +459,10 @@ pub fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
     let (version, flags) = try!(read_fullbox_extra(src));
     let disabled = flags & 0x1u32 == 0 || flags & 0x2u32 == 0;
     match version {
-        1 => {
-            // 64 bit creation and modification times.
-            let mut skip: Vec<u8> = vec![0; 16];
-            let r = try!(src.read(&mut skip));
-            assert!(r == skip.len());
-        },
-        0 => {
-            // 32 bit creation and modification times.
-            let mut skip: Vec<u8> = vec![0; 8];
-            let r = try!(src.read(&mut skip));
-            assert!(r == skip.len());
-        },
+        // 64 bit creation and modification times.
+        1 => { try!(skip(src, 16)); },
+        // 32 bit creation and modification times.
+        0 => { try!(skip(src, 8)); },
         _ => panic!("invalid tkhd version"),
     }
     let track_id = try!(be_u32(src));
@@ -553,9 +534,7 @@ pub fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
     let (timescale, duration) = match version {
         1 => {
             // Skip 64-bit creation and modification times.
-            let mut skip: Vec<u8> = vec![0; 16];
-            let r = try!(src.read(&mut skip));
-            assert!(r == skip.len());
+            try!(skip(src, 16));
 
             // 64 bit duration.
             (try!(be_u32(src)),
@@ -563,9 +542,7 @@ pub fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
         },
         0 => {
             // Skip 32-bit creation and modification times.
-            let mut skip: Vec<u8> = vec![0; 8];
-            let r = try!(src.read(&mut skip));
-            assert!(r == skip.len());
+            try!(skip(src, 8));
 
             // 32 bit duration.
             (try!(be_u32(src)),
