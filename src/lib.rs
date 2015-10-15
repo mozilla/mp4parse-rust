@@ -805,14 +805,13 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
                 // Skip uninteresting fields.
                 try!(skip(src, 8));
 
-                // TODO(kinetik): find the meaning of 'template' in MPEG-4 docs.
-                let channelcount = try!(src.read_u16::<BigEndian>()); // template 2
-                let samplesize = try!(src.read_u16::<BigEndian>()); // template 16
+                let channelcount = try!(src.read_u16::<BigEndian>());
+                let samplesize = try!(src.read_u16::<BigEndian>());
 
                 // Skip uninteresting fields.
                 try!(skip(src, 4));
 
-                let samplerate = try!(src.read_u32::<BigEndian>()); // template ({ samplerate of media } << 16)
+                let samplerate = try!(src.read_u32::<BigEndian>());
 
                 // TODO(kinetik): Parse esds atom?  For now we just stash the data.
                 let h = try!(read_box_header(src));
