@@ -328,11 +328,12 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder:
                     "soun" => Some(TrackType::Audio),
                     _ => None
                 };
-                // Ignore unrecognized track types.
-                track_type.map(|track_type|
-                               context.tracks.push(Track { track_type: track_type }))
-                    .or_else(|| { println!("unknown track type!"); None } );
-                println!("  {}", hdlr);
+                // Save track types with recognized types.
+                match track_type {
+                    Some(track_type) =>
+                         context.tracks.push(Track { track_type: track_type }),
+                    None => println!("unknown track type!"),
+                };
             },
             "stsd" => {
                 let track = &context.tracks[context.tracks.len() - 1];
