@@ -266,8 +266,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> byt
 }
 
 /// Read the contents of a box, including sub boxes.
-/// Right now it just prints the box value rather than
-/// returning anything.
+/// Metadata is accumulated in the passed-through MediaContext struct.
 pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder::Result<()> {
     read_box_header(f).and_then(|h| {
         let mut content = limit(f, &h);
