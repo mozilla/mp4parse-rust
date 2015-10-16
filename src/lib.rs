@@ -347,7 +347,7 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder:
             },
         };
         assert!(content.limit() == 0);
-        println!("Parse result: {}", context);
+        println!("read_box context: {}", context);
         Ok(()) // and_then needs a Result to return.
     })
 }
