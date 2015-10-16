@@ -343,7 +343,7 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder:
             _ => {
                 // Skip the contents of unknown chunks.
                 println!("{} (skipped)", h);
-                try!(skip_box_content(&mut content, &h).and(Ok(())));
+                try!(skip_box_content(&mut content, &h));
             },
         };
         assert!(content.limit() == 0);
