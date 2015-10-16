@@ -373,14 +373,13 @@ pub extern fn read_box_from_buffer(buffer: *const u8, size: usize) -> i32 {
     // Parse in a subthread.
     let task = thread::spawn(move || {
         let mut context = MediaContext { tracks: Vec::new() };
-        read_box(&mut c, &mut context)
-        .or_else(|e| { match e {
-            // TODO: Catch EOF earlier so we can get the return value.
-            // Catch EOF. We naturally hit it at end-of-input.
-            byteorder::Error::UnexpectedEOF => { Ok(()) },
-            e => { Err(e) },
-        }})
-        .unwrap();
+        loop {
+            match read_box(&mut c, &mut context) {
+                Ok(_) => {},
+                Err(byteorder::Error::UnexpectedEOF) => { break },
+                Err(e) => { panic!(e) },
+            }
+        }
         // Make sure the track count fits in an i32 so we can use
         // negative values for failure.
         assert!(context.tracks.len() < i32::MAX as usize);
