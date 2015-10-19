@@ -12,5 +12,11 @@ license = "MPL-2.0"
 
 repository = "https://github.com/mozilla/mp4parse-rust"
 
+# Cargo includes random files from the working directory
+# by default! Avoid bloating the package with test files.
+exclude = [
+  "*.mp4",
+]
+
 [dependencies]
 byteorder = "0.3.8"
