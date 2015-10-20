@@ -860,17 +860,21 @@ pub extern "C" fn mp4parse_context_feed(context: *mut MediaContext, buffer: *con
     let b = unsafe { std::slice::from_raw_parts(buffer, size) };
     let mut c = Cursor::new(b);
 
-    loop {
-        match read_box(&mut c, &mut context) {
-            Ok(_) => { },
-            Err(byteorder::Error::UnexpectedEOF) => { break },
-            Err(_) => { return -1 },
+    // Parse in a subthread to catch any panics.
+    let task = std::thread::spawn(move || {
+        loop {
+            match read_box(&mut c, &mut context) {
+                Ok(_) => {},
+                Err(byteorder::Error::UnexpectedEOF) => { break },
+                Err(e) => { panic!(e); },
+            }
         }
-    }
-    // Make sure the track count fits in an i32 so we can use
-    // negative values for failure.
-    assert!(context.tracks.len() < std::i32::MAX as usize);
-    context.tracks.len() as i32
+        // Make sure the track count fits in an i32 so we can use
+        // negative values for failure.
+        assert!(context.tracks.len() < std::i32::MAX as usize);
+        context.tracks.len() as i32
+    });
+    task.join().unwrap_or(-1)
 }
 
 #[test]
