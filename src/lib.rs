@@ -4,11 +4,22 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+use std::fmt;
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct FourCC(pub u32);
+
+impl fmt::Debug for FourCC {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    write!(f, "'{}'", fourcc_to_string(*self))
+  }
+}
+
 /// Basic ISO box structure.
 #[derive(Debug)]
 pub struct BoxHeader {
     /// Four character box type
-    pub name: u32,
+    pub name: FourCC,
     /// Size of the box in bytes
     pub size: u64,
     /// Offset to the start of the contained data (or header size).
@@ -18,17 +29,17 @@ pub struct BoxHeader {
 /// File type box 'ftyp'.
 #[derive(Debug)]
 pub struct FileTypeBox {
-    name: u32,
+    name: FourCC,
     size: u64,
-    major_brand: u32,
+    major_brand: FourCC,
     minor_version: u32,
-    compatible_brands: Vec<u32>,
+    compatible_brands: Vec<FourCC>,
 }
 
 /// Movie header box 'mvhd'.
 #[derive(Debug)]
 pub struct MovieHeaderBox {
-    pub name: u32,
+    pub name: FourCC,
     pub size: u64,
     pub timescale: u32,
     pub duration: u64,
@@ -38,7 +49,7 @@ pub struct MovieHeaderBox {
 /// Track header box 'tkhd'
 #[derive(Debug)]
 pub struct TrackHeaderBox {
-    pub name: u32,
+    pub name: FourCC,
     pub size: u64,
     pub track_id: u32,
     pub enabled: bool,
@@ -50,7 +61,7 @@ pub struct TrackHeaderBox {
 /// Edit list box 'elst'
 #[derive(Debug)]
 pub struct EditListBox {
-    name: u32,
+    name: FourCC,
     size: u64,
     edits: Vec<Edit>,
 }
@@ -66,7 +77,7 @@ pub struct Edit {
 /// Media header box 'mdhd'
 #[derive(Debug)]
 pub struct MediaHeaderBox {
-    name: u32,
+    name: FourCC,
     size: u64,
     timescale: u32,
     duration: u64,
@@ -75,7 +86,7 @@ pub struct MediaHeaderBox {
 // Chunk offset box 'stco' or 'co64'
 #[derive(Debug)]
 pub struct ChunkOffsetBox {
-    name: u32,
+    name: FourCC,
     size: u64,
     offsets: Vec<u64>,
 }
@@ -83,7 +94,7 @@ pub struct ChunkOffsetBox {
 // Sync sample box 'stss'
 #[derive(Debug)]
 pub struct SyncSampleBox {
-    name: u32,
+    name: FourCC,
     size: u64,
     samples: Vec<u32>,
 }
@@ -91,7 +102,7 @@ pub struct SyncSampleBox {
 // Sample to chunk box 'stsc'
 #[derive(Debug)]
 pub struct SampleToChunkBox {
-    name: u32,
+    name: FourCC,
     size: u64,
     samples: Vec<SampleToChunk>,
 }
@@ -106,7 +117,7 @@ pub struct SampleToChunk {
 // Sample size box 'stsz'
 #[derive(Debug)]
 pub struct SampleSizeBox {
-    name: u32,
+    name: FourCC,
     size: u64,
     sample_size: u32,
     sample_sizes: Vec<u32>,
@@ -115,7 +126,7 @@ pub struct SampleSizeBox {
 // Time to sample box 'stts'
 #[derive(Debug)]
 pub struct TimeToSampleBox {
-    name: u32,
+    name: FourCC,
     size: u64,
     samples: Vec<Sample>,
 }
@@ -129,15 +140,15 @@ pub struct Sample {
 // Handler reference box 'hdlr'
 #[derive(Debug)]
 pub struct HandlerBox {
-    name: u32,
+    name: FourCC,
     size: u64,
-    handler_type: u32,
+    handler_type: FourCC,
 }
 
 // Sample description box 'stsd'
 #[derive(Debug)]
 pub struct SampleDescriptionBox {
-    name: u32,
+    name: FourCC,
     size: u64,
     descriptions: Vec<SampleEntry>,
 }
@@ -207,7 +218,7 @@ use std::cmp;
 /// Parse a box out of a data buffer.
 pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<BoxHeader> {
     let size32 = try!(be_u32(src));
-    let name = try!(be_u32(src));
+    let name = FourCC(try!(be_u32(src)));
     let size = match size32 {
         0 => panic!("unknown box size not implemented"),
         1 => {
@@ -422,12 +433,12 @@ pub extern fn read_box_from_buffer(buffer: *const u8, size: usize) -> i32 {
 
 /// Parse an ftyp box.
 pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<FileTypeBox> {
-    let major = try!(be_u32(src));
+    let major = FourCC(try!(be_u32(src)));
     let minor = try!(be_u32(src));
     let brand_count = (head.size - 8 - 8) / 4;
     let mut brands = Vec::new();
     for _ in 0..brand_count {
-        brands.push(try!(be_u32(src)));
+        brands.push(FourCC(try!(be_u32(src))));
     }
     Ok(FileTypeBox{
         name: head.name,
@@ -686,7 +697,7 @@ pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
     // Skip uninteresting fields.
     try!(skip(src, 4));
 
-    let handler_type = try!(be_u32(src));
+    let handler_type = FourCC(try!(be_u32(src)));
 
     // Skip uninteresting fields.
     try!(skip(src, 12));
@@ -805,14 +816,14 @@ pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track
 }
 
 /// Convert the iso box type or other 4-character value to a string.
-fn fourcc_to_string(name: u32) -> String {
+fn fourcc_to_string(name: FourCC) -> String {
     let u32_to_vec = |u| {
         vec!((u >> 24 & 0xffu32) as u8,
              (u >> 16 & 0xffu32) as u8,
              (u >>  8 & 0xffu32) as u8,
              (u & 0xffu32) as u8)
     };
-    let name_bytes = u32_to_vec(name);
+    let name_bytes = u32_to_vec(name.0);
     String::from_utf8_lossy(&name_bytes).into_owned()
 }
 
@@ -867,7 +878,7 @@ fn test_read_box_header() {
     write!(&mut test, "test").unwrap(); // box type
     let mut stream = Cursor::new(test);
     let parsed = read_box_header(&mut stream).unwrap();
-    assert_eq!(parsed.name, 1952805748);
+    assert_eq!(parsed.name, FourCC(1952805748));
     assert_eq!(parsed.size, 8);
     println!("box {:?}", parsed);
 }
@@ -881,7 +892,7 @@ fn test_read_box_header_long() {
     // Skip generating box content.
     let mut stream = Cursor::new(test);
     let parsed = read_box_header(&mut stream).unwrap();
-    assert_eq!(parsed.name, 1819242087);
+    assert_eq!(parsed.name, FourCC(1819242087));
     assert_eq!(parsed.size, 4096);
     println!("box {:?}", parsed);
 }
@@ -901,12 +912,12 @@ fn test_read_ftyp() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_ftyp(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, 1718909296);
+    assert_eq!(parsed.name, FourCC(1718909296));
     assert_eq!(parsed.size, 24);
-    assert_eq!(parsed.major_brand, 1836069938);
+    assert_eq!(parsed.major_brand, FourCC(1836069938));
     assert_eq!(parsed.minor_version, 0);
     assert_eq!(parsed.compatible_brands.len(), 2);
-    assert_eq!(parsed.compatible_brands[0], 1769172845);
+    assert_eq!(parsed.compatible_brands[0], FourCC(1769172845));
     assert_eq!(fourcc_to_string(parsed.compatible_brands[1]), "mp42");
     println!("box {:?}", parsed);
 }
@@ -928,7 +939,7 @@ fn test_read_elst_v0() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_elst(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, 1701606260);
+    assert_eq!(parsed.name, FourCC(1701606260));
     assert_eq!(parsed.size, 28);
     assert_eq!(parsed.edits.len(), 1);
     assert_eq!(parsed.edits[0].segment_duration, 16909060);
@@ -959,7 +970,7 @@ fn test_read_elst_v1() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_elst(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, 1701606260);
+    assert_eq!(parsed.name, FourCC(1701606260));
     assert_eq!(parsed.size, 56);
     assert_eq!(parsed.edits.len(), 2);
     assert_eq!(parsed.edits[1].segment_duration, 72623859723010820);
@@ -986,7 +997,7 @@ fn test_read_mdhd_v0() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_mdhd(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, 1835296868);
+    assert_eq!(parsed.name, FourCC(1835296868));
     assert_eq!(parsed.size, 32);
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, 84281096);
@@ -1010,7 +1021,7 @@ fn test_read_mdhd_v1() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_mdhd(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, 1835296868);
+    assert_eq!(parsed.name, FourCC(1835296868));
     assert_eq!(parsed.size, 44);
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, 361984551075317512);
