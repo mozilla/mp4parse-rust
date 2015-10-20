@@ -191,7 +191,7 @@ pub struct MediaContext {
 }
 
 impl MediaContext {
-    fn new() -> MediaContext {
+    pub fn new() -> MediaContext {
         MediaContext {
             tracks: Vec::new(),
         }
