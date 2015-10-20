@@ -159,6 +159,14 @@ pub struct MediaContext {
     pub tracks: Vec<Track>,
 }
 
+impl MediaContext {
+    fn new() -> MediaContext {
+        MediaContext {
+            tracks: Vec::new(),
+        }
+    }
+}
+
 enum TrackType {
     Video,
     Audio
@@ -372,7 +380,7 @@ pub extern fn read_box_from_buffer(buffer: *const u8, size: usize) -> i32 {
 
     // Parse in a subthread.
     let task = thread::spawn(move || {
-        let mut context = MediaContext { tracks: Vec::new() };
+        let mut context = MediaContext::new();
         loop {
             match read_box(&mut c, &mut context) {
                 Ok(_) => {},

@@ -10,7 +10,7 @@ use byteorder::Error;
 fn dump_file(filename: &String) {
     let file = File::open(filename).unwrap();
     let mut reader = BufReader::new(file);
-    let mut context = mp4parse::MediaContext { tracks: Vec::new() };
+    let mut context = mp4parse::MediaContext::new();
     loop {
         match mp4parse::read_box(&mut reader, &mut context) {
             Ok(_) => {},
