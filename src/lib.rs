@@ -848,13 +848,15 @@ pub unsafe extern "C" fn mp4parse_context_free(context: *mut MediaContext) {
 /// Feed a buffer to read_box() it, returning the number of detected tracks.
 #[no_mangle]
 pub extern "C" fn mp4parse_context_feed(context: *mut MediaContext, buffer: *const u8, size: usize) -> i32 {
-    assert!(!context.is_null());
-    let mut context: &mut MediaContext = unsafe { &mut *context };
-
     // Validate arguments from C.
+    if context.is_null() {
+        return -1;
+    }
     if buffer.is_null() || size < 8 {
         return -1;
     }
+
+    let mut context: &mut MediaContext = unsafe { &mut *context };
 
     // Wrap the buffer we've been give in a slice.
     let b = unsafe { std::slice::from_raw_parts(buffer, size) };
