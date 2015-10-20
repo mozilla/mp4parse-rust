@@ -192,7 +192,7 @@ pub struct ES_Descriptor {
 /// Internal data structures.
 #[derive(Debug)]
 pub struct MediaContext {
-    pub tracks: Vec<Track>,
+    tracks: Vec<Track>,
 }
 
 impl MediaContext {
