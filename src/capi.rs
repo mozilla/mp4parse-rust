@@ -19,14 +19,14 @@ pub unsafe extern "C" fn mp4parse_new() -> *mut MediaContext {
     std::mem::transmute(Box::new(MediaContext::new()))
 }
 
-/// Free an rust-side parser context.
+/// Free a rust-side parser context.
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_free(context: *mut MediaContext) {
     assert!(!context.is_null());
     let _: Box<MediaContext> = std::mem::transmute(context);
 }
 
-/// Feed a buffer to read_box() it, returning the number of detected tracks.
+/// Feed a buffer through read_box(), returning the number of detected tracks.
 #[no_mangle]
 pub extern "C" fn mp4parse_read(context: *mut MediaContext, buffer: *const u8, size: usize) -> i32 {
     // Validate arguments from C.
