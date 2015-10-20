@@ -870,6 +870,44 @@ fn be_u64<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<u64> {
     src.read_u64::<BigEndian>()
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn mp4parse_context_new() -> *mut MediaContext {
+    std::mem::transmute(Box::new(MediaContext::new()))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn mp4parse_context_free(context: *mut MediaContext) {
+    assert!(!context.is_null());
+    let _: Box<MediaContext> = std::mem::transmute(context);
+}
+
+#[no_mangle]
+pub extern "C" fn mp4parse_context_feed(context: *mut MediaContext, buffer: *const u8, size: usize) -> i32 {
+    assert!(!context.is_null());
+    let mut context: &mut MediaContext = unsafe { &mut *context };
+
+    // Validate arguments from C.
+    if buffer.is_null() || size < 8 {
+        return -1;
+    }
+
+    // Wrap the buffer we've been give in a slice.
+    let b = unsafe { std::slice::from_raw_parts(buffer, size) };
+    let mut c = Cursor::new(b);
+
+    loop {
+        match read_box(&mut c, &mut context) {
+            Ok(_) => { },
+            Err(byteorder::Error::UnexpectedEOF) => { break },
+            Err(_) => { return -1 },
+        }
+    }
+    // Make sure the track count fits in an i32 so we can use
+    // negative values for failure.
+    assert!(context.tracks.len() < std::i32::MAX as usize);
+    context.tracks.len() as i32
+}
+
 #[test]
 fn test_read_box_header() {
     use std::io::Cursor;
