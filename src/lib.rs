@@ -394,43 +394,6 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder:
     })
 }
 
-/// Entry point for C language callers.
-/// Take a buffer and call read_box() on it,
-/// returning the number of detected tracks.
-#[no_mangle]
-pub extern fn read_box_from_buffer(buffer: *const u8, size: usize) -> i32 {
-    use std::slice;
-    use std::thread;
-    use std::i32;
-
-    // Validate arguments from C.
-    if buffer.is_null() || size < 8 {
-        return -1;
-    }
-
-    // Wrap the buffer we've been give in a slice.
-    let b = unsafe { slice::from_raw_parts(buffer, size) };
-    let mut c = Cursor::new(b);
-
-    // Parse in a subthread.
-    let task = thread::spawn(move || {
-        let mut context = MediaContext::new();
-        loop {
-            match read_box(&mut c, &mut context) {
-                Ok(_) => {},
-                Err(byteorder::Error::UnexpectedEOF) => { break },
-                Err(e) => { panic!(e) },
-            }
-        }
-        // Make sure the track count fits in an i32 so we can use
-        // negative values for failure.
-        assert!(context.tracks.len() < i32::MAX as usize);
-        context.tracks.len() as i32
-    });
-    // Catch any panics.
-    task.join().unwrap_or(-1)
-}
-
 /// Parse an ftyp box.
 pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<FileTypeBox> {
     let major = FourCC(try!(be_u32(src)));
@@ -870,6 +833,7 @@ fn be_u64<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<u64> {
     src.read_u64::<BigEndian>()
 }
 
+/// Entry point for C language callers.
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_context_new() -> *mut MediaContext {
     std::mem::transmute(Box::new(MediaContext::new()))
@@ -881,6 +845,7 @@ pub unsafe extern "C" fn mp4parse_context_free(context: *mut MediaContext) {
     let _: Box<MediaContext> = std::mem::transmute(context);
 }
 
+/// Feed a buffer to read_box() it, returning the number of detected tracks.
 #[no_mangle]
 pub extern "C" fn mp4parse_context_feed(context: *mut MediaContext, buffer: *const u8, size: usize) -> i32 {
     assert!(!context.is_null());
