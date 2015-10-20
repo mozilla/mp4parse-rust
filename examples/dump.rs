@@ -18,7 +18,7 @@ fn dump_file(filename: &String) {
             Err(e) => { panic!(e); },
         }
     }
-    println!("-- result of parsing '{}' --\n{}", filename, context);
+    println!("-- result of parsing '{}' --\n{:?}", filename, context);
 }
 
 fn main() {
