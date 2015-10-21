@@ -11,10 +11,10 @@ extern "C" {
 
 struct mp4parse_state;
 
-struct mp4parse_state* mp4parse_state_new(void);
-void mp4parse_state_free(struct mp4parse_state* state);
+struct mp4parse_state* mp4parse_new(void);
+void mp4parse_free(struct mp4parse_state* state);
 
-int32_t mp4parse_state_feed(struct mp4parse_state* state, uint8_t *buffer, size_t size);
+int32_t mp4parse_read(struct mp4parse_state* state, uint8_t *buffer, size_t size);
 
 #ifdef __cplusplus
 }
