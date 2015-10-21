@@ -15,8 +15,10 @@ use read_box;
 
 /// Allocate an opaque rust-side parser context.
 #[no_mangle]
-pub unsafe extern "C" fn mp4parse_new() -> *mut MediaContext {
-    std::mem::transmute(Box::new(MediaContext::new()))
+pub extern "C" fn mp4parse_new() -> *mut MediaContext {
+    unsafe {
+        std::mem::transmute(Box::new(MediaContext::new()))
+    }
 }
 
 /// Free a rust-side parser context.
@@ -64,11 +66,8 @@ pub extern "C" fn mp4parse_read(context: *mut MediaContext, buffer: *const u8, s
 
 #[test]
 fn new_context() {
-    let context = unsafe {
-        let context = mp4parse_new();
-        assert!(!context.is_null());
-        context
-    };
+    let context = mp4parse_new();
+    assert!(!context.is_null());
     mp4parse_free(context);
 }
 
@@ -84,7 +83,7 @@ fn arg_validation() {
     let null_context = std::ptr::null_mut();
     assert_eq!(-1, mp4parse_read(null_context, null_buffer, 0));
 
-    let context = unsafe { mp4parse_new() };
+    let context = mp4parse_new();
     assert!(!context.is_null());
 
     assert_eq!(-1, mp4parse_read(context, null_buffer, 0));
