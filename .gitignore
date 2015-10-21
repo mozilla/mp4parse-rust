@@ -1,2 +1,5 @@
 /target
 /Cargo.lock
+*.o
+libmp4parse.a*
+examples/test
