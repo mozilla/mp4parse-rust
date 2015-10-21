@@ -59,3 +59,42 @@ pub extern "C" fn mp4parse_read(context: *mut MediaContext, buffer: *const u8, s
     });
     task.join().unwrap_or(-1)
 }
+
+#[test]
+fn new_context() {
+    unsafe {
+        let context = mp4parse_new();
+        assert!(!context.is_null());
+        mp4parse_free(context);
+    }
+}
+
+#[test]
+#[should_panic(expected = "assertion failed")]
+fn free_null_context() {
+    unsafe {
+        mp4parse_free(std::ptr::null_mut());
+    }
+}
+
+#[test]
+fn arg_validation() {
+    let null_buffer = std::ptr::null();
+    let null_context = std::ptr::null_mut();
+    assert_eq!(-1, mp4parse_read(null_context, null_buffer, 0));
+
+    let context = unsafe { mp4parse_new() };
+    assert!(!context.is_null());
+
+    assert_eq!(-1, mp4parse_read(context, null_buffer, 0));
+
+    let buffer = vec![0u8; 8];
+    for size in (0..buffer.len()) {
+        println!("testing buffer length {}", size);
+        assert_eq!(-1, mp4parse_read(context, buffer.as_ptr(), size));
+    }
+
+    unsafe {
+        mp4parse_free(context);
+    }
+}
