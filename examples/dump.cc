@@ -8,26 +8,46 @@
 #include <cstdio>
 #include <vector>
 
-extern "C" int32_t read_box_from_buffer(uint8_t *buffer, size_t size);
+#include "mp4parse.h"
 
+void test_context()
+{
+  mp4parse_state *context = mp4parse_new();
+  assert(context != nullptr);
+  mp4parse_free(context);
+}
 
-void test_arg_validation()
+void test_arg_validation(mp4parse_state *context)
 {
   int32_t rv;
-  rv = read_box_from_buffer(nullptr, 0);
+
+  rv = mp4parse_read(nullptr, nullptr, 0);
+  assert(rv < 0);
+
+  rv = mp4parse_read(context, nullptr, 0);
   assert(rv < 0);
 
   size_t len = 4097;
-  rv = read_box_from_buffer(nullptr, len);
+  rv = mp4parse_read(context, nullptr, len);
   assert(rv < 0);
 
   std::vector<uint8_t> buf;
-  rv = read_box_from_buffer(buf.data(), buf.size());
+  rv = mp4parse_read(context, buf.data(), buf.size());
   assert(rv < 0);
 
   buf.reserve(len);
-  rv = read_box_from_buffer(buf.data(), buf.size());
+  rv = mp4parse_read(context, buf.data(), buf.size());
   assert(rv < 0);
+}
+
+void test_arg_validation()
+{
+  test_arg_validation(nullptr);
+
+  mp4parse_state *context = mp4parse_new();
+  assert(context != nullptr);
+  test_arg_validation(context);
+  mp4parse_free(context);
 }
 
 void read_file(const char* filename)
@@ -41,14 +61,20 @@ void read_file(const char* filename)
   buf.resize(read);
   fclose(f);
 
+  mp4parse_state *context = mp4parse_new();
+  assert(context != nullptr);
+
   fprintf(stderr, "Parsing %lu byte buffer.\n", (unsigned long)read);
-  int32_t rv = read_box_from_buffer(buf.data(), buf.size());
+  int32_t rv = mp4parse_read(context, buf.data(), buf.size());
   assert(rv >= 0);
   fprintf(stderr, "%d tracks returned to C code.\n", rv);
+
+  mp4parse_free(context);
 }
 
 int main(int argc, char* argv[])
 {
+  test_context();
   test_arg_validation();
 
   for (auto i = 1; i < argc; ++i) {
