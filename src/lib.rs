@@ -49,11 +49,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Four-byte 'character code' describing the type of a piece of data.
 #[derive(Clone, Copy, Eq, PartialEq)]
-pub struct FourCC(u32);
+pub struct FourCC([u8; 4]);
 
 impl fmt::Debug for FourCC {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "'{}'", fourcc_to_string(*self))
+    write!(f, "'{}'", String::from_utf8_lossy(&self.0))
   }
 }
 
@@ -265,7 +265,7 @@ struct Track {
 /// skip unknown or uninteresting boxes.
 pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
     let size32 = try!(be_u32(src));
-    let name = FourCC(try!(be_u32(src)));
+    let name = FourCC(try!(be_fourcc(src)));
     let size = match size32 {
         0 => return Err(Error::InvalidData),
         1 => {
@@ -363,62 +363,62 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> Res
 pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     read_box_header(f).and_then(|h| {
         let mut content = limit(f, &h);
-        match &fourcc_to_string(h.name)[..] {
-            "ftyp" => {
+        match &h.name.0 {
+            b"ftyp" => {
                 let ftyp = try!(read_ftyp(&mut content, &h));
                 println!("{:?}", ftyp);
             },
-            "moov" => try!(recurse(&mut content, &h, context)),
-            "mvhd" => {
+            b"moov" => try!(recurse(&mut content, &h, context)),
+            b"mvhd" => {
                 let mvhd = try!(read_mvhd(&mut content, &h));
                 println!("  {:?}", mvhd);
             },
-            "trak" => try!(recurse(&mut content, &h, context)),
-            "tkhd" => {
+            b"trak" => try!(recurse(&mut content, &h, context)),
+            b"tkhd" => {
                 let tkhd = try!(read_tkhd(&mut content, &h));
                 println!("  {:?}", tkhd);
             },
-            "edts" => try!(recurse(&mut content, &h, context)),
-            "elst" => {
+            b"edts" => try!(recurse(&mut content, &h, context)),
+            b"elst" => {
                 let elst = try!(read_elst(&mut content, &h));
                 println!("  {:?}", elst);
             },
-            "mdia" => try!(recurse(&mut content, &h, context)),
-            "mdhd" => {
+            b"mdia" => try!(recurse(&mut content, &h, context)),
+            b"mdhd" => {
                 let mdhd = try!(read_mdhd(&mut content, &h));
                 println!("  {:?}", mdhd);
             },
-            "minf" => try!(recurse(&mut content, &h, context)),
-            "stbl" => try!(recurse(&mut content, &h, context)),
-            "stco" => {
+            b"minf" => try!(recurse(&mut content, &h, context)),
+            b"stbl" => try!(recurse(&mut content, &h, context)),
+            b"stco" => {
                 let stco = try!(read_stco(&mut content, &h));
                 println!("  {:?}", stco);
             },
-            "co64" => {
+            b"co64" => {
                 let co64 = try!(read_co64(&mut content, &h));
                 println!("  {:?}", co64);
             },
-            "stss" => {
+            b"stss" => {
                 let stss = try!(read_stss(&mut content, &h));
                 println!("  {:?}", stss);
             },
-            "stsc" => {
+            b"stsc" => {
                 let stsc = try!(read_stsc(&mut content, &h));
                 println!("  {:?}", stsc);
             },
-            "stsz" => {
+            b"stsz" => {
                 let stsz = try!(read_stsz(&mut content, &h));
                 println!("  {:?}", stsz);
             },
-            "stts" => {
+            b"stts" => {
                 let stts = try!(read_stts(&mut content, &h));
                 println!("  {:?}", stts);
             },
-            "hdlr" => {
+            b"hdlr" => {
                 let hdlr = try!(read_hdlr(&mut content, &h));
-                let track_type = match &fourcc_to_string(hdlr.handler_type)[..] {
-                    "vide" => Some(TrackType::Video),
-                    "soun" => Some(TrackType::Audio),
+                let track_type = match &hdlr.handler_type.0 {
+                    b"vide" => Some(TrackType::Video),
+                    b"soun" => Some(TrackType::Audio),
                     _ => None
                 };
                 // Save track types with recognized types.
@@ -429,7 +429,7 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
                 };
                 println!("  {:?}", hdlr);
             },
-            "stsd" => {
+            b"stsd" => {
                 let track = &context.tracks[context.tracks.len() - 1];
                 let stsd = try!(read_stsd(&mut content, &h, &track));
                 println!("  {:?}", stsd);
@@ -448,12 +448,12 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
 
 /// Parse an ftyp box.
 fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileTypeBox> {
-    let major = FourCC(try!(be_u32(src)));
+    let major = FourCC(try!(be_fourcc(src)));
     let minor = try!(be_u32(src));
     let brand_count = (head.size - 8 - 8) / 4;
     let mut brands = Vec::new();
     for _ in 0..brand_count {
-        brands.push(FourCC(try!(be_u32(src))));
+        brands.push(FourCC(try!(be_fourcc(src))));
     }
     Ok(FileTypeBox{
         name: head.name,
@@ -712,7 +712,7 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     // Skip uninteresting fields.
     try!(skip(src, 4));
 
-    let handler_type = FourCC(try!(be_u32(src)));
+    let handler_type = FourCC(try!(be_fourcc(src)));
 
     // Skip uninteresting fields.
     try!(skip(src, 12));
@@ -740,7 +740,7 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
             TrackType::Video => {
                 let h = try!(read_box_header(src));
                 // TODO(kinetik): avc3 and encv here also?
-                if fourcc_to_string(h.name) != "avc1" {
+                if &h.name.0 != b"avc1" {
                     panic!("unsupported SampleEntry::Video subtype");
                 }
 
@@ -760,7 +760,7 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
 
                 // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
                 let h = try!(read_box_header(src));
-                if fourcc_to_string(h.name) != "avcC" {
+                if &h.name.0 != b"avcC" {
                     panic!("expected avcC atom inside avc1");
                 }
                 let mut data: Vec<u8> = vec![0; (h.size - h.offset) as usize];
@@ -780,7 +780,7 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
             TrackType::Audio => {
                 let h = try!(read_box_header(src));
                 // TODO(kinetik): enca here also?
-                if fourcc_to_string(h.name) != "mp4a" {
+                if &h.name.0 != b"mp4a" {
                     panic!("unsupported SampleEntry::Audio subtype");
                 }
 
@@ -802,7 +802,7 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
 
                 // TODO(kinetik): Parse esds atom?  For now we just stash the data.
                 let h = try!(read_box_header(src));
-                if fourcc_to_string(h.name) != "esds" {
+                if &h.name.0 != b"esds" {
                     panic!("expected esds atom inside mp4a");
                 }
                 let (_, _) = try!(read_fullbox_extra(src));
@@ -828,18 +828,6 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
         size: head.size,
         descriptions: descriptions,
     })
-}
-
-/// Convert the iso box type or other 4-character value to a string.
-fn fourcc_to_string(name: FourCC) -> String {
-    let u32_to_vec = |u| {
-        vec!((u >> 24 & 0xffu32) as u8,
-             (u >> 16 & 0xffu32) as u8,
-             (u >>  8 & 0xffu32) as u8,
-             (u & 0xffu32) as u8)
-    };
-    let name_bytes = u32_to_vec(name.0);
-    String::from_utf8_lossy(&name_bytes).into_owned()
 }
 
 /// Skip a number of bytes that we don't care to parse.
@@ -885,6 +873,12 @@ fn be_u64<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<u64> {
     src.read_u64::<byteorder::BigEndian>()
 }
 
+fn be_fourcc<T: Read>(src: &mut T) -> byteorder::Result<[u8; 4]> {
+    let mut fourcc = [0; 4];
+    try!(src.read(&mut fourcc));
+    Ok(fourcc)
+}
+
 #[test]
 fn test_read_box_header() {
     use std::io::Write;
@@ -892,7 +886,7 @@ fn test_read_box_header() {
     write!(&mut test, "test").unwrap(); // box type
     let mut stream = Cursor::new(test);
     let parsed = read_box_header(&mut stream).unwrap();
-    assert_eq!(parsed.name, FourCC(1952805748));
+    assert_eq!(parsed.name, FourCC(*b"test"));
     assert_eq!(parsed.size, 8);
     println!("box {:?}", parsed);
 }
@@ -906,7 +900,7 @@ fn test_read_box_header_long() {
     // Skip generating box content.
     let mut stream = Cursor::new(test);
     let parsed = read_box_header(&mut stream).unwrap();
-    assert_eq!(parsed.name, FourCC(1819242087));
+    assert_eq!(parsed.name, FourCC(*b"long"));
     assert_eq!(parsed.size, 4096);
     println!("box {:?}", parsed);
 }
@@ -926,13 +920,13 @@ fn test_read_ftyp() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_ftyp(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, FourCC(1718909296));
+    assert_eq!(parsed.name, FourCC(*b"ftyp"));
     assert_eq!(parsed.size, 24);
-    assert_eq!(parsed.major_brand, FourCC(1836069938));
+    assert_eq!(parsed.major_brand, FourCC(*b"mp42"));
     assert_eq!(parsed.minor_version, 0);
     assert_eq!(parsed.compatible_brands.len(), 2);
-    assert_eq!(parsed.compatible_brands[0], FourCC(1769172845));
-    assert_eq!(fourcc_to_string(parsed.compatible_brands[1]), "mp42");
+    assert_eq!(parsed.compatible_brands[0], FourCC(*b"isom"));
+    assert_eq!(parsed.compatible_brands[1], FourCC(*b"mp42"));
     println!("box {:?}", parsed);
 }
 
@@ -952,7 +946,7 @@ fn test_read_elst_v0() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_elst(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, FourCC(1701606260));
+    assert_eq!(parsed.name, FourCC(*b"elst"));
     assert_eq!(parsed.size, 28);
     assert_eq!(parsed.edits.len(), 1);
     assert_eq!(parsed.edits[0].segment_duration, 16909060);
@@ -982,7 +976,7 @@ fn test_read_elst_v1() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_elst(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, FourCC(1701606260));
+    assert_eq!(parsed.name, FourCC(*b"elst"));
     assert_eq!(parsed.size, 56);
     assert_eq!(parsed.edits.len(), 2);
     assert_eq!(parsed.edits[1].segment_duration, 72623859723010820);
@@ -1008,7 +1002,7 @@ fn test_read_mdhd_v0() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_mdhd(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, FourCC(1835296868));
+    assert_eq!(parsed.name, FourCC(*b"mdhd"));
     assert_eq!(parsed.size, 32);
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, 84281096);
@@ -1031,7 +1025,7 @@ fn test_read_mdhd_v1() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_mdhd(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, FourCC(1835296868));
+    assert_eq!(parsed.name, FourCC(*b"mdhd"));
     assert_eq!(parsed.size, 44);
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, 361984551075317512);
