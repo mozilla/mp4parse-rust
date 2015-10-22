@@ -49,7 +49,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// Four-byte 'character code' describing the type of a piece of data.
 #[derive(Clone, Copy, Eq, PartialEq)]
-pub struct FourCC(pub u32);
+pub struct FourCC(u32);
 
 impl fmt::Debug for FourCC {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
