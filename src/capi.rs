@@ -113,7 +113,7 @@ fn arg_validation() {
         assert_eq!(-1, mp4parse_read(context, null_buffer, 0));
     }
 
-    for size in (0..buffer.len()) {
+    for size in 0..buffer.len() {
         println!("testing buffer length {}", size);
         unsafe {
             assert_eq!(-1, mp4parse_read(context, buffer.as_ptr(), size));
