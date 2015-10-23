@@ -840,7 +840,6 @@ fn be_u64<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<u64> {
 
 #[test]
 fn test_read_box_header() {
-    use std::io::Cursor;
     use std::io::Write;
     let mut test: Vec<u8> = vec![0, 0, 0, 8]; // minimal box length
     write!(&mut test, "test").unwrap(); // box type
@@ -892,7 +891,6 @@ fn test_read_ftyp() {
 
 #[test]
 fn test_read_elst_v0() {
-    use std::io::Cursor;
     use std::io::Write;
     let mut test: Vec<u8> = vec![0, 0, 0, 28]; // size
     write!(&mut test, "elst").unwrap(); // type
@@ -919,7 +917,6 @@ fn test_read_elst_v0() {
 
 #[test]
 fn test_read_elst_v1() {
-    use std::io::Cursor;
     use std::io::Write;
     let mut test: Vec<u8> = vec![0, 0, 0, 56]; // size
     write!(&mut test, "elst").unwrap(); // type
@@ -950,7 +947,6 @@ fn test_read_elst_v1() {
 
 #[test]
 fn test_read_mdhd_v0() {
-    use std::io::Cursor;
     use std::io::Write;
     let mut test: Vec<u8> = vec![0, 0, 0, 32]; // size
     write!(&mut test, "mdhd").unwrap(); // type
@@ -974,7 +970,6 @@ fn test_read_mdhd_v0() {
 
 #[test]
 fn test_read_mdhd_v1() {
-    use std::io::Cursor;
     use std::io::Write;
     let mut test: Vec<u8> = vec![0, 0, 0, 44]; // size
     write!(&mut test, "mdhd").unwrap(); // type
