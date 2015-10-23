@@ -4,6 +4,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+extern crate byteorder;
+use byteorder::{BigEndian, ReadBytesExt};
+use std::io::{Read, BufRead, Take};
+use std::io::Cursor;
+use std::cmp;
 use std::fmt;
 
 /// Expose C api wrapper.
@@ -213,12 +218,6 @@ enum TrackType {
 pub struct Track {
     track_type: TrackType,
 }
-
-extern crate byteorder;
-use byteorder::{BigEndian, ReadBytesExt};
-use std::io::{Read, BufRead, Take};
-use std::io::Cursor;
-use std::cmp;
 
 /// Parse a box out of a data buffer.
 pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<BoxHeader> {
