@@ -34,17 +34,14 @@ use Error;
 #[no_mangle]
 pub extern "C" fn mp4parse_new() -> *mut MediaContext {
     let context = Box::new(MediaContext::new());
-    unsafe {
-        // transmute is unsafe, but context is always valid.
-        std::mem::transmute(context)
-    }
+    Box::into_raw(context)
 }
 
 /// Free a rust-side parser context.
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_free(context: *mut MediaContext) {
     assert!(!context.is_null());
-    let _: Box<MediaContext> = std::mem::transmute(context);
+    let _ = Box::from_raw(context);
 }
 
 /// Feed a buffer through `read_box()` with the given rust-side
