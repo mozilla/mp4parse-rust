@@ -251,13 +251,13 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
     let size32 = try!(be_u32(src));
     let name = FourCC(try!(be_u32(src)));
     let size = match size32 {
-        0 => panic!("unknown box size not implemented"),
+        0 => return Err(Error::InvalidData),
         1 => {
             let size64 = try!(be_u64(src));
             assert!(size64 >= 16);
             size64
         },
-        2 ... 7 => panic!("invalid box size"),
+        2 ... 7 => return Err(Error::InvalidData),
         _ => size32 as u64,
     };
     let offset = match size32 {
