@@ -6,6 +6,7 @@
 
 extern crate byteorder;
 use byteorder::ReadBytesExt;
+use std::error::Error as ErrorTrait; // For Err(e) => e.description().
 use std::io::{Read, BufRead, Take};
 use std::io::Cursor;
 use std::cmp;
@@ -276,7 +277,6 @@ fn limit<'a, T: Read>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
 
 /// Helper to construct a Cursor over the contents of a box.
 fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> byteorder::Result<()> {
-    use std::error::Error;
     println!("{:?} -- recursing", h);
     // FIXME: I couldn't figure out how to do this without copying.
     // We use Seek on the Read we return in skip_box_content, but
