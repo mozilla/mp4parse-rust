@@ -7,11 +7,11 @@
 
 use std;
 use std::io::Cursor;
-use byteorder;
 
 // Symbols we need from our rust api.
 use MediaContext;
 use read_box;
+use Error;
 
 /// Allocate an opaque rust-side parser context.
 #[no_mangle]
@@ -52,7 +52,7 @@ pub unsafe extern "C" fn mp4parse_read(context: *mut MediaContext, buffer: *cons
         loop {
             match read_box(&mut c, &mut context) {
                 Ok(_) => {},
-                Err(byteorder::Error::UnexpectedEOF) => { break },
+                Err(Error::UnexpectedEOF) => { break },
                 Err(e) => { panic!(e); },
             }
         }

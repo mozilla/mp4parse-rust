@@ -17,6 +17,32 @@ pub mod capi;
 // FIXME: We can 'pub use capi::*' in rustc 1.5 and later.
 pub use capi::{mp4parse_new, mp4parse_free, mp4parse_read};
 
+#[derive(Debug)]
+pub enum Error {
+    /// Custom error type for reporting parse errors.
+    InvalidData,
+    /// Reflect byteorder::Error::UnexpectedEOF for short data.
+    UnexpectedEOF,
+    /// Propagate underlying errors from std::io.
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error { Error::Io(err) }
+}
+
+impl From<byteorder::Error> for Error {
+    fn from(err: byteorder::Error) -> Error {
+        match err {
+            byteorder::Error::UnexpectedEOF => Error::UnexpectedEOF,
+            byteorder::Error::Io(e) => Error::Io(e),
+        }
+    }
+}
+
+/// Result shorthand using our Error enum.
+pub type Result<T> = std::result::Result<T, Error>;
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct FourCC(pub u32);
 
@@ -221,7 +247,7 @@ pub struct Track {
 }
 
 /// Parse a box out of a data buffer.
-pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<BoxHeader> {
+pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
     let size32 = try!(be_u32(src));
     let name = FourCC(try!(be_u32(src)));
     let size = match size32 {
@@ -247,7 +273,7 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<BoxHea
 }
 
 /// Parse the extra header fields for a full box.
-fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<(u8, u32)> {
+fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> Result<(u8, u32)> {
     let version = try!(src.read_u8());
     let flags_a = try!(src.read_u8());
     let flags_b = try!(src.read_u8());
@@ -258,14 +284,14 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<(u8, u3
 }
 
 /// Skip over the entire contents of a box.
-pub fn skip_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> byteorder::Result<usize> {
+pub fn skip_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> Result<usize> {
     skip(src, (header.size - header.offset) as usize)
 }
 
 /// Skip over the remaining contents of a box.
-pub fn skip_remaining_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> byteorder::Result<()> {
+pub fn skip_remaining_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> Result<()> {
     match skip(src, (header.size - header.offset) as usize) {
-        Ok(_) | Err(byteorder::Error::UnexpectedEOF) => Ok(()),
+        Ok(_) | Err(Error::UnexpectedEOF) => Ok(()),
         e @ _ => Err(e.err().unwrap())
     }
 }
@@ -276,7 +302,7 @@ fn limit<'a, T: Read>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
 }
 
 /// Helper to construct a Cursor over the contents of a box.
-fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> byteorder::Result<()> {
+fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> Result<()> {
     println!("{:?} -- recursing", h);
     // FIXME: I couldn't figure out how to do this without copying.
     // We use Seek on the Read we return in skip_box_content, but
@@ -291,17 +317,21 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> byt
     loop {
         match read_box(&mut content, context) {
             Ok(_) => {},
-            Err(byteorder::Error::UnexpectedEOF) => {
+            Err(Error::UnexpectedEOF) => {
                 // byteorder returns EOF at the end of the buffer.
                 // This isn't an error for us, just an signal to
                 // stop recursion.
-                println!("Caught byteorder::Error::UnexpectedEOF");
+                println!("Caught Error::UnexpectedEOF");
                 break;
             },
-            Err(byteorder::Error::Io(e)) => {
+            Err(Error::InvalidData) => {
+                println!("Invalid data");
+                return Err(Error::InvalidData);
+            },
+            Err(Error::Io(e)) => {
                 println!("I/O Error '{:?}' reading box: {:?}",
                          e.kind(), e.description());
-                return Err(byteorder::Error::Io(e));
+                return Err(Error::Io(e));
             },
         }
     }
@@ -312,7 +342,7 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> byt
 
 /// Read the contents of a box, including sub boxes.
 /// Metadata is accumulated in the passed-through MediaContext struct.
-pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder::Result<()> {
+pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     read_box_header(f).and_then(|h| {
         let mut content = limit(f, &h);
         match &fourcc_to_string(h.name)[..] {
@@ -399,7 +429,7 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> byteorder:
 }
 
 /// Parse an ftyp box.
-pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<FileTypeBox> {
+pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileTypeBox> {
     let major = FourCC(try!(be_u32(src)));
     let minor = try!(be_u32(src));
     let brand_count = (head.size - 8 - 8) / 4;
@@ -417,7 +447,7 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 }
 
 /// Parse an mvhd box.
-pub fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> byteorder::Result<MovieHeaderBox> {
+pub fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<MovieHeaderBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     match version {
         // 64 bit creation and modification times.
@@ -443,7 +473,7 @@ pub fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
 }
 
 /// Parse a tkhd box.
-pub fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> byteorder::Result<TrackHeaderBox> {
+pub fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<TrackHeaderBox> {
     let (version, flags) = try!(read_fullbox_extra(src));
     let disabled = flags & 0x1u32 == 0 || flags & 0x2u32 == 0;
     match version {
@@ -476,7 +506,7 @@ pub fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
 }
 
 /// Parse a elst box.
-pub fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<EditListBox> {
+pub fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<EditListBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     let edit_count = try!(be_u32(src));
     let mut edits = Vec::new();
@@ -512,7 +542,7 @@ pub fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 }
 
 /// Parse a mdhd box.
-pub fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> byteorder::Result<MediaHeaderBox> {
+pub fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<MediaHeaderBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     let (timescale, duration) = match version {
         1 => {
@@ -546,7 +576,7 @@ pub fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
 }
 
 /// Parse a stco box.
-pub fn read_stco<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<ChunkOffsetBox> {
+pub fn read_stco<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<ChunkOffsetBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let offset_count = try!(be_u32(src));
     let mut offsets = Vec::new();
@@ -562,7 +592,7 @@ pub fn read_stco<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 }
 
 /// Parse a stco box.
-pub fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<ChunkOffsetBox> {
+pub fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<ChunkOffsetBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let offset_count = try!(be_u32(src));
     let mut offsets = Vec::new();
@@ -578,7 +608,7 @@ pub fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 }
 
 /// Parse a stss box.
-pub fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<SyncSampleBox> {
+pub fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SyncSampleBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let sample_count = try!(be_u32(src));
     let mut samples = Vec::new();
@@ -594,7 +624,7 @@ pub fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 }
 
 /// Parse a stsc box.
-pub fn read_stsc<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<SampleToChunkBox> {
+pub fn read_stsc<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SampleToChunkBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let sample_count = try!(be_u32(src));
     let mut samples = Vec::new();
@@ -617,7 +647,7 @@ pub fn read_stsc<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 }
 
 /// Parse a stsz box.
-pub fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<SampleSizeBox> {
+pub fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SampleSizeBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let sample_size = try!(be_u32(src));
     let sample_count = try!(be_u32(src));
@@ -637,7 +667,7 @@ pub fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 }
 
 /// Parse a stts box.
-pub fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::Result<TimeToSampleBox> {
+pub fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TimeToSampleBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let sample_count = try!(be_u32(src));
     let mut samples = Vec::new();
@@ -658,7 +688,7 @@ pub fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> byteorder::R
 }
 
 /// Parse a hdlr box.
-pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> byteorder::Result<HandlerBox> {
+pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<HandlerBox> {
     let (_, _) = try!(read_fullbox_extra(src));
 
     // Skip uninteresting fields.
@@ -681,7 +711,7 @@ pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> by
 }
 
 /// Parse a stsd box.
-pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &Track) -> byteorder::Result<SampleDescriptionBox> {
+pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &Track) -> Result<SampleDescriptionBox> {
     let (_, _) = try!(read_fullbox_extra(src));
 
     let description_count = try!(be_u32(src));
@@ -795,7 +825,7 @@ fn fourcc_to_string(name: FourCC) -> String {
 }
 
 /// Skip a number of bytes that we don't care to parse.
-fn skip<T: BufRead>(src: &mut T, bytes: usize) -> byteorder::Result<usize> {
+fn skip<T: BufRead>(src: &mut T, bytes: usize) -> Result<usize> {
     let mut bytes_to_skip = bytes;
     while bytes_to_skip > 0 {
         let len = {
@@ -803,7 +833,7 @@ fn skip<T: BufRead>(src: &mut T, bytes: usize) -> byteorder::Result<usize> {
             buf.len()
         };
         if len == 0 {
-            return Err(byteorder::Error::UnexpectedEOF)
+            return Err(Error::UnexpectedEOF)
         }
         let discard = cmp::min(len, bytes_to_skip);
         src.consume(discard);

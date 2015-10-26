@@ -5,7 +5,6 @@ use std::fs::File;
 use std::io::BufReader;
 
 extern crate byteorder;
-use byteorder::Error;
 
 fn dump_file(filename: &String) {
     let file = File::open(filename).unwrap();
@@ -14,7 +13,7 @@ fn dump_file(filename: &String) {
     loop {
         match mp4parse::read_box(&mut reader, &mut context) {
             Ok(_) => {},
-            Err(Error::UnexpectedEOF) => { break },
+            Err(mp4parse::Error::UnexpectedEOF) => { break },
             Err(e) => { panic!(e); },
         }
     }
