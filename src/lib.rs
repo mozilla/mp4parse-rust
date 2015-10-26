@@ -5,7 +5,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 extern crate byteorder;
-use byteorder::{BigEndian, ReadBytesExt};
+use byteorder::ReadBytesExt;
 use std::io::{Read, BufRead, Take};
 use std::io::Cursor;
 use std::cmp;
@@ -814,27 +814,27 @@ fn skip<T: BufRead>(src: &mut T, bytes: usize) -> byteorder::Result<usize> {
 }
 
 fn be_i16<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<i16> {
-    src.read_i16::<BigEndian>()
+    src.read_i16::<byteorder::BigEndian>()
 }
 
 fn be_i32<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<i32> {
-    src.read_i32::<BigEndian>()
+    src.read_i32::<byteorder::BigEndian>()
 }
 
 fn be_i64<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<i64> {
-    src.read_i64::<BigEndian>()
+    src.read_i64::<byteorder::BigEndian>()
 }
 
 fn be_u16<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<u16> {
-    src.read_u16::<BigEndian>()
+    src.read_u16::<byteorder::BigEndian>()
 }
 
 fn be_u32<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<u32> {
-    src.read_u32::<BigEndian>()
+    src.read_u32::<byteorder::BigEndian>()
 }
 
 fn be_u64<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<u64> {
-    src.read_u64::<BigEndian>()
+    src.read_u64::<byteorder::BigEndian>()
 }
 
 #[test]
