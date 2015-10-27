@@ -47,6 +47,7 @@ impl From<byteorder::Error> for Error {
 /// Result shorthand using our Error enum.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Four-byte 'character code' describing the type of a piece of data.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct FourCC(pub u32);
 
@@ -57,11 +58,17 @@ impl fmt::Debug for FourCC {
 }
 
 /// Basic ISO box structure.
+///
+/// mp4 files are a sequence of possibly-nested 'box' structures.
+/// Each box begins with a header describing the length of the
+/// box's data and a four-byte 'character code' or `FourCC` which
+/// identifies the type of the box. Together these are enough to
+/// interpret the contents of that section of the file.
 #[derive(Debug)]
 pub struct BoxHeader {
-    /// Four character box type
+    /// Four character box type.
     pub name: FourCC,
-    /// Size of the box in bytes
+    /// Size of the box in bytes.
     pub size: u64,
     /// Offset to the start of the contained data (or header size).
     pub offset: u64,
@@ -250,7 +257,12 @@ struct Track {
     track_type: TrackType,
 }
 
-/// Parse a box out of a data buffer.
+/// Read and parse a box header.
+///
+/// Call this first to determine the type of a particular mp4 box
+/// and its length. Used internally for dispatching to specific
+/// parsers for the internal content, or to get the length to
+/// skip unknown or uninteresting boxes.
 pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
     let size32 = try!(be_u32(src));
     let name = FourCC(try!(be_u32(src)));
@@ -345,7 +357,9 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> Res
 }
 
 /// Read the contents of a box, including sub boxes.
-/// Metadata is accumulated in the passed-through MediaContext struct.
+///
+/// Metadata is accumulated in the passed-through MediaContext struct,
+/// which can be examined later.
 pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     read_box_header(f).and_then(|h| {
         let mut content = limit(f, &h);
