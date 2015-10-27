@@ -1,5 +1,22 @@
-// C API for mp4parse module.
-// Parses ISO Base Media Format aka video/mp4 streams.
+//! C API for mp4parse module.
+//!
+//! Parses ISO Base Media Format aka video/mp4 streams.
+//!
+//! # Examples
+//!
+//! ```rust
+//! extern crate mp4parse;
+//!
+//! // Minimal valid mp4 containing no tracks.
+//! let data = b"\0\0\0\x0cftypmp42";
+//!
+//! let context = mp4parse::mp4parse_new();
+//! unsafe {
+//!     let rv = mp4parse::mp4parse_read(context, data.as_ptr(), data.len());
+//!     assert_eq!(0, rv);
+//!     mp4parse::mp4parse_free(context);
+//! }
+//! ```
 
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -30,7 +47,11 @@ pub unsafe extern "C" fn mp4parse_free(context: *mut MediaContext) {
     let _: Box<MediaContext> = std::mem::transmute(context);
 }
 
-/// Feed a buffer through read_box(), returning the number of detected tracks.
+/// Feed a buffer through `read_box()` with the given rust-side
+/// parser context, returning the number of detected tracks.
+///
+/// This is safe to call with NULL arguments but will crash
+/// if given invalid pointers, as is usual for C.
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_read(context: *mut MediaContext, buffer: *const u8, size: usize) -> i32 {
     // Validate arguments from C.

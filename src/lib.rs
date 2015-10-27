@@ -1,8 +1,8 @@
-// Module for parsing ISO Base Media Format aka video/mp4 streams.
+//! Module for parsing ISO Base Media Format aka video/mp4 streams.
 
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
-// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+// file, You can obtain one at https:mozilla.org/MPL/2.0/.
 
 extern crate byteorder;
 use byteorder::ReadBytesExt;
@@ -12,18 +12,22 @@ use std::io::Cursor;
 use std::cmp;
 use std::fmt;
 
-/// Expose C api wrapper.
+// Expose C api wrapper.
 pub mod capi;
 // FIXME: We can 'pub use capi::*' in rustc 1.5 and later.
 pub use capi::{mp4parse_new, mp4parse_free, mp4parse_read};
 
+/// Describes parser failures.
+///
+/// This enum wraps athe standard `io::Error` type, unified with
+/// our own parser error states and those of crates we use.
 #[derive(Debug)]
 pub enum Error {
     /// Custom error type for reporting parse errors.
     InvalidData,
-    /// Reflect byteorder::Error::UnexpectedEOF for short data.
+    /// Reflect `byteorder::Error::UnexpectedEOF` for short data.
     UnexpectedEOF,
-    /// Propagate underlying errors from std::io.
+    /// Propagate underlying errors from `std::io`.
     Io(std::io::Error),
 }
 
