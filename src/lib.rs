@@ -69,7 +69,7 @@ pub struct BoxHeader {
 
 /// File type box 'ftyp'.
 #[derive(Debug)]
-pub struct FileTypeBox {
+struct FileTypeBox {
     name: FourCC,
     size: u64,
     major_brand: FourCC,
@@ -79,36 +79,36 @@ pub struct FileTypeBox {
 
 /// Movie header box 'mvhd'.
 #[derive(Debug)]
-pub struct MovieHeaderBox {
-    pub name: FourCC,
-    pub size: u64,
-    pub timescale: u32,
-    pub duration: u64,
+struct MovieHeaderBox {
+    name: FourCC,
+    size: u64,
+    timescale: u32,
+    duration: u64,
     // Ignore other fields.
 }
 
 /// Track header box 'tkhd'
 #[derive(Debug)]
-pub struct TrackHeaderBox {
-    pub name: FourCC,
-    pub size: u64,
-    pub track_id: u32,
-    pub enabled: bool,
-    pub duration: u64,
-    pub width: u32,
-    pub height: u32,
+struct TrackHeaderBox {
+    name: FourCC,
+    size: u64,
+    track_id: u32,
+    enabled: bool,
+    duration: u64,
+    width: u32,
+    height: u32,
 }
 
 /// Edit list box 'elst'
 #[derive(Debug)]
-pub struct EditListBox {
+struct EditListBox {
     name: FourCC,
     size: u64,
     edits: Vec<Edit>,
 }
 
 #[derive(Debug)]
-pub struct Edit {
+struct Edit {
     segment_duration: u64,
     media_time: i64,
     media_rate_integer: i16,
@@ -117,7 +117,7 @@ pub struct Edit {
 
 /// Media header box 'mdhd'
 #[derive(Debug)]
-pub struct MediaHeaderBox {
+struct MediaHeaderBox {
     name: FourCC,
     size: u64,
     timescale: u32,
@@ -126,7 +126,7 @@ pub struct MediaHeaderBox {
 
 // Chunk offset box 'stco' or 'co64'
 #[derive(Debug)]
-pub struct ChunkOffsetBox {
+struct ChunkOffsetBox {
     name: FourCC,
     size: u64,
     offsets: Vec<u64>,
@@ -134,7 +134,7 @@ pub struct ChunkOffsetBox {
 
 // Sync sample box 'stss'
 #[derive(Debug)]
-pub struct SyncSampleBox {
+struct SyncSampleBox {
     name: FourCC,
     size: u64,
     samples: Vec<u32>,
@@ -142,14 +142,14 @@ pub struct SyncSampleBox {
 
 // Sample to chunk box 'stsc'
 #[derive(Debug)]
-pub struct SampleToChunkBox {
+struct SampleToChunkBox {
     name: FourCC,
     size: u64,
     samples: Vec<SampleToChunk>,
 }
 
 #[derive(Debug)]
-pub struct SampleToChunk {
+struct SampleToChunk {
     first_chunk: u32,
     samples_per_chunk: u32,
     sample_description_index: u32,
@@ -157,7 +157,7 @@ pub struct SampleToChunk {
 
 // Sample size box 'stsz'
 #[derive(Debug)]
-pub struct SampleSizeBox {
+struct SampleSizeBox {
     name: FourCC,
     size: u64,
     sample_size: u32,
@@ -166,21 +166,21 @@ pub struct SampleSizeBox {
 
 // Time to sample box 'stts'
 #[derive(Debug)]
-pub struct TimeToSampleBox {
+struct TimeToSampleBox {
     name: FourCC,
     size: u64,
     samples: Vec<Sample>,
 }
 
 #[derive(Debug)]
-pub struct Sample {
+struct Sample {
     sample_count: u32,
     sample_delta: u32,
 }
 
 // Handler reference box 'hdlr'
 #[derive(Debug)]
-pub struct HandlerBox {
+struct HandlerBox {
     name: FourCC,
     size: u64,
     handler_type: FourCC,
@@ -188,7 +188,7 @@ pub struct HandlerBox {
 
 // Sample description box 'stsd'
 #[derive(Debug)]
-pub struct SampleDescriptionBox {
+struct SampleDescriptionBox {
     name: FourCC,
     size: u64,
     descriptions: Vec<SampleEntry>,
@@ -214,14 +214,14 @@ enum SampleEntry {
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct AVCDecoderConfigurationRecord {
+struct AVCDecoderConfigurationRecord {
     data: Vec<u8>,
 }
 
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct ES_Descriptor {
+struct ES_Descriptor {
     data: Vec<u8>,
 }
 
@@ -246,7 +246,7 @@ enum TrackType {
 }
 
 #[derive(Debug)]
-pub struct Track {
+struct Track {
     track_type: TrackType,
 }
 
@@ -288,12 +288,12 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> Result<(u8, u32)> {
 }
 
 /// Skip over the entire contents of a box.
-pub fn skip_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> Result<usize> {
+fn skip_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> Result<usize> {
     skip(src, (header.size - header.offset) as usize)
 }
 
 /// Skip over the remaining contents of a box.
-pub fn skip_remaining_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> Result<()> {
+fn skip_remaining_box_content<T: BufRead> (src: &mut T, header: &BoxHeader) -> Result<()> {
     match skip(src, (header.size - header.offset) as usize) {
         Ok(_) | Err(Error::UnexpectedEOF) => Ok(()),
         e @ _ => Err(e.err().unwrap())
@@ -433,7 +433,7 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
 }
 
 /// Parse an ftyp box.
-pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileTypeBox> {
+fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileTypeBox> {
     let major = FourCC(try!(be_u32(src)));
     let minor = try!(be_u32(src));
     let brand_count = (head.size - 8 - 8) / 4;
@@ -451,7 +451,7 @@ pub fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileT
 }
 
 /// Parse an mvhd box.
-pub fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<MovieHeaderBox> {
+fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<MovieHeaderBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     match version {
         // 64 bit creation and modification times.
@@ -477,7 +477,7 @@ pub fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Re
 }
 
 /// Parse a tkhd box.
-pub fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<TrackHeaderBox> {
+fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<TrackHeaderBox> {
     let (version, flags) = try!(read_fullbox_extra(src));
     let disabled = flags & 0x1u32 == 0 || flags & 0x2u32 == 0;
     match version {
@@ -510,7 +510,7 @@ pub fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Re
 }
 
 /// Parse a elst box.
-pub fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<EditListBox> {
+fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<EditListBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     let edit_count = try!(be_u32(src));
     let mut edits = Vec::new();
@@ -546,7 +546,7 @@ pub fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<EditL
 }
 
 /// Parse a mdhd box.
-pub fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<MediaHeaderBox> {
+fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<MediaHeaderBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     let (timescale, duration) = match version {
         1 => {
@@ -580,7 +580,7 @@ pub fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Re
 }
 
 /// Parse a stco box.
-pub fn read_stco<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<ChunkOffsetBox> {
+fn read_stco<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<ChunkOffsetBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let offset_count = try!(be_u32(src));
     let mut offsets = Vec::new();
@@ -596,7 +596,7 @@ pub fn read_stco<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<Chunk
 }
 
 /// Parse a stco box.
-pub fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<ChunkOffsetBox> {
+fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<ChunkOffsetBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let offset_count = try!(be_u32(src));
     let mut offsets = Vec::new();
@@ -612,7 +612,7 @@ pub fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<Chunk
 }
 
 /// Parse a stss box.
-pub fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SyncSampleBox> {
+fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SyncSampleBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let sample_count = try!(be_u32(src));
     let mut samples = Vec::new();
@@ -628,7 +628,7 @@ pub fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SyncS
 }
 
 /// Parse a stsc box.
-pub fn read_stsc<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SampleToChunkBox> {
+fn read_stsc<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SampleToChunkBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let sample_count = try!(be_u32(src));
     let mut samples = Vec::new();
@@ -651,7 +651,7 @@ pub fn read_stsc<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<Sampl
 }
 
 /// Parse a stsz box.
-pub fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SampleSizeBox> {
+fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SampleSizeBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let sample_size = try!(be_u32(src));
     let sample_count = try!(be_u32(src));
@@ -671,7 +671,7 @@ pub fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<Sampl
 }
 
 /// Parse a stts box.
-pub fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TimeToSampleBox> {
+fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TimeToSampleBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let sample_count = try!(be_u32(src));
     let mut samples = Vec::new();
@@ -692,7 +692,7 @@ pub fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TimeT
 }
 
 /// Parse a hdlr box.
-pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<HandlerBox> {
+fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<HandlerBox> {
     let (_, _) = try!(read_fullbox_extra(src));
 
     // Skip uninteresting fields.
@@ -715,7 +715,7 @@ pub fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Re
 }
 
 /// Parse a stsd box.
-pub fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &Track) -> Result<SampleDescriptionBox> {
+fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &Track) -> Result<SampleDescriptionBox> {
     let (_, _) = try!(read_fullbox_extra(src));
 
     let description_count = try!(be_u32(src));
