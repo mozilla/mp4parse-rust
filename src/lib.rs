@@ -23,7 +23,7 @@ pub use capi::{mp4parse_new, mp4parse_free, mp4parse_read};
 /// our own parser error states and those of crates we use.
 #[derive(Debug)]
 pub enum Error {
-    /// Custom error type for reporting parse errors.
+    /// Parse error caused by corrupt or malformed data.
     InvalidData,
     /// Parse error caused by limited parser support rather than invalid data.
     Unsupported,
