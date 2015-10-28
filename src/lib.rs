@@ -749,7 +749,7 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
                 let h = try!(read_box_header(src));
                 // TODO(kinetik): avc3 and encv here also?
                 if &h.name.0 != b"avc1" {
-                    panic!("unsupported SampleEntry::Video subtype");
+                    return Err(Error::Unsupported);
                 }
 
                 // Skip uninteresting fields.
@@ -769,7 +769,7 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
                 // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
                 let h = try!(read_box_header(src));
                 if &h.name.0 != b"avcC" {
-                    panic!("expected avcC atom inside avc1");
+                    return Err(Error::InvalidData);
                 }
                 let mut data: Vec<u8> = vec![0; (h.size - h.offset) as usize];
                 let r = try!(src.read(&mut data));
@@ -789,7 +789,7 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
                 let h = try!(read_box_header(src));
                 // TODO(kinetik): enca here also?
                 if &h.name.0 != b"mp4a" {
-                    panic!("unsupported SampleEntry::Audio subtype");
+                    return Err(Error::Unsupported);
                 }
 
                 // Skip uninteresting fields.
@@ -811,7 +811,7 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
                 // TODO(kinetik): Parse esds atom?  For now we just stash the data.
                 let h = try!(read_box_header(src));
                 if &h.name.0 != b"esds" {
-                    panic!("expected esds atom inside mp4a");
+                    return Err(Error::InvalidData);
                 }
                 let (_, _) = try!(read_fullbox_extra(src));
                 let mut data: Vec<u8> = vec![0; (h.size - h.offset - 4) as usize];
