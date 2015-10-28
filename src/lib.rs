@@ -25,6 +25,8 @@ pub use capi::{mp4parse_new, mp4parse_free, mp4parse_read};
 pub enum Error {
     /// Custom error type for reporting parse errors.
     InvalidData,
+    /// Parse error caused by limited parser support rather than invalid data.
+    Unsupported,
     /// Reflect `byteorder::Error::UnexpectedEOF` for short data.
     UnexpectedEOF,
     /// Propagate underlying errors from `std::io`.
@@ -267,7 +269,7 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
     let size32 = try!(be_u32(src));
     let name = FourCC(try!(be_fourcc(src)));
     let size = match size32 {
-        0 => return Err(Error::InvalidData),
+        0 => return Err(Error::Unsupported),
         1 => {
             let size64 = try!(be_u64(src));
             if size64 < 16 {
@@ -345,6 +347,10 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> Res
             Err(Error::InvalidData) => {
                 println!("Invalid data");
                 return Err(Error::InvalidData);
+            },
+            Err(Error::Unsupported) => {
+                println!("Unsupported BMFF construct");
+                return Err(Error::Unsupported);
             },
             Err(Error::Io(e)) => {
                 println!("I/O Error '{:?}' reading box: {:?}",
