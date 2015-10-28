@@ -480,13 +480,13 @@ fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
         1 => { try!(skip(src, 16)); },
         // 32 bit creation and modification times.
         0 => { try!(skip(src, 8)); },
-        _ => panic!("invalid mhdr version"),
+        _ => return Err(Error::InvalidData),
     }
     let timescale = try!(be_u32(src));
     let duration = match version {
         1 => try!(be_u64(src)),
         0 => try!(be_u32(src)) as u64,
-        _ => panic!("invalid mhdr version"),
+        _ => return Err(Error::InvalidData),
     };
     // Skip remaining fields.
     try!(skip(src, 80));
@@ -507,14 +507,14 @@ fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
         1 => { try!(skip(src, 16)); },
         // 32 bit creation and modification times.
         0 => { try!(skip(src, 8)); },
-        _ => panic!("invalid tkhd version"),
+        _ => return Err(Error::InvalidData),
     }
     let track_id = try!(be_u32(src));
     try!(skip(src, 4));
     let duration = match version {
         1 => try!(be_u64(src)),
         0 => try!(be_u32(src)) as u64,
-        _ => panic!("invalid tkhd version"),
+        _ => return Err(Error::InvalidData),
     };
     // Skip uninteresting fields.
     try!(skip(src, 52));
@@ -548,7 +548,7 @@ fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<EditListB
                 (try!(be_u32(src)) as u64,
                  try!(be_i32(src)) as i64)
             },
-            _ => panic!("invalid elst version"),
+            _ => return Err(Error::InvalidData),
         };
         let media_rate_integer = try!(be_i16(src));
         let media_rate_fraction = try!(be_i16(src));
@@ -587,7 +587,7 @@ fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
             (try!(be_u32(src)),
              try!(be_u32(src)) as u64)
         },
-        _ => panic!("invalid mdhd version"),
+        _ => return Err(Error::InvalidData),
     };
 
     // Skip uninteresting fields.
