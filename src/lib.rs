@@ -834,10 +834,7 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
 fn skip<T: BufRead>(src: &mut T, bytes: usize) -> Result<usize> {
     let mut bytes_to_skip = bytes;
     while bytes_to_skip > 0 {
-        let len = {
-            let buf = src.fill_buf().unwrap();
-            buf.len()
-        };
+        let len = try!(src.fill_buf()).len();
         if len == 0 {
             return Err(Error::UnexpectedEOF)
         }
