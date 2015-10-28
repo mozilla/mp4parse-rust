@@ -15,3 +15,11 @@ fn fuzz_2() {
     let mut context = mp4parse::MediaContext::new();
     let _ = mp4parse::read_box(&mut c, &mut context);
 }
+
+/// https://github.com/mozilla/mp4parse-rust/issues/4
+#[test]
+fn fuzz_4() {
+    let mut c = Cursor::new(b"\x00\x00\x00\x01\x30\x30\x30\x30\x00\x00\x00\x00\x00\x00\x00\x00".to_vec());
+    let mut context = mp4parse::MediaContext::new();
+    let _ = mp4parse::read_box(&mut c, &mut context);
+}
