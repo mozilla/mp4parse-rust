@@ -880,8 +880,11 @@ fn be_u64<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<u64> {
 
 fn be_fourcc<T: Read>(src: &mut T) -> byteorder::Result<[u8; 4]> {
     let mut fourcc = [0; 4];
-    try!(src.read(&mut fourcc));
-    Ok(fourcc)
+    let bytes_read = try!(src.read(&mut fourcc));
+    match bytes_read {
+        4 => Ok(fourcc),
+        _ => Err(byteorder::Error::UnexpectedEOF),
+    }
 }
 
 #[test]
