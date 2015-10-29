@@ -23,3 +23,12 @@ fn fuzz_4() {
     let mut context = mp4parse::MediaContext::new();
     let _ = mp4parse::read_box(&mut c, &mut context);
 }
+
+/// https://github.com/mozilla/mp4parse-rust/issues/5
+#[test]
+fn fuzz_5() {
+    let mut c =
+    Cursor::new(b"\x30\x30\x30\x30\x66\x74\x79\x70\x30\x30\x30\x30\x30\x30\x30\x30".to_vec());
+    let mut context = mp4parse::MediaContext::new();
+    let _ = mp4parse::read_box(&mut c, &mut context);
+}
