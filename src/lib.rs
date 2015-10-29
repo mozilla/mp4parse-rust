@@ -267,7 +267,7 @@ struct Track {
 /// skip unknown or uninteresting boxes.
 pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
     let size32 = try!(be_u32(src));
-    let name = FourCC(try!(be_fourcc(src)));
+    let name = try!(be_fourcc(src));
     let size = match size32 {
         0 => return Err(Error::Unsupported),
         1 => {
@@ -456,12 +456,12 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
 
 /// Parse an ftyp box.
 fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileTypeBox> {
-    let major = FourCC(try!(be_fourcc(src)));
+    let major = try!(be_fourcc(src));
     let minor = try!(be_u32(src));
     let brand_count = (head.size - 8 - 8) / 4;
     let mut brands = Vec::new();
     for _ in 0..brand_count {
-        brands.push(FourCC(try!(be_fourcc(src))));
+        brands.push(try!(be_fourcc(src)));
     }
     Ok(FileTypeBox{
         name: head.name,
@@ -720,7 +720,7 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     // Skip uninteresting fields.
     try!(skip(src, 4));
 
-    let handler_type = FourCC(try!(be_fourcc(src)));
+    let handler_type = try!(be_fourcc(src));
 
     // Skip uninteresting fields.
     try!(skip(src, 12));
@@ -878,12 +878,15 @@ fn be_u64<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<u64> {
     src.read_u64::<byteorder::BigEndian>()
 }
 
-fn be_fourcc<T: Read>(src: &mut T) -> byteorder::Result<[u8; 4]> {
+fn be_fourcc<T: Read>(src: &mut T) -> Result<FourCC> {
     let mut fourcc = [0; 4];
-    let bytes_read = try!(src.read(&mut fourcc));
-    match bytes_read {
-        4 => Ok(fourcc),
-        _ => Err(byteorder::Error::UnexpectedEOF),
+    match src.read(&mut fourcc) {
+        // Expect all 4 bytes read.
+        Ok(4) => Ok(FourCC(fourcc)),
+        // Short read means EOF.
+        Ok(_) => Err(Error::UnexpectedEOF),
+        // Propagate std::io errors.
+        Err(e) => Err(Error::Io(e)),
     }
 }
 
