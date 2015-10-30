@@ -54,9 +54,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct FourCC([u8; 4]);
 
 impl fmt::Debug for FourCC {
-  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "'{}'", String::from_utf8_lossy(&self.0))
-  }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "'{}'", String::from_utf8_lossy(&self.0))
+    }
 }
 
 /// Basic ISO box structure.
@@ -266,7 +266,7 @@ macro_rules! log {
 #[derive(Debug)]
 enum TrackType {
     Video,
-    Audio
+    Audio,
 }
 
 #[derive(Debug)]
@@ -860,7 +860,7 @@ fn skip<T: BufRead>(src: &mut T, bytes: usize) -> Result<usize> {
     while bytes_to_skip > 0 {
         let len = try!(src.fill_buf()).len();
         if len == 0 {
-            return Err(Error::UnexpectedEOF)
+            return Err(Error::UnexpectedEOF);
         }
         let discard = cmp::min(len, bytes_to_skip);
         src.consume(discard);

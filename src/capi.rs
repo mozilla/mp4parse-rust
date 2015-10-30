@@ -52,7 +52,7 @@ pub unsafe extern "C" fn mp4parse_free(context: *mut MediaContext) {
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_read(context: *mut MediaContext, buffer: *const u8, size: usize) -> i32 {
     // Validate arguments from C.
-    if context.is_null()  || buffer.is_null() || size < 8 {
+    if context.is_null() || buffer.is_null() || size < 8 {
         return -1;
     }
 
