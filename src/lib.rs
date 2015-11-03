@@ -237,13 +237,25 @@ struct ES_Descriptor {
 /// Internal data structures.
 #[derive(Debug)]
 pub struct MediaContext {
+    /// Tracks found in the file.
     tracks: Vec<Track>,
+    /// Print boxes and other info as parsing proceeds. For debugging.
+    trace: bool,
 }
 
 impl MediaContext {
     pub fn new() -> MediaContext {
         MediaContext {
             tracks: Vec::new(),
+            trace: false,
+        }
+    }
+}
+
+macro_rules! log {
+    ( $ctx:expr, $( $args:expr),* ) => {
+        if $ctx.trace {
+            println!( $( $args, )* );
         }
     }
 }
@@ -323,7 +335,7 @@ fn limit<'a, T: Read>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
 
 /// Helper to construct a Cursor over the contents of a box.
 fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> Result<()> {
-    println!("{:?} -- recursing", h);
+    log!(context, "{:?} -- recursing", h);
     // FIXME: I couldn't figure out how to do this without copying.
     // We use Seek on the Read we return in skip_box_content, but
     // that trait isn't implemented for a Take like our limit()
@@ -341,26 +353,26 @@ fn recurse<T: Read>(f: &mut T, h: &BoxHeader, context: &mut MediaContext) -> Res
                 // byteorder returns EOF at the end of the buffer.
                 // This isn't an error for us, just an signal to
                 // stop recursion.
-                println!("Caught Error::UnexpectedEOF");
+                log!(context, "Caught Error::UnexpectedEOF");
                 break;
             },
             Err(Error::InvalidData) => {
-                println!("Invalid data");
+                log!(context, "Invalid data");
                 return Err(Error::InvalidData);
             },
             Err(Error::Unsupported) => {
-                println!("Unsupported BMFF construct");
+                log!(context, "Unsupported BMFF construct");
                 return Err(Error::Unsupported);
             },
             Err(Error::Io(e)) => {
-                println!("I/O Error '{:?}' reading box: {:?}",
-                         e.kind(), e.description());
+                log!(context, "I/O Error '{:?}' reading box: {:?}",
+                              e.kind(), e.description());
                 return Err(Error::Io(e));
             },
         }
     }
     assert!(content.position() == h.size - h.offset);
-    println!("{:?} -- end", h);
+    log!(context, "{:?} -- end", h);
     Ok(())
 }
 
@@ -374,53 +386,53 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
         match &h.name.0 {
             b"ftyp" => {
                 let ftyp = try!(read_ftyp(&mut content, &h));
-                println!("{:?}", ftyp);
+                log!(context, "{:?}", ftyp);
             },
             b"moov" => try!(recurse(&mut content, &h, context)),
             b"mvhd" => {
                 let mvhd = try!(read_mvhd(&mut content, &h));
-                println!("  {:?}", mvhd);
+                log!(context, "  {:?}", mvhd);
             },
             b"trak" => try!(recurse(&mut content, &h, context)),
             b"tkhd" => {
                 let tkhd = try!(read_tkhd(&mut content, &h));
-                println!("  {:?}", tkhd);
+                log!(context, "  {:?}", tkhd);
             },
             b"edts" => try!(recurse(&mut content, &h, context)),
             b"elst" => {
                 let elst = try!(read_elst(&mut content, &h));
-                println!("  {:?}", elst);
+                log!(context, "  {:?}", elst);
             },
             b"mdia" => try!(recurse(&mut content, &h, context)),
             b"mdhd" => {
                 let mdhd = try!(read_mdhd(&mut content, &h));
-                println!("  {:?}", mdhd);
+                log!(context, "  {:?}", mdhd);
             },
             b"minf" => try!(recurse(&mut content, &h, context)),
             b"stbl" => try!(recurse(&mut content, &h, context)),
             b"stco" => {
                 let stco = try!(read_stco(&mut content, &h));
-                println!("  {:?}", stco);
+                log!(context, "  {:?}", stco);
             },
             b"co64" => {
                 let co64 = try!(read_co64(&mut content, &h));
-                println!("  {:?}", co64);
+                log!(context, "  {:?}", co64);
             },
             b"stss" => {
                 let stss = try!(read_stss(&mut content, &h));
-                println!("  {:?}", stss);
+                log!(context, "  {:?}", stss);
             },
             b"stsc" => {
                 let stsc = try!(read_stsc(&mut content, &h));
-                println!("  {:?}", stsc);
+                log!(context, "  {:?}", stsc);
             },
             b"stsz" => {
                 let stsz = try!(read_stsz(&mut content, &h));
-                println!("  {:?}", stsz);
+                log!(context, "  {:?}", stsz);
             },
             b"stts" => {
                 let stts = try!(read_stts(&mut content, &h));
-                println!("  {:?}", stts);
+                log!(context, "  {:?}", stts);
             },
             b"hdlr" => {
                 let hdlr = try!(read_hdlr(&mut content, &h));
@@ -433,23 +445,24 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
                 match track_type {
                     Some(track_type) =>
                          context.tracks.push(Track { track_type: track_type }),
-                    None => println!("unknown track type!"),
+                    None => log!(context, "unknown track type!"),
                 };
-                println!("  {:?}", hdlr);
+                log!(context, "  {:?}", hdlr);
             },
             b"stsd" => {
                 let track = &context.tracks[context.tracks.len() - 1];
                 let stsd = try!(read_stsd(&mut content, &h, &track));
-                println!("  {:?}", stsd);
+                log!(context, "  {:?}", stsd);
             },
             _ => {
                 // Skip the contents of unknown chunks.
-                println!("{:?} (skipped)", h);
+                log!(context, "{:?} (skipped)", h);
                 try!(skip_box_content(&mut content, &h));
             },
         };
+        log!(context, "{} content bytes left", content.limit());
         assert!(content.limit() == 0);
-        println!("read_box context: {:?}", context);
+        log!(context, "read_box context: {:?}", context);
         Ok(()) // and_then needs a Result to return.
     })
 }
