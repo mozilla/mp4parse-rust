@@ -10,6 +10,9 @@ fn dump_file(filename: &String) {
     let file = File::open(filename).unwrap();
     let mut reader = BufReader::new(file);
     let mut context = mp4parse::MediaContext::new();
+    // Turn on debug output.
+    context.trace(true);
+    // Read all boxes.
     loop {
         match mp4parse::read_box(&mut reader, &mut context) {
             Ok(_) => {},

@@ -250,6 +250,9 @@ impl MediaContext {
             trace: false,
         }
     }
+    pub fn trace(&mut self, on: bool) {
+        self.trace = on;
+    }
 }
 
 macro_rules! log {
