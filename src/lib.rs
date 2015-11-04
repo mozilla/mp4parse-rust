@@ -474,7 +474,12 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
 fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileTypeBox> {
     let major = try!(be_fourcc(src));
     let minor = try!(be_u32(src));
-    let brand_count = (head.size - 8 - 8) / 4;
+    let bytes_left = head.size - head.offset - 8;
+    if bytes_left % 4 != 0 {
+        return Err(Error::InvalidData);
+    }
+    // Is a brand_count of zero valid?
+    let brand_count = bytes_left / 4;
     let mut brands = Vec::new();
     for _ in 0..brand_count {
         brands.push(try!(be_fourcc(src)));
