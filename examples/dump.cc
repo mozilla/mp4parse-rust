@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 #include <cassert>
+#include <cinttypes>
 #include <cstdint>
 #include <cstdio>
 #include <vector>
@@ -50,6 +51,15 @@ void test_arg_validation()
   mp4parse_free(context);
 }
 
+const char * tracktype2mimetype(uint32_t type)
+{
+  switch (type) {
+    case MP4PARSE_TRACK_TYPE_H264: return "video/avc";
+    case MP4PARSE_TRACK_TYPE_AAC:  return "audio/mp4a-latm";
+  }
+  return "unknown";
+}
+
 void read_file(const char* filename)
 {
   FILE* f = fopen(filename, "rb");
@@ -68,6 +78,14 @@ void read_file(const char* filename)
   int32_t rv = mp4parse_read(context, buf.data(), buf.size());
   assert(rv >= 0);
   fprintf(stderr, "%d tracks returned to C code.\n", rv);
+
+  for (int i = 0; i < rv; ++i) {
+    mp4parse_track_info track_info;
+    int32_t rv2 = mp4parse_get_track_info(context, i, &track_info);
+    assert(rv2 >= 0);
+    fprintf(stderr, "Track %d: mime_type='%s' duration=%" PRId64 " media_time=%" PRId64 " track_id=%d\n",
+            i, tracktype2mimetype(track_info.track_type), track_info.duration, track_info.media_time, track_info.track_id);
+  }
 
   mp4parse_free(context);
 }

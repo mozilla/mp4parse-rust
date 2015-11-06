@@ -27,13 +27,46 @@ use std::io::Cursor;
 
 // Symbols we need from our rust api.
 use MediaContext;
+use TrackType;
 use read_box;
 use Error;
+use media_time_to_ms;
+use track_time_to_ms;
+
+const TRACK_TYPE_H264: u32 = 0;
+const TRACK_TYPE_AAC:  u32 = 1;
+
+// These structs *must* match those declared in include/mp4parse.h.
+#[repr(C)]
+pub struct TrackInfo {
+    track_type: u32,
+    track_id: u32,
+    duration: u64,
+    media_time: i64, // wants to be u64? understand how elst adjustment works
+}
+
+#[repr(C)]
+pub struct TrackAudioInfo {
+    channels: u16,
+    bit_depth: u16,
+    sample_rate: u32,
+//    profile: i32,
+//    extended_profile: i32, // check types
+}
+
+#[repr(C)]
+pub struct TrackVideoInfo {
+    display_width: u32,
+    display_height: u32,
+    image_width: u16,
+    image_height: u16,
+}
 
 /// Allocate an opaque rust-side parser context.
 #[no_mangle]
 pub extern "C" fn mp4parse_new() -> *mut MediaContext {
-    let context = Box::new(MediaContext::new());
+    let mut context = Box::new(MediaContext::new());
+    context.trace(true);
     Box::into_raw(context)
 }
 
@@ -77,6 +110,92 @@ pub unsafe extern "C" fn mp4parse_read(context: *mut MediaContext, buffer: *cons
         context.tracks.len() as i32
     });
     task.join().unwrap_or(-1)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut MediaContext, track: i32, info: *mut TrackInfo) -> i32 {
+    if context.is_null() || track < 0 || info.is_null() {
+        return -1;
+    }
+
+    let context: &mut MediaContext = &mut *context;
+
+    if track as usize >= context.tracks.len() {
+        return -1;
+    }
+
+    let track = &context.tracks[track as usize];
+
+    (*info).track_type = match track.track_type {
+        TrackType::Video => TRACK_TYPE_H264,
+        TrackType::Audio => TRACK_TYPE_AAC,
+        TrackType::Unknown => return -1,
+    };
+
+    // Maybe context & track should just have a single simple is_valid() instead?
+    if context.timescale.is_none() ||
+        track.timescale.is_none() ||
+        track.empty_duration.is_none() ||
+        track.media_time.is_none() ||
+        track.duration.is_none() ||
+        track.track_id.is_none() {
+            return -1;
+        }
+
+    let empty_duration = media_time_to_ms(track.empty_duration.unwrap(), context.timescale.unwrap());
+    (*info).media_time = track_time_to_ms(track.media_time.unwrap(), track.timescale.unwrap()) as i64 - empty_duration as i64;
+    (*info).duration = track_time_to_ms(track.duration.unwrap(), track.timescale.unwrap());
+    (*info).track_id = track.track_id.unwrap();
+
+    0
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn mp4parse_get_track_audio_info(context: *mut MediaContext, track: i32, info: *mut TrackAudioInfo) -> i32 {
+    if context.is_null() || track < 0 || info.is_null() {
+        return -1;
+    }
+
+    let context: &mut MediaContext = &mut *context;
+
+    if track as usize >= context.tracks.len() {
+        return -1;
+    }
+
+    let track = &context.tracks[track as usize];
+    if let TrackType::Video = track.track_type {
+        return -1;
+    }
+    let _ = match track.data {
+        Some(ref data) => data,
+        None => return -1,
+    };
+
+    -1 // TODO: implement
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn mp4parse_get_track_video_info(context: *mut MediaContext, track: i32, info: *mut TrackVideoInfo) -> i32 {
+    if context.is_null() || track < 0 || info.is_null() {
+        return -1;
+    }
+
+    let context: &mut MediaContext = &mut *context;
+
+    if track as usize >= context.tracks.len() {
+        return -1;
+    }
+
+    let track = &context.tracks[track as usize];
+    if let TrackType::Audio = track.track_type {
+        return -1;
+    }
+    let _ = match track.data {
+        Some(ref data) => data,
+        None => return -1,
+    };
+
+    -1 // TODO: implement
 }
 
 #[test]

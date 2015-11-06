@@ -204,7 +204,7 @@ struct SampleDescriptionBox {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum SampleEntry {
     Audio {
         data_reference_index: u16,
@@ -219,17 +219,18 @@ enum SampleEntry {
         height: u16,
         avcc: AVCDecoderConfigurationRecord,
     },
+    Unknown,
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct AVCDecoderConfigurationRecord {
     data: Vec<u8>,
 }
 
 #[allow(non_camel_case_types)]
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ES_Descriptor {
     data: Vec<u8>,
 }
@@ -237,6 +238,7 @@ struct ES_Descriptor {
 /// Internal data structures.
 #[derive(Debug)]
 pub struct MediaContext {
+    timescale: Option<MediaTimeScale>,
     /// Tracks found in the file.
     tracks: Vec<Track>,
     /// Print boxes and other info as parsing proceeds. For debugging.
@@ -246,10 +248,12 @@ pub struct MediaContext {
 impl MediaContext {
     pub fn new() -> MediaContext {
         MediaContext {
+            timescale: None,
             tracks: Vec::new(),
             trace: false,
         }
     }
+
     pub fn trace(&mut self, on: bool) {
         self.trace = on;
     }
@@ -265,13 +269,48 @@ macro_rules! log {
 
 #[derive(Debug)]
 enum TrackType {
-    Video,
     Audio,
+    Video,
+    Unknown,
 }
+
+#[derive(Debug, Copy, Clone)]
+struct MediaTimeScale(u64); /// The media's global (mvhd) timescale.
+
+#[derive(Debug, Copy, Clone)]
+struct MediaScaledTime(u64); /// A time scaled by the media's global (mvhd) timescale.
+
+#[derive(Debug, Copy, Clone)]
+struct TrackTimeScale(u64, usize); /// The track's local (mdhd) timescale.
+
+#[derive(Debug, Copy, Clone)]
+struct TrackScaledTime(u64, usize); /// A time scaled by the track's local (mdhd) timescale.
 
 #[derive(Debug)]
 struct Track {
     track_type: TrackType,
+    empty_duration: Option<MediaScaledTime>,
+    media_time: Option<TrackScaledTime>,
+    timescale: Option<TrackTimeScale>,
+    duration: Option<TrackScaledTime>,
+    track_id: Option<u32>,
+    mime_type: String,
+    data: Option<SampleEntry>,
+}
+
+impl Track {
+    fn new() -> Track {
+        Track {
+            track_type: TrackType::Unknown,
+            empty_duration: None,
+            media_time: None,
+            timescale: None,
+            duration: None,
+            track_id: None,
+            mime_type: String::new(),
+            data: None,
+        }
+    }
 }
 
 /// Read and parse a box header.
@@ -394,21 +433,58 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
             b"moov" => try!(recurse(&mut content, &h, context)),
             b"mvhd" => {
                 let mvhd = try!(read_mvhd(&mut content, &h));
+                context.timescale = Some(MediaTimeScale(mvhd.timescale as u64));
                 log!(context, "  {:?}", mvhd);
             },
-            b"trak" => try!(recurse(&mut content, &h, context)),
+            b"trak" => {
+                context.tracks.push(Track::new());
+                try!(recurse(&mut content, &h, context));
+            },
             b"tkhd" => {
                 let tkhd = try!(read_tkhd(&mut content, &h));
+                if let Some(track) = context.tracks.last_mut() {
+                    track.track_id = Some(tkhd.track_id);
+                } else {
+                    return Err(Error::InvalidData);
+                }
                 log!(context, "  {:?}", tkhd);
             },
             b"edts" => try!(recurse(&mut content, &h, context)),
             b"elst" => {
                 let elst = try!(read_elst(&mut content, &h));
+                let mut empty_duration = 0;
+                let track_idx = context.tracks.len() - 1;
+                if let Some(track) = context.tracks.last_mut() {
+                    let mut idx = 0;
+                    if elst.edits.len() > 2 {
+                        return Err(Error::Unsupported);
+                    }
+                    if elst.edits[idx].media_time == -1 {
+                        empty_duration = elst.edits[0].segment_duration;
+                        idx += 1;
+                    }
+                    track.empty_duration = Some(MediaScaledTime(empty_duration));
+                    if elst.edits[idx].media_time < 0 {
+                        return Err(Error::InvalidData);
+                    }
+                    track.media_time = Some(TrackScaledTime(elst.edits[idx].media_time as u64,
+                                                            track_idx));
+                } else {
+                    return Err(Error::InvalidData);
+                }
                 log!(context, "  {:?}", elst);
             },
             b"mdia" => try!(recurse(&mut content, &h, context)),
             b"mdhd" => {
                 let mdhd = try!(read_mdhd(&mut content, &h));
+                let track_idx = context.tracks.len() - 1;
+                if let Some(track) = context.tracks.last_mut() {
+                    track.duration = Some(TrackScaledTime(mdhd.duration, track_idx));
+                    track.timescale = Some(TrackTimeScale(mdhd.timescale as u64,
+                                                          track_idx));
+                } else {
+                    return Err(Error::InvalidData);
+                }
                 log!(context, "  {:?}", mdhd);
             },
             b"minf" => try!(recurse(&mut content, &h, context)),
@@ -439,23 +515,24 @@ pub fn read_box<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
             },
             b"hdlr" => {
                 let hdlr = try!(read_hdlr(&mut content, &h));
-                let track_type = match &hdlr.handler_type.0 {
-                    b"vide" => Some(TrackType::Video),
-                    b"soun" => Some(TrackType::Audio),
-                    _ => None
-                };
-                // Save track types with recognized types.
-                match track_type {
-                    Some(track_type) =>
-                         context.tracks.push(Track { track_type: track_type }),
-                    None => log!(context, "unknown track type!"),
-                };
+                if let Some(track) = context.tracks.last_mut() {
+                    match &hdlr.handler_type.0 {
+                        b"vide" => track.track_type = TrackType::Video,
+                        b"soun" => track.track_type = TrackType::Audio,
+                        _ => ()
+                    }
+                } else {
+                    return Err(Error::InvalidData);
+                }
                 log!(context, "  {:?}", hdlr);
             },
             b"stsd" => {
-                let track = &context.tracks[context.tracks.len() - 1];
-                let stsd = try!(read_stsd(&mut content, &h, &track));
-                log!(context, "  {:?}", stsd);
+                if let Some(track) = context.tracks.last_mut() {
+                    let stsd = try!(read_stsd(&mut content, &h, track));
+                    log!(context, "  {:?}", stsd);
+                } else {
+                    return Err(Error::InvalidData);
+                }
             },
             _ => {
                 // Skip the contents of unknown chunks.
@@ -758,18 +835,19 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
 }
 
 /// Parse a stsd box.
-fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &Track) -> Result<SampleDescriptionBox> {
+fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &mut Track) -> Result<SampleDescriptionBox> {
     let (_, _) = try!(read_fullbox_extra(src));
 
     let description_count = try!(be_u32(src));
     let mut descriptions = Vec::new();
 
+    // TODO(kinetik): check if/when more than one desc per track? do we need to support?
     for _ in 0..description_count {
         let description = match track.track_type {
             TrackType::Video => {
                 let h = try!(read_box_header(src));
-                // TODO(kinetik): avc3 and encv here also?
-                if &h.name.0 != b"avc1" {
+                // TODO(kinetik): encv here also?
+                if &h.name.0 != b"avc1" && &h.name.0 != b"avc3" {
                     return Err(Error::Unsupported);
                 }
 
@@ -798,6 +876,8 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
                 let avcc = AVCDecoderConfigurationRecord { data: data };
 
                 try!(skip_remaining_box_content(src, head));
+
+                track.mime_type = String::from("video/avc");
 
                 SampleEntry::Video {
                     data_reference_index: data_reference_index,
@@ -840,6 +920,9 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
                 assert!(r == data.len());
                 let esds = ES_Descriptor { data: data };
 
+                // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
+                track.mime_type = String::from("audio/mp4a-latm");
+
                 SampleEntry::Audio {
                     data_reference_index: data_reference_index,
                     channelcount: channelcount,
@@ -848,7 +931,15 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &T
                     esds: esds,
                 }
             },
+            TrackType::Unknown => {
+                SampleEntry::Unknown
+            }
         };
+        if track.data.is_none() {
+            track.data = Some(description.clone());
+        } else {
+            return Err(Error::InvalidData);
+        }
         descriptions.push(description);
     }
 
@@ -873,6 +964,15 @@ fn skip<T: BufRead>(src: &mut T, bytes: usize) -> Result<usize> {
     }
     assert!(bytes_to_skip == 0);
     Ok(bytes)
+}
+
+fn media_time_to_ms(time: MediaScaledTime, scale: MediaTimeScale) -> u64 {
+    time.0 * 1000000 / scale.0
+}
+
+fn track_time_to_ms(time: TrackScaledTime, scale: TrackTimeScale) -> u64 {
+    assert!(time.1 == scale.1);
+    time.0 * 1000000 / scale.0
 }
 
 fn be_i16<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<i16> {
