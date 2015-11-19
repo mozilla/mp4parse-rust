@@ -28,7 +28,7 @@ use std::io::Cursor;
 // Symbols we need from our rust api.
 use MediaContext;
 use TrackType;
-use read_box;
+use read_mp4;
 use Error;
 use media_time_to_ms;
 use track_time_to_ms;
@@ -77,7 +77,7 @@ pub unsafe extern "C" fn mp4parse_free(context: *mut MediaContext) {
     let _ = Box::from_raw(context);
 }
 
-/// Feed a buffer through `read_box()` with the given rust-side
+/// Feed a buffer through `read_mp4()` with the given rust-side
 /// parser context, returning the number of detected tracks.
 ///
 /// This is safe to call with NULL arguments but will crash
@@ -97,12 +97,10 @@ pub unsafe extern "C" fn mp4parse_read(context: *mut MediaContext, buffer: *cons
 
     // Parse in a subthread to catch any panics.
     let task = std::thread::spawn(move || {
-        loop {
-            match read_box(&mut c, &mut context) {
-                Ok(_) => {},
-                Err(Error::UnexpectedEOF) => { break },
-                Err(e) => { panic!(e); },
-            }
+        match read_mp4(&mut c, &mut context) {
+            Ok(_) => {},
+            Err(Error::UnexpectedEOF) => {},
+            Err(e) => { panic!(e); },
         }
         // Make sure the track count fits in an i32 so we can use
         // negative values for failure.
