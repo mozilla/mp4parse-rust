@@ -96,7 +96,7 @@ struct MovieHeaderBox {
 }
 
 /// Track header box 'tkhd'
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct TrackHeaderBox {
     name: FourCC,
     size: u64,
@@ -205,20 +205,26 @@ struct SampleDescriptionBox {
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 enum SampleEntry {
-    Audio {
-        data_reference_index: u16,
-        channelcount: u16,
-        samplesize: u16,
-        samplerate: u32,
-        esds: ES_Descriptor,
-    },
-    Video {
-        data_reference_index: u16,
-        width: u16,
-        height: u16,
-        avcc: AVCDecoderConfigurationRecord,
-    },
+    Audio(AudioSampleEntry),
+    Video(VideoSampleEntry),
     Unknown,
+}
+
+#[derive(Debug, Clone)]
+struct AudioSampleEntry {
+    data_reference_index: u16,
+    channelcount: u16,
+    samplesize: u16,
+    samplerate: u32,
+    esds: ES_Descriptor,
+}
+
+#[derive(Debug, Clone)]
+struct VideoSampleEntry {
+    data_reference_index: u16,
+    width: u16,
+    height: u16,
+    avcc: AVCDecoderConfigurationRecord,
 }
 
 #[allow(dead_code)]
@@ -295,6 +301,7 @@ struct Track {
     track_id: Option<u32>,
     mime_type: String,
     data: Option<SampleEntry>,
+    tkhd: Option<TrackHeaderBox>, // TODO(kinetik): find a nicer way to export this.
 }
 
 impl Track {
@@ -308,6 +315,7 @@ impl Track {
             track_id: None,
             mime_type: String::new(),
             data: None,
+            tkhd: None,
         }
     }
 }
@@ -465,6 +473,7 @@ fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
                 let tkhd = try!(read_tkhd(&mut content, &h));
                 if let Some(track) = context.tracks.last_mut() {
                     track.track_id = Some(tkhd.track_id);
+                    track.tkhd = Some(tkhd.clone())
                 } else {
                     return Err(Error::InvalidData);
                 }
@@ -949,12 +958,12 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &m
 
                 track.mime_type = String::from("video/avc");
 
-                SampleEntry::Video {
+                SampleEntry::Video(VideoSampleEntry {
                     data_reference_index: data_reference_index,
                     width: width,
                     height: height,
                     avcc: avcc,
-                }
+                })
             },
             TrackType::Audio => {
                 let h = try!(read_box_header(src));
@@ -993,13 +1002,13 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &m
                 // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
                 track.mime_type = String::from("audio/mp4a-latm");
 
-                SampleEntry::Audio {
+                SampleEntry::Audio(AudioSampleEntry {
                     data_reference_index: data_reference_index,
                     channelcount: channelcount,
                     samplesize: samplesize,
                     samplerate: samplerate,
                     esds: esds,
-                }
+                })
             },
             TrackType::Unknown => {
                 SampleEntry::Unknown

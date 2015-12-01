@@ -32,6 +32,7 @@ use read_mp4;
 use Error;
 use media_time_to_ms;
 use track_time_to_ms;
+use SampleEntry;
 
 const TRACK_TYPE_H264: u32 = 0;
 const TRACK_TYPE_AAC:  u32 = 1;
@@ -161,15 +162,27 @@ pub unsafe extern "C" fn mp4parse_get_track_audio_info(context: *mut MediaContex
     }
 
     let track = &context.tracks[track as usize];
-    if let TrackType::Video = track.track_type {
-        return -1;
-    }
-    let _ = match track.data {
+
+    match track.track_type {
+        TrackType::Audio => {},
+        _ => return -1,
+    };
+
+    let audio = match track.data {
         Some(ref data) => data,
         None => return -1,
     };
 
-    -1 // TODO: implement
+    let audio = match audio {
+        &SampleEntry::Audio(ref x) => x,
+        _ => return -1,
+    };
+
+    (*info).channels = audio.channelcount;
+    (*info).bit_depth = audio.samplesize;
+    (*info).sample_rate = audio.samplerate >> 16; // 16.16 fixed point
+
+    0
 }
 
 #[no_mangle]
@@ -185,15 +198,32 @@ pub unsafe extern "C" fn mp4parse_get_track_video_info(context: *mut MediaContex
     }
 
     let track = &context.tracks[track as usize];
-    if let TrackType::Audio = track.track_type {
-        return -1;
-    }
-    let _ = match track.data {
+
+    match track.track_type {
+        TrackType::Video => {},
+        _ => return -1,
+    };
+
+    let video = match track.data {
         Some(ref data) => data,
         None => return -1,
     };
 
-    -1 // TODO: implement
+    let video = match video {
+        &SampleEntry::Video(ref x) => x,
+        _ => return -1,
+    };
+
+    if let Some(ref tkhd) = track.tkhd {
+        (*info).display_width = tkhd.width >> 16; // 16.16 fixed point
+        (*info).display_height = tkhd.height >> 16; // 16.16 fixed point
+    } else {
+        return -1
+    }
+    (*info).image_width = video.width;
+    (*info).image_width = video.height;
+
+    0
 }
 
 #[test]
