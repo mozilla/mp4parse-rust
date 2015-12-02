@@ -13,12 +13,10 @@ fn dump_file(filename: &String) {
     // Turn on debug output.
     context.trace(true);
     // Read all boxes.
-    loop {
-        match mp4parse::read_box(&mut reader, &mut context) {
-            Ok(_) => {},
-            Err(mp4parse::Error::UnexpectedEOF) => { break },
-            Err(e) => { panic!(e); },
-        }
+    match mp4parse::read_mp4(&mut reader, &mut context) {
+        Ok(_) => {},
+        Err(mp4parse::Error::UnexpectedEOF) => {},
+        Err(e) => { panic!(e); },
     }
     println!("-- result of parsing '{}' --\n{:?}", filename, context);
 }

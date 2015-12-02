@@ -17,7 +17,7 @@ use std::io::Cursor;
 fn fuzz_2() {
     let mut c = Cursor::new(b"\x00\x00\x00\x04\xa6\x00\x04\xa6".to_vec());
     let mut context = mp4parse::MediaContext::new();
-    let _ = mp4parse::read_box(&mut c, &mut context);
+    let _ = mp4parse::read_mp4(&mut c, &mut context);
 }
 
 /// https://github.com/mozilla/mp4parse-rust/issues/4
@@ -27,7 +27,7 @@ fn fuzz_2() {
 fn fuzz_4() {
     let mut c = Cursor::new(b"\x00\x00\x00\x01\x30\x30\x30\x30\x00\x00\x00\x00\x00\x00\x00\x00".to_vec());
     let mut context = mp4parse::MediaContext::new();
-    let _ = mp4parse::read_box(&mut c, &mut context);
+    let _ = mp4parse::read_mp4(&mut c, &mut context);
 }
 
 /// https://github.com/mozilla/mp4parse-rust/issues/5
@@ -38,7 +38,7 @@ fn fuzz_4() {
 fn fuzz_5() {
     let mut c = Cursor::new(b"\x30\x30\x30\x30\x66\x74\x79\x70\x30\x30\x30\x30\x30\x30\x30\x30".to_vec());
     let mut context = mp4parse::MediaContext::new();
-    let _ = mp4parse::read_box(&mut c, &mut context);
+    let _ = mp4parse::read_mp4(&mut c, &mut context);
 }
 
 /// https://github.com/mozilla/mp4parse-rust/issues/6
@@ -49,5 +49,5 @@ fn fuzz_5() {
 fn fuzz_6() {
     let mut c = Cursor::new(b"\x00\x00\x00\x13\x66\x74\x79\x70\x30\x30\x30\x30\x30\x30\x30\x30".to_vec());
     let mut context = mp4parse::MediaContext::new();
-    let _ = mp4parse::read_box(&mut c, &mut context);
+    let _ = mp4parse::read_mp4(&mut c, &mut context);
 }
