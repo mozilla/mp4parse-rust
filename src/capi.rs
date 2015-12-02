@@ -66,8 +66,7 @@ pub struct TrackVideoInfo {
 /// Allocate an opaque rust-side parser context.
 #[no_mangle]
 pub extern "C" fn mp4parse_new() -> *mut MediaContext {
-    let mut context = Box::new(MediaContext::new());
-    context.trace(true);
+    let context = Box::new(MediaContext::new());
     Box::into_raw(context)
 }
 
