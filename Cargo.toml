@@ -19,4 +19,4 @@ exclude = [
 ]
 
 [dependencies]
-byteorder = "0.3.8"
+byteorder = "0.4.2"
