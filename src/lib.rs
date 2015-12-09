@@ -65,7 +65,7 @@ impl fmt::Debug for FourCC {
 /// box's data and a four-byte 'character code' or `FourCC` which
 /// identifies the type of the box. Together these are enough to
 /// interpret the contents of that section of the file.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct BoxHeader {
     /// Four character box type.
     pub name: FourCC,
@@ -78,8 +78,7 @@ pub struct BoxHeader {
 /// File type box 'ftyp'.
 #[derive(Debug)]
 struct FileTypeBox {
-    name: FourCC,
-    size: u64,
+    header: BoxHeader,
     major_brand: FourCC,
     minor_version: u32,
     compatible_brands: Vec<FourCC>,
@@ -88,8 +87,7 @@ struct FileTypeBox {
 /// Movie header box 'mvhd'.
 #[derive(Debug)]
 struct MovieHeaderBox {
-    name: FourCC,
-    size: u64,
+    header: BoxHeader,
     timescale: u32,
     duration: u64,
     // Ignore other fields.
@@ -98,8 +96,7 @@ struct MovieHeaderBox {
 /// Track header box 'tkhd'
 #[derive(Debug, Clone)]
 struct TrackHeaderBox {
-    name: FourCC,
-    size: u64,
+    header: BoxHeader,
     track_id: u32,
     enabled: bool,
     duration: u64,
@@ -110,8 +107,7 @@ struct TrackHeaderBox {
 /// Edit list box 'elst'
 #[derive(Debug)]
 struct EditListBox {
-    name: FourCC,
-    size: u64,
+    header: BoxHeader,
     edits: Vec<Edit>,
 }
 
@@ -126,8 +122,7 @@ struct Edit {
 /// Media header box 'mdhd'
 #[derive(Debug)]
 struct MediaHeaderBox {
-    name: FourCC,
-    size: u64,
+    header: BoxHeader,
     timescale: u32,
     duration: u64,
 }
@@ -135,24 +130,21 @@ struct MediaHeaderBox {
 // Chunk offset box 'stco' or 'co64'
 #[derive(Debug)]
 struct ChunkOffsetBox {
-    name: FourCC,
-    size: u64,
+    header: BoxHeader,
     offsets: Vec<u64>,
 }
 
 // Sync sample box 'stss'
 #[derive(Debug)]
 struct SyncSampleBox {
-    name: FourCC,
-    size: u64,
+    header: BoxHeader,
     samples: Vec<u32>,
 }
 
 // Sample to chunk box 'stsc'
 #[derive(Debug)]
 struct SampleToChunkBox {
-    name: FourCC,
-    size: u64,
+    header: BoxHeader,
     samples: Vec<SampleToChunk>,
 }
 
@@ -166,8 +158,7 @@ struct SampleToChunk {
 // Sample size box 'stsz'
 #[derive(Debug)]
 struct SampleSizeBox {
-    name: FourCC,
-    size: u64,
+    header: BoxHeader,
     sample_size: u32,
     sample_sizes: Vec<u32>,
 }
@@ -175,8 +166,7 @@ struct SampleSizeBox {
 // Time to sample box 'stts'
 #[derive(Debug)]
 struct TimeToSampleBox {
-    name: FourCC,
-    size: u64,
+    header: BoxHeader,
     samples: Vec<Sample>,
 }
 
@@ -189,16 +179,14 @@ struct Sample {
 // Handler reference box 'hdlr'
 #[derive(Debug)]
 struct HandlerBox {
-    name: FourCC,
-    size: u64,
+    header: BoxHeader,
     handler_type: FourCC,
 }
 
 // Sample description box 'stsd'
 #[derive(Debug)]
 struct SampleDescriptionBox {
-    name: FourCC,
-    size: u64,
+    header: BoxHeader,
     descriptions: Vec<SampleEntry>,
 }
 
@@ -641,8 +629,7 @@ fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileTypeB
         brands.push(try!(be_fourcc(src)));
     }
     Ok(FileTypeBox{
-        name: head.name,
-        size: head.size,
+        header: *head,
         major_brand: major,
         minor_version: minor,
         compatible_brands: brands,
@@ -668,8 +655,7 @@ fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     // Skip remaining fields.
     try!(skip(src, 80));
     Ok(MovieHeaderBox {
-        name: head.name,
-        size: head.size,
+        header: *head,
         timescale: timescale,
         duration: duration,
     })
@@ -698,8 +684,7 @@ fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     let width = try!(be_u32(src));
     let height = try!(be_u32(src));
     Ok(TrackHeaderBox {
-        name: head.name,
-        size: head.size,
+        header: *head,
         track_id: track_id,
         enabled: !disabled,
         duration: duration,
@@ -738,8 +723,7 @@ fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<EditListB
     }
 
     Ok(EditListBox{
-        name: head.name,
-        size: head.size,
+        header: *head,
         edits: edits
     })
 }
@@ -771,8 +755,7 @@ fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     try!(skip(src, 4));
 
     Ok(MediaHeaderBox{
-        name: head.name,
-        size: head.size,
+        header: *head,
         timescale: timescale,
         duration: duration,
     })
@@ -788,8 +771,7 @@ fn read_stco<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<ChunkOffs
     }
 
     Ok(ChunkOffsetBox{
-        name: head.name,
-        size: head.size,
+        header: *head,
         offsets: offsets,
     })
 }
@@ -804,8 +786,7 @@ fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<ChunkOffs
     }
 
     Ok(ChunkOffsetBox{
-        name: head.name,
-        size: head.size,
+        header: *head,
         offsets: offsets,
     })
 }
@@ -820,8 +801,7 @@ fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SyncSampl
     }
 
     Ok(SyncSampleBox{
-        name: head.name,
-        size: head.size,
+        header: *head,
         samples: samples,
     })
 }
@@ -843,8 +823,7 @@ fn read_stsc<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SampleToC
     }
 
     Ok(SampleToChunkBox{
-        name: head.name,
-        size: head.size,
+        header: *head,
         samples: samples,
     })
 }
@@ -862,8 +841,7 @@ fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SampleSiz
     }
 
     Ok(SampleSizeBox{
-        name: head.name,
-        size: head.size,
+        header: *head,
         sample_size: sample_size,
         sample_sizes: sample_sizes,
     })
@@ -884,8 +862,7 @@ fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TimeToSam
     }
 
     Ok(TimeToSampleBox{
-        name: head.name,
-        size: head.size,
+        header: *head,
         samples: samples,
     })
 }
@@ -907,8 +884,7 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     try!(skip_remaining_box_content(src, head));
 
     Ok(HandlerBox{
-        name: head.name,
-        size: head.size,
+        header: *head,
         handler_type: handler_type,
     })
 }
@@ -1023,8 +999,7 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &m
     }
 
     Ok(SampleDescriptionBox{
-        name: head.name,
-        size: head.size,
+        header: *head,
         descriptions: descriptions,
     })
 }
@@ -1132,8 +1107,8 @@ fn test_read_ftyp() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_ftyp(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, FourCC(*b"ftyp"));
-    assert_eq!(parsed.size, 24);
+    assert_eq!(parsed.header.name, FourCC(*b"ftyp"));
+    assert_eq!(parsed.header.size, 24);
     assert_eq!(parsed.major_brand, FourCC(*b"mp42"));
     assert_eq!(parsed.minor_version, 0);
     assert_eq!(parsed.compatible_brands.len(), 2);
@@ -1158,8 +1133,8 @@ fn test_read_elst_v0() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_elst(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, FourCC(*b"elst"));
-    assert_eq!(parsed.size, 28);
+    assert_eq!(parsed.header.name, FourCC(*b"elst"));
+    assert_eq!(parsed.header.size, 28);
     assert_eq!(parsed.edits.len(), 1);
     assert_eq!(parsed.edits[0].segment_duration, 16909060);
     assert_eq!(parsed.edits[0].media_time, 84281096);
@@ -1188,8 +1163,8 @@ fn test_read_elst_v1() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_elst(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, FourCC(*b"elst"));
-    assert_eq!(parsed.size, 56);
+    assert_eq!(parsed.header.name, FourCC(*b"elst"));
+    assert_eq!(parsed.header.size, 56);
     assert_eq!(parsed.edits.len(), 2);
     assert_eq!(parsed.edits[1].segment_duration, 72623859723010820);
     assert_eq!(parsed.edits[1].media_time, 361984551075317512);
@@ -1214,8 +1189,8 @@ fn test_read_mdhd_v0() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_mdhd(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, FourCC(*b"mdhd"));
-    assert_eq!(parsed.size, 32);
+    assert_eq!(parsed.header.name, FourCC(*b"mdhd"));
+    assert_eq!(parsed.header.size, 32);
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, 84281096);
     println!("box {:?}", parsed);
@@ -1237,8 +1212,8 @@ fn test_read_mdhd_v1() {
     let mut stream = Cursor::new(test);
     let header = read_box_header(&mut stream).unwrap();
     let parsed = read_mdhd(&mut stream, &header).unwrap();
-    assert_eq!(parsed.name, FourCC(*b"mdhd"));
-    assert_eq!(parsed.size, 44);
+    assert_eq!(parsed.header.name, FourCC(*b"mdhd"));
+    assert_eq!(parsed.header.size, 44);
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, 361984551075317512);
     println!("box {:?}", parsed);
