@@ -434,7 +434,11 @@ fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
         match &h.name.0 {
             b"mvhd" => {
                 let mvhd = try!(read_mvhd(&mut content, &h));
-                context.timescale = Some(MediaTimeScale(mvhd.timescale as u64));
+                if mvhd.timescale > 0 {
+                    context.timescale = Some(MediaTimeScale(mvhd.timescale as u64));
+                } else {
+                    return Err(Error::InvalidData);
+                }
                 log!(context, "  {:?}", mvhd);
             },
             b"trak" => {
@@ -521,8 +525,12 @@ fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
                 let track_idx = context.tracks.len() - 1;
                 if let Some(track) = context.tracks.last_mut() {
                     track.duration = Some(TrackScaledTime(mdhd.duration, track_idx));
-                    track.timescale = Some(TrackTimeScale(mdhd.timescale as u64,
-                                                          track_idx));
+                    if mdhd.timescale > 0 {
+                        track.timescale = Some(TrackTimeScale(mdhd.timescale as u64,
+                                                              track_idx));
+                    } else {
+                        return Err(Error::InvalidData);
+                    }
                 } else {
                     return Err(Error::InvalidData);
                 }
