@@ -98,7 +98,7 @@ struct MovieHeaderBox {
 struct TrackHeaderBox {
     header: BoxHeader,
     track_id: u32,
-    enabled: bool,
+    disabled: bool,
     duration: u64,
     width: u32,
     height: u32,
@@ -686,7 +686,7 @@ fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     Ok(TrackHeaderBox {
         header: *head,
         track_id: track_id,
-        enabled: !disabled,
+        disabled: disabled,
         duration: duration,
         width: width,
         height: height,
