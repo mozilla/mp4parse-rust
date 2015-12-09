@@ -190,7 +190,6 @@ struct SampleDescriptionBox {
     descriptions: Vec<SampleEntry>,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 enum SampleEntry {
     Audio(AudioSampleEntry),
@@ -215,14 +214,12 @@ struct VideoSampleEntry {
     avcc: AVCDecoderConfigurationRecord,
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct AVCDecoderConfigurationRecord {
     data: Vec<u8>,
 }
 
 #[allow(non_camel_case_types)]
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct ES_Descriptor {
     data: Vec<u8>,
