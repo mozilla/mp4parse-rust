@@ -524,7 +524,9 @@ fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
                 let mdhd = try!(read_mdhd(&mut content, &h));
                 let track_idx = context.tracks.len() - 1;
                 if let Some(track) = context.tracks.last_mut() {
-                    track.duration = Some(TrackScaledTime(mdhd.duration, track_idx));
+                    if mdhd.duration != std::u64::MAX {
+                        track.duration = Some(TrackScaledTime(mdhd.duration, track_idx));
+                    }
                     if mdhd.timescale > 0 {
                         track.timescale = Some(TrackTimeScale(mdhd.timescale as u64,
                                                               track_idx));
@@ -750,8 +752,20 @@ fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
             try!(skip(src, 8));
 
             // 32 bit duration.
-            (try!(be_u32(src)),
-             try!(be_u32(src)) as u64)
+            let timescale = try!(be_u32(src));
+            let duration = {
+                // Since we convert the 32-bit duration to 64-bit by
+                // upcasting, we need to preserve the special all-1s
+                // ("unknown") case by hand.
+                let d = try!(be_u32(src));
+                if d == std::u32::MAX {
+                    std::u64::MAX
+                } else {
+                    d as u64
+                }
+            };
+            (timescale,
+             duration)
         },
         _ => return Err(Error::InvalidData),
     };
