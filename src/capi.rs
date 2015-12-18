@@ -98,9 +98,11 @@ pub unsafe extern "C" fn mp4parse_read(context: *mut MediaContext, buffer: *cons
     // Parse in a subthread to catch any panics.
     let task = std::thread::spawn(move || {
         match read_mp4(&mut c, &mut context) {
-            Ok(_) => {},
-            Err(Error::UnexpectedEOF) => {},
-            Err(e) => { panic!(e); },
+            Ok(_) => {}
+            Err(Error::UnexpectedEOF) => {}
+            Err(e) => {
+                panic!(e);
+            }
         }
         // Make sure the track count fits in an i32 so we can use
         // negative values for failure.
@@ -135,8 +137,8 @@ pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut MediaContext, tra
        context.tracks[track_index].timescale.is_none() ||
        context.tracks[track_index].duration.is_none() ||
        context.tracks[track_index].track_id.is_none() {
-            return -1;
-        }
+        return -1;
+    }
 
     std::thread::spawn(move || {
         let track = &context.tracks[track_index];
@@ -171,7 +173,7 @@ pub unsafe extern "C" fn mp4parse_get_track_audio_info(context: *mut MediaContex
     let track = &context.tracks[track as usize];
 
     match track.track_type {
-        TrackType::Audio => {},
+        TrackType::Audio => {}
         _ => return -1,
     };
 
@@ -207,7 +209,7 @@ pub unsafe extern "C" fn mp4parse_get_track_video_info(context: *mut MediaContex
     let track = &context.tracks[track as usize];
 
     match track.track_type {
-        TrackType::Video => {},
+        TrackType::Video => {}
         _ => return -1,
     };
 
@@ -225,7 +227,7 @@ pub unsafe extern "C" fn mp4parse_get_track_video_info(context: *mut MediaContex
         (*info).display_width = tkhd.width >> 16; // 16.16 fixed point
         (*info).display_height = tkhd.height >> 16; // 16.16 fixed point
     } else {
-        return -1
+        return -1;
     }
     (*info).image_width = video.width;
     (*info).image_width = video.height;
@@ -237,13 +239,17 @@ pub unsafe extern "C" fn mp4parse_get_track_video_info(context: *mut MediaContex
 fn new_context() {
     let context = mp4parse_new();
     assert!(!context.is_null());
-    unsafe { mp4parse_free(context); }
+    unsafe {
+        mp4parse_free(context);
+    }
 }
 
 #[test]
 #[should_panic(expected = "assertion failed")]
 fn free_null_context() {
-    unsafe { mp4parse_free(std::ptr::null_mut()); }
+    unsafe {
+        mp4parse_free(std::ptr::null_mut());
+    }
 }
 
 #[test]
@@ -268,5 +274,7 @@ fn arg_validation() {
         }
     }
 
-    unsafe { mp4parse_free(context); }
+    unsafe {
+        mp4parse_free(context);
+    }
 }
