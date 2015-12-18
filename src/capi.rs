@@ -182,8 +182,8 @@ pub unsafe extern "C" fn mp4parse_get_track_audio_info(context: *mut MediaContex
         None => return -1,
     };
 
-    let audio = match audio {
-        &SampleEntry::Audio(ref x) => x,
+    let audio = match *audio {
+        SampleEntry::Audio(ref x) => x,
         _ => return -1,
     };
 
@@ -218,8 +218,8 @@ pub unsafe extern "C" fn mp4parse_get_track_video_info(context: *mut MediaContex
         None => return -1,
     };
 
-    let video = match video {
-        &SampleEntry::Video(ref x) => x,
+    let video = match *video {
+        SampleEntry::Video(ref x) => x,
         _ => return -1,
     };
 

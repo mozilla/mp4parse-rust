@@ -363,7 +363,7 @@ fn skip_box_content<T: BufRead>(src: &mut T, header: &BoxHeader) -> Result<usize
 fn skip_remaining_box_content<T: BufRead>(src: &mut T, header: &BoxHeader) -> Result<()> {
     match skip(src, (header.size - header.offset) as usize) {
         Ok(_) | Err(Error::UnexpectedEOF) => Ok(()),
-        e @ _ => Err(e.err().unwrap()),
+        e => Err(e.err().unwrap()),
     }
 }
 
