@@ -918,6 +918,97 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     })
 }
 
+/// Parse an video description inside an stsd box.
+fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
+    let h = try!(read_box_header(src));
+    // TODO(kinetik): encv here also?
+    if &h.name.0 != b"avc1" && &h.name.0 != b"avc3" {
+        return Err(Error::Unsupported);
+    }
+
+    // Skip uninteresting fields.
+    try!(skip(src, 6));
+
+    let data_reference_index = try!(be_u16(src));
+
+    // Skip uninteresting fields.
+    try!(skip(src, 16));
+
+    let width = try!(be_u16(src));
+    let height = try!(be_u16(src));
+
+    // Skip uninteresting fields.
+    try!(skip(src, 50));
+
+    // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
+    let h = try!(read_box_header(src));
+    if &h.name.0 != b"avcC" {
+        return Err(Error::InvalidData);
+    }
+    let mut data: Vec<u8> = vec![0; (h.size - h.offset) as usize];
+    let r = try!(src.read(&mut data));
+    assert!(r == data.len());
+    let avcc = AVCDecoderConfigurationRecord { data: data };
+
+    try!(skip_remaining_box_content(src, head));
+
+    track.mime_type = String::from("video/avc");
+
+    Ok(SampleEntry::Video(VideoSampleEntry {
+        data_reference_index: data_reference_index,
+        width: width,
+        height: height,
+        avcc: avcc,
+    }))
+}
+
+/// Parse an audio description inside an stsd box.
+fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, _: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
+    let h = try!(read_box_header(src));
+    // TODO(kinetik): enca here also?
+    if &h.name.0 != b"mp4a" {
+        return Err(Error::Unsupported);
+    }
+
+    // Skip uninteresting fields.
+    try!(skip(src, 6));
+
+    let data_reference_index = try!(be_u16(src));
+
+    // Skip uninteresting fields.
+    try!(skip(src, 8));
+
+    let channelcount = try!(be_u16(src));
+    let samplesize = try!(be_u16(src));
+
+    // Skip uninteresting fields.
+    try!(skip(src, 4));
+
+    let samplerate = try!(be_u32(src));
+
+    // TODO(kinetik): Parse esds atom?  For now we just stash the data.
+    let h = try!(read_box_header(src));
+    if &h.name.0 != b"esds" {
+        return Err(Error::InvalidData);
+    }
+    let (_, _) = try!(read_fullbox_extra(src));
+    let mut data: Vec<u8> = vec![0; (h.size - h.offset - 4) as usize];
+    let r = try!(src.read(&mut data));
+    assert!(r == data.len());
+    let esds = ES_Descriptor { data: data };
+
+    // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
+    track.mime_type = String::from("audio/mp4a-latm");
+
+    Ok(SampleEntry::Audio(AudioSampleEntry {
+        data_reference_index: data_reference_index,
+        channelcount: channelcount,
+        samplesize: samplesize,
+        samplerate: samplerate,
+        esds: esds,
+    }))
+}
+
 /// Parse a stsd box.
 fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &mut Track) -> Result<SampleDescriptionBox> {
     let (_, _) = try!(read_fullbox_extra(src));
@@ -928,93 +1019,8 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &m
     // TODO(kinetik): check if/when more than one desc per track? do we need to support?
     for _ in 0..description_count {
         let description = match track.track_type {
-            TrackType::Video => {
-                let h = try!(read_box_header(src));
-                // TODO(kinetik): encv here also?
-                if &h.name.0 != b"avc1" && &h.name.0 != b"avc3" {
-                    return Err(Error::Unsupported);
-                }
-
-                // Skip uninteresting fields.
-                try!(skip(src, 6));
-
-                let data_reference_index = try!(be_u16(src));
-
-                // Skip uninteresting fields.
-                try!(skip(src, 16));
-
-                let width = try!(be_u16(src));
-                let height = try!(be_u16(src));
-
-                // Skip uninteresting fields.
-                try!(skip(src, 50));
-
-                // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
-                let h = try!(read_box_header(src));
-                if &h.name.0 != b"avcC" {
-                    return Err(Error::InvalidData);
-                }
-                let mut data: Vec<u8> = vec![0; (h.size - h.offset) as usize];
-                let r = try!(src.read(&mut data));
-                assert!(r == data.len());
-                let avcc = AVCDecoderConfigurationRecord { data: data };
-
-                try!(skip_remaining_box_content(src, head));
-
-                track.mime_type = String::from("video/avc");
-
-                SampleEntry::Video(VideoSampleEntry {
-                    data_reference_index: data_reference_index,
-                    width: width,
-                    height: height,
-                    avcc: avcc,
-                })
-            }
-            TrackType::Audio => {
-                let h = try!(read_box_header(src));
-                // TODO(kinetik): enca here also?
-                if &h.name.0 != b"mp4a" {
-                    return Err(Error::Unsupported);
-                }
-
-                // Skip uninteresting fields.
-                try!(skip(src, 6));
-
-                let data_reference_index = try!(be_u16(src));
-
-                // Skip uninteresting fields.
-                try!(skip(src, 8));
-
-                let channelcount = try!(be_u16(src));
-                let samplesize = try!(be_u16(src));
-
-                // Skip uninteresting fields.
-                try!(skip(src, 4));
-
-                let samplerate = try!(be_u32(src));
-
-                // TODO(kinetik): Parse esds atom?  For now we just stash the data.
-                let h = try!(read_box_header(src));
-                if &h.name.0 != b"esds" {
-                    return Err(Error::InvalidData);
-                }
-                let (_, _) = try!(read_fullbox_extra(src));
-                let mut data: Vec<u8> = vec![0; (h.size - h.offset - 4) as usize];
-                let r = try!(src.read(&mut data));
-                assert!(r == data.len());
-                let esds = ES_Descriptor { data: data };
-
-                // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
-                track.mime_type = String::from("audio/mp4a-latm");
-
-                SampleEntry::Audio(AudioSampleEntry {
-                    data_reference_index: data_reference_index,
-                    channelcount: channelcount,
-                    samplesize: samplesize,
-                    samplerate: samplerate,
-                    esds: esds,
-                })
-            }
+            TrackType::Video => try!(read_video_desc(src, head, track)),
+            TrackType::Audio => try!(read_audio_desc(src, head, track)),
             TrackType::Unknown => SampleEntry::Unknown,
         };
         if track.data.is_none() {
