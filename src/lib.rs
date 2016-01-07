@@ -526,16 +526,14 @@ fn read_edts<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
 
 fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track_idx: usize) -> Result<(MediaHeaderBox, Option<TrackScaledTime>, Option<TrackTimeScale>)> {
     let mdhd = try!(read_mdhd(f, h));
-    let duration = if mdhd.duration != std::u64::MAX {
-        Some(TrackScaledTime(mdhd.duration, track_idx))
-    } else {
-        None
+    let duration = match mdhd.duration {
+        std::u64::MAX => None,
+        duration => Some(TrackScaledTime(duration, track_idx)),
     };
-    let timescale = if mdhd.timescale > 0 {
-        Some(TrackTimeScale(mdhd.timescale as u64, track_idx))
-    } else {
+    if mdhd.timescale <= 0 {
         return Err(Error::InvalidData);
-    };
+    }
+    let timescale = Some(TrackTimeScale(mdhd.timescale as u64, track_idx));
     Ok((mdhd, duration, timescale))
 }
 
