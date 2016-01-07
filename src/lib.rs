@@ -378,7 +378,7 @@ fn driver<F, T: BufRead>(f: &mut T, context: &mut MediaContext, action: F) -> Re
         let r = read_box_header(f).and_then(|h| {
             let mut content = limit(f, &h);
             let r = action(context, h, &mut content);
-            if let Ok(_) = r {
+            if r.is_ok() {
                 // TODO(kinetik): can check this for "non-fatal" errors (e.g. EOF) too.
                 log!(context, "{} content bytes left", content.limit());
                 assert!(content.limit() == 0);
