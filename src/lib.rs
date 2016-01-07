@@ -524,21 +524,31 @@ fn read_edts<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
     })
 }
 
+fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track_idx: usize) -> Result<(MediaHeaderBox, Option<TrackScaledTime>, Option<TrackTimeScale>)> {
+    let mdhd = try!(read_mdhd(f, h));
+    let duration = if mdhd.duration != std::u64::MAX {
+        Some(TrackScaledTime(mdhd.duration, track_idx))
+    } else {
+        None
+    };
+    let timescale = if mdhd.timescale > 0 {
+        Some(TrackTimeScale(mdhd.timescale as u64, track_idx))
+    } else {
+        return Err(Error::InvalidData);
+    };
+    Ok((mdhd, duration, timescale))
+}
+
 fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -> Result<()> {
     driver(f, context, |context, h, mut content| {
         match &h.name.0 {
             b"mdhd" => {
-                let mdhd = try!(read_mdhd(&mut content, &h));
                 let track_idx = context.tracks.len() - 1;
+                let (mdhd, duration, timescale) = try!(parse_mdhd(content, &h, track_idx));
+
                 if let Some(track) = context.tracks.last_mut() {
-                    if mdhd.duration != std::u64::MAX {
-                        track.duration = Some(TrackScaledTime(mdhd.duration, track_idx));
-                    }
-                    if mdhd.timescale > 0 {
-                        track.timescale = Some(TrackTimeScale(mdhd.timescale as u64, track_idx));
-                    } else {
-                        return Err(Error::InvalidData);
-                    }
+                    track.duration = duration;
+                    track.timescale = timescale;
                 } else {
                     return Err(Error::InvalidData);
                 }
@@ -1250,4 +1260,46 @@ fn test_read_mdhd_v1() {
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, 361984551075317512);
     println!("box {:?}", parsed);
+}
+
+#[test]
+fn test_read_mdhd_unknown_duration() {
+    use std::io::{Cursor, Write};
+    let mut test: Vec<u8> = vec![0, 0, 0, 32]; // size
+    write!(&mut test, "mdhd").unwrap(); // type
+    test.extend(vec![0, 0, 0, 0]); // fullbox
+    test.extend(vec![0, 0, 0, 0,
+                     0, 0, 0, 0,
+                     1, 2, 3, 4,
+                     0xff, 0xff, 0xff, 0xff,
+                     0, 0, 0, 0]);
+    assert_eq!(test.len(), 32);
+
+    let mut stream = Cursor::new(test);
+    let header = read_box_header(&mut stream).unwrap();
+    let parsed = read_mdhd(&mut stream, &header).unwrap();
+    assert_eq!(parsed.header.name, FourCC(*b"mdhd"));
+    assert_eq!(parsed.header.size, 32);
+    assert_eq!(parsed.timescale, 16909060);
+    assert_eq!(parsed.duration, std::u64::MAX);
+    println!("box {:?}", parsed);
+}
+
+#[test]
+fn test_read_mdhd_invalid_timescale() {
+    use std::io::{Cursor, Write};
+    let mut test: Vec<u8> = vec![0, 0, 0, 44]; // size
+    write!(&mut test, "mdhd").unwrap(); // type
+    test.extend(vec![1, 0, 0, 0]); // fullbox
+    test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
+                     0, 0, 0, 0, 0, 0, 0, 0,
+                     0, 0, 0, 0,
+                     5, 6, 7, 8, 5, 6, 7, 8,
+                     0, 0, 0, 0]);
+    assert_eq!(test.len(), 44);
+
+    let mut stream = Cursor::new(test);
+    let header = read_box_header(&mut stream).unwrap();
+    let r = parse_mdhd(&mut stream, &header, 0);
+    assert_eq!(r.is_err(), true);
 }
