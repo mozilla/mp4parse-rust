@@ -16,7 +16,13 @@ fn dump_file(filename: &String) {
     match mp4parse::read_mp4(&mut reader, &mut context) {
         Ok(_) => {},
         Err(mp4parse::Error::UnexpectedEOF) => {},
-        Err(e) => { panic!(e); },
+        Err(mp4parse::Error::Io(e)) => {
+            println!("I/O ERROR: {:?}", e);
+            panic!(e);
+        },
+        Err(e) => {
+            println!("ERROR: {:?}", e);
+        },
     }
     println!("-- result of parsing '{}' --\n{:?}", filename, context);
 }
