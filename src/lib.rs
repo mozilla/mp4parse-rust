@@ -1124,12 +1124,22 @@ fn be_fourcc<T: Read>(src: &mut T) -> Result<FourCC> {
 mod tests {
     use std::io::{Cursor, Write};
     use super::*;
+    extern crate test_assembler;
+    use self::test_assembler::*;
+
+    fn make_box<F>(size: u32, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
+        where F: Fn(Section) -> Section {
+        let section = Section::new()
+            .B32(size)
+            .append_bytes(name);
+        Cursor::new(func(section).get_contents().unwrap())
+    }
 
     #[test]
     fn read_box_header_short() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 8]; // minimal box length
-        write!(&mut test, "test").unwrap(); // box type
-        let mut stream = Cursor::new(test);
+        let mut stream = make_box(8, b"test", |s| {
+            s
+        });
         let parsed = read_box_header(&mut stream).unwrap();
         assert_eq!(parsed.name, FourCC(*b"test"));
         assert_eq!(parsed.size, 8);
@@ -1137,11 +1147,9 @@ mod tests {
 
     #[test]
     fn read_box_header_long() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 1]; // long box extension code
-        test.extend("long".to_string().into_bytes()); // box type
-        test.extend(vec![0, 0, 0, 0, 0, 0, 16, 0]); // 64 bit size
-        // Skip generating box content.
-        let mut stream = Cursor::new(test);
+        let mut stream = make_box(1, b"long", |s| {
+            s.B64(4096) // fake 64-bit size
+        });
         let parsed = read_box_header(&mut stream).unwrap();
         assert_eq!(parsed.name, FourCC(*b"long"));
         assert_eq!(parsed.size, 4096);
