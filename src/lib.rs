@@ -1129,7 +1129,6 @@ fn test_read_box_header() {
     let parsed = read_box_header(&mut stream).unwrap();
     assert_eq!(parsed.name, FourCC(*b"test"));
     assert_eq!(parsed.size, 8);
-    println!("box {:?}", parsed);
 }
 
 #[test]
@@ -1143,7 +1142,6 @@ fn test_read_box_header_long() {
     let parsed = read_box_header(&mut stream).unwrap();
     assert_eq!(parsed.name, FourCC(*b"long"));
     assert_eq!(parsed.size, 4096);
-    println!("box {:?}", parsed);
 }
 
 #[test]
@@ -1167,7 +1165,6 @@ fn test_read_ftyp() {
     assert_eq!(parsed.compatible_brands.len(), 2);
     assert_eq!(parsed.compatible_brands[0], FourCC(*b"isom"));
     assert_eq!(parsed.compatible_brands[1], FourCC(*b"mp42"));
-    println!("box {:?}", parsed);
 }
 
 #[test]
@@ -1193,7 +1190,6 @@ fn test_read_elst_v0() {
     assert_eq!(parsed.edits[0].media_time, 84281096);
     assert_eq!(parsed.edits[0].media_rate_integer, 2314);
     assert_eq!(parsed.edits[0].media_rate_fraction, 2828);
-    println!("box {:?}", parsed);
 }
 
 #[test]
@@ -1223,7 +1219,6 @@ fn test_read_elst_v1() {
     assert_eq!(parsed.edits[1].media_time, 361984551075317512);
     assert_eq!(parsed.edits[1].media_rate_integer, 2314);
     assert_eq!(parsed.edits[1].media_rate_fraction, 2828);
-    println!("box {:?}", parsed);
 }
 
 #[test]
@@ -1246,7 +1241,6 @@ fn test_read_mdhd_v0() {
     assert_eq!(parsed.header.size, 32);
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, 84281096);
-    println!("box {:?}", parsed);
 }
 
 #[test]
@@ -1269,7 +1263,6 @@ fn test_read_mdhd_v1() {
     assert_eq!(parsed.header.size, 44);
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, 361984551075317512);
-    println!("box {:?}", parsed);
 }
 
 #[test]
@@ -1292,7 +1285,6 @@ fn test_read_mdhd_unknown_duration() {
     assert_eq!(parsed.header.size, 32);
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, std::u64::MAX);
-    println!("box {:?}", parsed);
 }
 
 #[test]
@@ -1334,7 +1326,6 @@ fn test_read_mvhd_v0() {
     assert_eq!(parsed.header.size, 108);
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, 84281096);
-    println!("box {:?}", parsed);
 }
 
 #[test]
@@ -1357,7 +1348,6 @@ fn test_read_mvhd_v1() {
     assert_eq!(parsed.header.size, 120);
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, 361984551075317512);
-    println!("box {:?}", parsed);
 }
 
 #[test]
@@ -1399,5 +1389,4 @@ fn test_read_mvhd_unknown_duration() {
     assert_eq!(parsed.header.size, 108);
     assert_eq!(parsed.timescale, 16909060);
     assert_eq!(parsed.duration, std::u64::MAX);
-    println!("box {:?}", parsed);
 }
