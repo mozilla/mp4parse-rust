@@ -530,7 +530,7 @@ fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track_idx: usize) -> Result<
         std::u64::MAX => None,
         duration => Some(TrackScaledTime(duration, track_idx)),
     };
-    if mdhd.timescale <= 0 {
+    if mdhd.timescale == 0 {
         return Err(Error::InvalidData);
     }
     let timescale = Some(TrackTimeScale(mdhd.timescale as u64, track_idx));
