@@ -1140,6 +1140,16 @@ mod tests {
         Cursor::new(func(section).get_contents().unwrap())
     }
 
+    fn make_fullbox<F>(size: u32, name: &[u8; 4], version: u8, func: F) -> Cursor<Vec<u8>>
+        where F: Fn(Section) -> Section {
+        let section = Section::new()
+            .B32(size)
+            .append_bytes(name)
+            .B8(version)
+            .B8(0).B8(0).B8(0);
+        Cursor::new(func(section).get_contents().unwrap())
+    }
+
     #[test]
     fn read_box_header_short() {
         let mut stream = make_box(8, b"test", |s| {
@@ -1182,10 +1192,8 @@ mod tests {
 
     #[test]
     fn read_elst_v0() {
-        let mut stream = make_box(28, b"elst", |s| {
+        let mut stream = make_fullbox(28, b"elst", 0, |s| {
             s
-                .B8(0)             // fullbox version
-                .B8(0).B8(0).B8(0) // fullbox flags
                 .B32(1) // list count
                 // first entry
                 .B32(1234) // duration
@@ -1206,10 +1214,8 @@ mod tests {
 
     #[test]
     fn read_elst_v1() {
-        let mut stream = make_box(56, b"elst", |s| {
+        let mut stream = make_fullbox(56, b"elst", 1, |s| {
             s
-                .B8(1)             // fullbox version
-                .B8(0).B8(0).B8(0) // fullbox flags
                 .B32(2) // list count
                 // first entry
                 .B64(1234) // duration
@@ -1236,10 +1242,8 @@ mod tests {
 
     #[test]
     fn read_mdhd_v0() {
-        let mut stream = make_box(32, b"mdhd", |s| {
+        let mut stream = make_fullbox(32, b"mdhd", 0, |s| {
             s
-                .B8(0)             // fullbox version
-                .B8(0).B8(0).B8(0) // fullbox flags
                 .B32(0).B32(0)
                 .B32(1234) // timescale
                 .B32(5678) // duration
@@ -1255,10 +1259,8 @@ mod tests {
 
     #[test]
     fn read_mdhd_v1() {
-        let mut stream = make_box(44, b"mdhd", |s| {
+        let mut stream = make_fullbox(44, b"mdhd", 1, |s| {
             s
-                .B8(1)             // fullbox version
-                .B8(0).B8(0).B8(0) // fullbox flags
                 .B64(0).B64(0)
                 .B32(1234) // timescale
                 .B64(5678) // duration
@@ -1274,10 +1276,8 @@ mod tests {
 
     #[test]
     fn read_mdhd_unknown_duration() {
-        let mut stream = make_box(32, b"mdhd", |s| {
+        let mut stream = make_fullbox(32, b"mdhd", 0, |s| {
             s
-                .B8(0)             // fullbox version
-                .B8(0).B8(0).B8(0) // fullbox flags
                 .B32(0).B32(0)
                 .B32(1234) // timescale
                 .B32(::std::u32::MAX) // duration
@@ -1293,10 +1293,8 @@ mod tests {
 
     #[test]
     fn read_mdhd_invalid_timescale() {
-        let mut stream = make_box(44, b"mdhd", |s| {
+        let mut stream = make_fullbox(44, b"mdhd", 1, |s| {
             s
-                .B8(1)             // fullbox version
-                .B8(0).B8(0).B8(0) // fullbox flags
                 .B64(0).B64(0)
                 .B32(0) // timescale
                 .B64(5678) // duration
@@ -1309,10 +1307,8 @@ mod tests {
 
     #[test]
     fn read_mvhd_v0() {
-        let mut stream = make_box(108, b"mvhd", |s| {
+        let mut stream = make_fullbox(108, b"mvhd", 0, |s| {
             s
-                .B8(0)             // fullbox version
-                .B8(0).B8(0).B8(0) // fullbox flags
                 .B32(0).B32(0)
                 .B32(1234)
                 .B32(5678)
@@ -1328,10 +1324,8 @@ mod tests {
 
     #[test]
     fn read_mvhd_v1() {
-        let mut stream = make_box(120, b"mvhd", |s| {
+        let mut stream = make_fullbox(120, b"mvhd", 1, |s| {
             s
-                .B8(1)             // fullbox version
-                .B8(0).B8(0).B8(0) // fullbox flags
                 .B64(0).B64(0)
                 .B32(1234)
                 .B64(5678)
@@ -1347,10 +1341,8 @@ mod tests {
 
     #[test]
     fn read_mvhd_invalid_timescale() {
-        let mut stream = make_box(120, b"mvhd", |s| {
+        let mut stream = make_fullbox(120, b"mvhd", 1, |s| {
             s
-                .B8(1)             // fullbox version
-                .B8(0).B8(0).B8(0) // fullbox flags
                 .B64(0).B64(0)
                 .B32(0)
                 .B64(5678)
@@ -1363,10 +1355,8 @@ mod tests {
 
     #[test]
     fn read_mvhd_unknown_duration() {
-        let mut stream = make_box(108, b"mvhd", |s| {
+        let mut stream = make_fullbox(108, b"mvhd", 0, |s| {
             s
-                .B8(0)             // fullbox version
-                .B8(0).B8(0).B8(0) // fullbox flags
                 .B32(0).B32(0)
                 .B32(1234)
                 .B32(::std::u32::MAX)
