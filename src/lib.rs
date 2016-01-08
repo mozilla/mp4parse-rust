@@ -1120,273 +1120,278 @@ fn be_fourcc<T: Read>(src: &mut T) -> Result<FourCC> {
     }
 }
 
-#[test]
-fn test_read_box_header() {
-    use std::io::{Cursor, Write};
-    let mut test: Vec<u8> = vec![0, 0, 0, 8]; // minimal box length
-    write!(&mut test, "test").unwrap(); // box type
-    let mut stream = Cursor::new(test);
-    let parsed = read_box_header(&mut stream).unwrap();
-    assert_eq!(parsed.name, FourCC(*b"test"));
-    assert_eq!(parsed.size, 8);
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn test_read_box_header_long() {
-    use std::io::Cursor;
-    let mut test: Vec<u8> = vec![0, 0, 0, 1]; // long box extension code
-    test.extend("long".to_string().into_bytes()); // box type
-    test.extend(vec![0, 0, 0, 0, 0, 0, 16, 0]); // 64 bit size
-    // Skip generating box content.
-    let mut stream = Cursor::new(test);
-    let parsed = read_box_header(&mut stream).unwrap();
-    assert_eq!(parsed.name, FourCC(*b"long"));
-    assert_eq!(parsed.size, 4096);
-}
+    #[test]
+    fn read_box_header_short() {
+        use std::io::{Cursor, Write};
+        let mut test: Vec<u8> = vec![0, 0, 0, 8]; // minimal box length
+        write!(&mut test, "test").unwrap(); // box type
+        let mut stream = Cursor::new(test);
+        let parsed = read_box_header(&mut stream).unwrap();
+        assert_eq!(parsed.name, FourCC(*b"test"));
+        assert_eq!(parsed.size, 8);
+    }
 
-#[test]
-fn test_read_ftyp() {
-    use std::io::{Cursor, Write};
-    let mut test: Vec<u8> = vec![0, 0, 0, 24]; // size
-    write!(&mut test, "ftyp").unwrap(); // type
-    write!(&mut test, "mp42").unwrap(); // major brand
-    test.extend(vec![0, 0, 0, 0]);      // minor version
-    write!(&mut test, "isom").unwrap(); // compatible brands...
-    write!(&mut test, "mp42").unwrap();
-    assert_eq!(test.len(), 24);
+    #[test]
+    fn read_box_header_long() {
+        use std::io::Cursor;
+        let mut test: Vec<u8> = vec![0, 0, 0, 1]; // long box extension code
+        test.extend("long".to_string().into_bytes()); // box type
+        test.extend(vec![0, 0, 0, 0, 0, 0, 16, 0]); // 64 bit size
+        // Skip generating box content.
+        let mut stream = Cursor::new(test);
+        let parsed = read_box_header(&mut stream).unwrap();
+        assert_eq!(parsed.name, FourCC(*b"long"));
+        assert_eq!(parsed.size, 4096);
+    }
 
-    let mut stream = Cursor::new(test);
-    let header = read_box_header(&mut stream).unwrap();
-    let parsed = read_ftyp(&mut stream, &header).unwrap();
-    assert_eq!(parsed.header.name, FourCC(*b"ftyp"));
-    assert_eq!(parsed.header.size, 24);
-    assert_eq!(parsed.major_brand, FourCC(*b"mp42"));
-    assert_eq!(parsed.minor_version, 0);
-    assert_eq!(parsed.compatible_brands.len(), 2);
-    assert_eq!(parsed.compatible_brands[0], FourCC(*b"isom"));
-    assert_eq!(parsed.compatible_brands[1], FourCC(*b"mp42"));
-}
-
-#[test]
-fn test_read_elst_v0() {
-    use std::io::{Cursor, Write};
-    let mut test: Vec<u8> = vec![0, 0, 0, 28]; // size
-    write!(&mut test, "elst").unwrap(); // type
-    test.extend(vec![0, 0, 0, 0]); // fullbox
-    test.extend(vec![0, 0, 0, 1]); // count
-    test.extend(vec![1, 2, 3, 4,
-                     5, 6, 7, 8,
-                     9, 10,
-                     11, 12]);
-    assert_eq!(test.len(), 28);
-
-    let mut stream = Cursor::new(test);
-    let header = read_box_header(&mut stream).unwrap();
-    let parsed = read_elst(&mut stream, &header).unwrap();
-    assert_eq!(parsed.header.name, FourCC(*b"elst"));
-    assert_eq!(parsed.header.size, 28);
-    assert_eq!(parsed.edits.len(), 1);
-    assert_eq!(parsed.edits[0].segment_duration, 16909060);
-    assert_eq!(parsed.edits[0].media_time, 84281096);
-    assert_eq!(parsed.edits[0].media_rate_integer, 2314);
-    assert_eq!(parsed.edits[0].media_rate_fraction, 2828);
-}
-
-#[test]
-fn test_read_elst_v1() {
-    use std::io::{Cursor, Write};
-    let mut test: Vec<u8> = vec![0, 0, 0, 56]; // size
-    write!(&mut test, "elst").unwrap(); // type
-    test.extend(vec![1, 0, 0, 0]); // fullbox
-    test.extend(vec![0, 0, 0, 2]); // count
-    test.extend(vec![1, 2, 3, 4, 1, 2, 3, 4,
-                     5, 6, 7, 8, 5, 6, 7, 8,
-                     9, 10,
-                     11, 12]);
-    test.extend(vec![1, 2, 3, 4, 1, 2, 3, 4,
-                     5, 6, 7, 8, 5, 6, 7, 8,
-                     9, 10,
-                     11, 12]);
-    assert_eq!(test.len(), 56);
-
-    let mut stream = Cursor::new(test);
-    let header = read_box_header(&mut stream).unwrap();
-    let parsed = read_elst(&mut stream, &header).unwrap();
-    assert_eq!(parsed.header.name, FourCC(*b"elst"));
-    assert_eq!(parsed.header.size, 56);
-    assert_eq!(parsed.edits.len(), 2);
-    assert_eq!(parsed.edits[1].segment_duration, 72623859723010820);
-    assert_eq!(parsed.edits[1].media_time, 361984551075317512);
-    assert_eq!(parsed.edits[1].media_rate_integer, 2314);
-    assert_eq!(parsed.edits[1].media_rate_fraction, 2828);
-}
-
-#[test]
-fn test_read_mdhd_v0() {
-    use std::io::{Cursor, Write};
-    let mut test: Vec<u8> = vec![0, 0, 0, 32]; // size
-    write!(&mut test, "mdhd").unwrap(); // type
-    test.extend(vec![0, 0, 0, 0]); // fullbox
-    test.extend(vec![0, 0, 0, 0,
-                     0, 0, 0, 0,
-                     1, 2, 3, 4,
-                     5, 6, 7, 8,
-                     0, 0, 0, 0]);
-    assert_eq!(test.len(), 32);
-
-    let mut stream = Cursor::new(test);
-    let header = read_box_header(&mut stream).unwrap();
-    let parsed = read_mdhd(&mut stream, &header).unwrap();
-    assert_eq!(parsed.header.name, FourCC(*b"mdhd"));
-    assert_eq!(parsed.header.size, 32);
-    assert_eq!(parsed.timescale, 16909060);
-    assert_eq!(parsed.duration, 84281096);
-}
-
-#[test]
-fn test_read_mdhd_v1() {
-    use std::io::{Cursor, Write};
-    let mut test: Vec<u8> = vec![0, 0, 0, 44]; // size
-    write!(&mut test, "mdhd").unwrap(); // type
-    test.extend(vec![1, 0, 0, 0]); // fullbox
-    test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0, 0, 0, 0, 0,
-                     1, 2, 3, 4,
-                     5, 6, 7, 8, 5, 6, 7, 8,
-                     0, 0, 0, 0]);
-    assert_eq!(test.len(), 44);
-
-    let mut stream = Cursor::new(test);
-    let header = read_box_header(&mut stream).unwrap();
-    let parsed = read_mdhd(&mut stream, &header).unwrap();
-    assert_eq!(parsed.header.name, FourCC(*b"mdhd"));
-    assert_eq!(parsed.header.size, 44);
-    assert_eq!(parsed.timescale, 16909060);
-    assert_eq!(parsed.duration, 361984551075317512);
-}
-
-#[test]
-fn test_read_mdhd_unknown_duration() {
-    use std::io::{Cursor, Write};
-    let mut test: Vec<u8> = vec![0, 0, 0, 32]; // size
-    write!(&mut test, "mdhd").unwrap(); // type
-    test.extend(vec![0, 0, 0, 0]); // fullbox
-    test.extend(vec![0, 0, 0, 0,
-                     0, 0, 0, 0,
-                     1, 2, 3, 4,
-                     0xff, 0xff, 0xff, 0xff,
-                     0, 0, 0, 0]);
-    assert_eq!(test.len(), 32);
-
-    let mut stream = Cursor::new(test);
-    let header = read_box_header(&mut stream).unwrap();
-    let parsed = read_mdhd(&mut stream, &header).unwrap();
-    assert_eq!(parsed.header.name, FourCC(*b"mdhd"));
-    assert_eq!(parsed.header.size, 32);
-    assert_eq!(parsed.timescale, 16909060);
-    assert_eq!(parsed.duration, std::u64::MAX);
-}
-
-#[test]
-fn test_read_mdhd_invalid_timescale() {
-    use std::io::{Cursor, Write};
-    let mut test: Vec<u8> = vec![0, 0, 0, 44]; // size
-    write!(&mut test, "mdhd").unwrap(); // type
-    test.extend(vec![1, 0, 0, 0]); // fullbox
-    test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0,
-                     5, 6, 7, 8, 5, 6, 7, 8,
-                     0, 0, 0, 0]);
-    assert_eq!(test.len(), 44);
-
-    let mut stream = Cursor::new(test);
-    let header = read_box_header(&mut stream).unwrap();
-    let r = parse_mdhd(&mut stream, &header, 0);
-    assert_eq!(r.is_err(), true);
-}
-
-#[test]
-fn test_read_mvhd_v0() {
-    use std::io::{Cursor, Write};
-    let mut test: Vec<u8> = vec![0, 0, 0, 108]; // size
-    write!(&mut test, "mvhd").unwrap(); // type
-    test.extend(vec![0, 0, 0, 0]); // fullbox
-    test.extend(vec![0, 0, 0, 0,
-                     0, 0, 0, 0,
-                     1, 2, 3, 4,
-                     5, 6, 7, 8]);
-    test.extend(vec![0; 80]);
-    assert_eq!(test.len(), 108);
+    #[test]
+    fn read_ftyp() {
+        use std::io::{Cursor, Write};
+        let mut test: Vec<u8> = vec![0, 0, 0, 24]; // size
+        write!(&mut test, "ftyp").unwrap(); // type
+        write!(&mut test, "mp42").unwrap(); // major brand
+        test.extend(vec![0, 0, 0, 0]);      // minor version
+        write!(&mut test, "isom").unwrap(); // compatible brands...
+        write!(&mut test, "mp42").unwrap();
+        assert_eq!(test.len(), 24);
 
         let mut stream = Cursor::new(test);
-    let header = read_box_header(&mut stream).unwrap();
-    let parsed = read_mvhd(&mut stream, &header).unwrap();
-    assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
-    assert_eq!(parsed.header.size, 108);
-    assert_eq!(parsed.timescale, 16909060);
-    assert_eq!(parsed.duration, 84281096);
-}
+        let header = read_box_header(&mut stream).unwrap();
+        let parsed = super::read_ftyp(&mut stream, &header).unwrap();
+        assert_eq!(parsed.header.name, FourCC(*b"ftyp"));
+        assert_eq!(parsed.header.size, 24);
+        assert_eq!(parsed.major_brand, FourCC(*b"mp42"));
+        assert_eq!(parsed.minor_version, 0);
+        assert_eq!(parsed.compatible_brands.len(), 2);
+        assert_eq!(parsed.compatible_brands[0], FourCC(*b"isom"));
+        assert_eq!(parsed.compatible_brands[1], FourCC(*b"mp42"));
+    }
 
-#[test]
-fn test_read_mvhd_v1() {
-    use std::io::{Cursor, Write};
-    let mut test: Vec<u8> = vec![0, 0, 0, 120]; // size
-    write!(&mut test, "mvhd").unwrap(); // type
-    test.extend(vec![1, 0, 0, 0]); // fullbox
-    test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0, 0, 0, 0, 0,
-                     1, 2, 3, 4,
-                     5, 6, 7, 8, 5, 6, 7, 8]);
-    test.extend(vec![0; 80]);
-    assert_eq!(test.len(), 120);
+    #[test]
+    fn read_elst_v0() {
+        use std::io::{Cursor, Write};
+        let mut test: Vec<u8> = vec![0, 0, 0, 28]; // size
+        write!(&mut test, "elst").unwrap(); // type
+        test.extend(vec![0, 0, 0, 0]); // fullbox
+        test.extend(vec![0, 0, 0, 1]); // count
+        test.extend(vec![1, 2, 3, 4,
+                         5, 6, 7, 8,
+                         9, 10,
+                         11, 12]);
+        assert_eq!(test.len(), 28);
 
         let mut stream = Cursor::new(test);
-    let header = read_box_header(&mut stream).unwrap();
-    let parsed = read_mvhd(&mut stream, &header).unwrap();
-    assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
-    assert_eq!(parsed.header.size, 120);
-    assert_eq!(parsed.timescale, 16909060);
-    assert_eq!(parsed.duration, 361984551075317512);
-}
+        let header = read_box_header(&mut stream).unwrap();
+        let parsed = super::read_elst(&mut stream, &header).unwrap();
+        assert_eq!(parsed.header.name, FourCC(*b"elst"));
+        assert_eq!(parsed.header.size, 28);
+        assert_eq!(parsed.edits.len(), 1);
+        assert_eq!(parsed.edits[0].segment_duration, 16909060);
+        assert_eq!(parsed.edits[0].media_time, 84281096);
+        assert_eq!(parsed.edits[0].media_rate_integer, 2314);
+        assert_eq!(parsed.edits[0].media_rate_fraction, 2828);
+    }
 
-#[test]
-fn test_read_mvhd_invalid_timescale() {
-    use std::io::{Cursor, Write};
-    let mut test: Vec<u8> = vec![0, 0, 0, 120]; // size
-    write!(&mut test, "mvhd").unwrap(); // type
-    test.extend(vec![1, 0, 0, 0]); // fullbox
-    test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0, 0, 0, 0, 0,
-                     0, 0, 0, 0,
-                     5, 6, 7, 8, 5, 6, 7, 8]);
-    test.extend(vec![0; 80]);
-    assert_eq!(test.len(), 120);
+    #[test]
+    fn read_elst_v1() {
+        use std::io::{Cursor, Write};
+        let mut test: Vec<u8> = vec![0, 0, 0, 56]; // size
+        write!(&mut test, "elst").unwrap(); // type
+        test.extend(vec![1, 0, 0, 0]); // fullbox
+        test.extend(vec![0, 0, 0, 2]); // count
+        test.extend(vec![1, 2, 3, 4, 1, 2, 3, 4,
+                         5, 6, 7, 8, 5, 6, 7, 8,
+                         9, 10,
+                         11, 12]);
+        test.extend(vec![1, 2, 3, 4, 1, 2, 3, 4,
+                         5, 6, 7, 8, 5, 6, 7, 8,
+                         9, 10,
+                         11, 12]);
+        assert_eq!(test.len(), 56);
 
-    let mut stream = Cursor::new(test);
-    let header = read_box_header(&mut stream).unwrap();
-    let r = parse_mvhd(&mut stream, &header);
-    assert_eq!(r.is_err(), true);
-}
+        let mut stream = Cursor::new(test);
+        let header = read_box_header(&mut stream).unwrap();
+        let parsed = super::read_elst(&mut stream, &header).unwrap();
+        assert_eq!(parsed.header.name, FourCC(*b"elst"));
+        assert_eq!(parsed.header.size, 56);
+        assert_eq!(parsed.edits.len(), 2);
+        assert_eq!(parsed.edits[1].segment_duration, 72623859723010820);
+        assert_eq!(parsed.edits[1].media_time, 361984551075317512);
+        assert_eq!(parsed.edits[1].media_rate_integer, 2314);
+        assert_eq!(parsed.edits[1].media_rate_fraction, 2828);
+    }
 
-#[test]
-fn test_read_mvhd_unknown_duration() {
-    use std::io::{Cursor, Write};
-    let mut test: Vec<u8> = vec![0, 0, 0, 108]; // size
-    write!(&mut test, "mvhd").unwrap(); // type
-    test.extend(vec![0, 0, 0, 0]); // fullbox
-    test.extend(vec![0, 0, 0, 0,
-                     0, 0, 0, 0,
-                     1, 2, 3, 4,
-                     0xff, 0xff, 0xff, 0xff]);
-    test.extend(vec![0; 80]);
-    assert_eq!(test.len(), 108);
+    #[test]
+    fn read_mdhd_v0() {
+        use std::io::{Cursor, Write};
+        let mut test: Vec<u8> = vec![0, 0, 0, 32]; // size
+        write!(&mut test, "mdhd").unwrap(); // type
+        test.extend(vec![0, 0, 0, 0]); // fullbox
+        test.extend(vec![0, 0, 0, 0,
+                         0, 0, 0, 0,
+                         1, 2, 3, 4,
+                         5, 6, 7, 8,
+                         0, 0, 0, 0]);
+        assert_eq!(test.len(), 32);
 
-    let mut stream = Cursor::new(test);
-    let header = read_box_header(&mut stream).unwrap();
-    let parsed = read_mvhd(&mut stream, &header).unwrap();
-    assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
-    assert_eq!(parsed.header.size, 108);
-    assert_eq!(parsed.timescale, 16909060);
-    assert_eq!(parsed.duration, std::u64::MAX);
+        let mut stream = Cursor::new(test);
+        let header = read_box_header(&mut stream).unwrap();
+        let parsed = super::read_mdhd(&mut stream, &header).unwrap();
+        assert_eq!(parsed.header.name, FourCC(*b"mdhd"));
+        assert_eq!(parsed.header.size, 32);
+        assert_eq!(parsed.timescale, 16909060);
+        assert_eq!(parsed.duration, 84281096);
+    }
+
+    #[test]
+    fn read_mdhd_v1() {
+        use std::io::{Cursor, Write};
+        let mut test: Vec<u8> = vec![0, 0, 0, 44]; // size
+        write!(&mut test, "mdhd").unwrap(); // type
+        test.extend(vec![1, 0, 0, 0]); // fullbox
+        test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0,
+                         1, 2, 3, 4,
+                         5, 6, 7, 8, 5, 6, 7, 8,
+                         0, 0, 0, 0]);
+        assert_eq!(test.len(), 44);
+
+        let mut stream = Cursor::new(test);
+        let header = read_box_header(&mut stream).unwrap();
+        let parsed = super::read_mdhd(&mut stream, &header).unwrap();
+        assert_eq!(parsed.header.name, FourCC(*b"mdhd"));
+        assert_eq!(parsed.header.size, 44);
+        assert_eq!(parsed.timescale, 16909060);
+        assert_eq!(parsed.duration, 361984551075317512);
+    }
+
+    #[test]
+    fn read_mdhd_unknown_duration() {
+        use std::io::{Cursor, Write};
+        let mut test: Vec<u8> = vec![0, 0, 0, 32]; // size
+        write!(&mut test, "mdhd").unwrap(); // type
+        test.extend(vec![0, 0, 0, 0]); // fullbox
+        test.extend(vec![0, 0, 0, 0,
+                         0, 0, 0, 0,
+                         1, 2, 3, 4,
+                         0xff, 0xff, 0xff, 0xff,
+                         0, 0, 0, 0]);
+        assert_eq!(test.len(), 32);
+
+        let mut stream = Cursor::new(test);
+        let header = read_box_header(&mut stream).unwrap();
+        let parsed = super::read_mdhd(&mut stream, &header).unwrap();
+        assert_eq!(parsed.header.name, FourCC(*b"mdhd"));
+        assert_eq!(parsed.header.size, 32);
+        assert_eq!(parsed.timescale, 16909060);
+        assert_eq!(parsed.duration, ::std::u64::MAX);
+    }
+
+    #[test]
+    fn read_mdhd_invalid_timescale() {
+        use std::io::{Cursor, Write};
+        let mut test: Vec<u8> = vec![0, 0, 0, 44]; // size
+        write!(&mut test, "mdhd").unwrap(); // type
+        test.extend(vec![1, 0, 0, 0]); // fullbox
+        test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0,
+                         5, 6, 7, 8, 5, 6, 7, 8,
+                         0, 0, 0, 0]);
+        assert_eq!(test.len(), 44);
+
+        let mut stream = Cursor::new(test);
+        let header = read_box_header(&mut stream).unwrap();
+        let r = super::parse_mdhd(&mut stream, &header, 0);
+        assert_eq!(r.is_err(), true);
+    }
+
+    #[test]
+    fn read_mvhd_v0() {
+        use std::io::{Cursor, Write};
+        let mut test: Vec<u8> = vec![0, 0, 0, 108]; // size
+        write!(&mut test, "mvhd").unwrap(); // type
+        test.extend(vec![0, 0, 0, 0]); // fullbox
+        test.extend(vec![0, 0, 0, 0,
+                         0, 0, 0, 0,
+                         1, 2, 3, 4,
+                         5, 6, 7, 8]);
+        test.extend(vec![0; 80]);
+        assert_eq!(test.len(), 108);
+
+        let mut stream = Cursor::new(test);
+        let header = read_box_header(&mut stream).unwrap();
+        let parsed = super::read_mvhd(&mut stream, &header).unwrap();
+        assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
+        assert_eq!(parsed.header.size, 108);
+        assert_eq!(parsed.timescale, 16909060);
+        assert_eq!(parsed.duration, 84281096);
+    }
+
+    #[test]
+    fn read_mvhd_v1() {
+        use std::io::{Cursor, Write};
+        let mut test: Vec<u8> = vec![0, 0, 0, 120]; // size
+        write!(&mut test, "mvhd").unwrap(); // type
+        test.extend(vec![1, 0, 0, 0]); // fullbox
+        test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0,
+                         1, 2, 3, 4,
+                         5, 6, 7, 8, 5, 6, 7, 8]);
+        test.extend(vec![0; 80]);
+        assert_eq!(test.len(), 120);
+
+        let mut stream = Cursor::new(test);
+        let header = read_box_header(&mut stream).unwrap();
+        let parsed = super::read_mvhd(&mut stream, &header).unwrap();
+        assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
+        assert_eq!(parsed.header.size, 120);
+        assert_eq!(parsed.timescale, 16909060);
+        assert_eq!(parsed.duration, 361984551075317512);
+    }
+
+    #[test]
+    fn read_mvhd_invalid_timescale() {
+        use std::io::{Cursor, Write};
+        let mut test: Vec<u8> = vec![0, 0, 0, 120]; // size
+        write!(&mut test, "mvhd").unwrap(); // type
+        test.extend(vec![1, 0, 0, 0]); // fullbox
+        test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0, 0, 0, 0, 0,
+                         0, 0, 0, 0,
+                         5, 6, 7, 8, 5, 6, 7, 8]);
+        test.extend(vec![0; 80]);
+        assert_eq!(test.len(), 120);
+
+        let mut stream = Cursor::new(test);
+        let header = read_box_header(&mut stream).unwrap();
+        let r = super::parse_mvhd(&mut stream, &header);
+        assert_eq!(r.is_err(), true);
+    }
+
+    #[test]
+    fn read_mvhd_unknown_duration() {
+        use std::io::{Cursor, Write};
+        let mut test: Vec<u8> = vec![0, 0, 0, 108]; // size
+        write!(&mut test, "mvhd").unwrap(); // type
+        test.extend(vec![0, 0, 0, 0]); // fullbox
+        test.extend(vec![0, 0, 0, 0,
+                         0, 0, 0, 0,
+                         1, 2, 3, 4,
+                         0xff, 0xff, 0xff, 0xff]);
+        test.extend(vec![0; 80]);
+        assert_eq!(test.len(), 108);
+
+        let mut stream = Cursor::new(test);
+        let header = read_box_header(&mut stream).unwrap();
+        let parsed = super::read_mvhd(&mut stream, &header).unwrap();
+        assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
+        assert_eq!(parsed.header.size, 108);
+        assert_eq!(parsed.timescale, 16909060);
+        assert_eq!(parsed.duration, ::std::u64::MAX);
+    }
 }
