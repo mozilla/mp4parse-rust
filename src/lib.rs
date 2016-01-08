@@ -1122,11 +1122,16 @@ fn be_fourcc<T: Read>(src: &mut T) -> Result<FourCC> {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, Write};
+    use std::io::Cursor;
     use super::*;
     extern crate test_assembler;
     use self::test_assembler::*;
 
+    // TODO(kinetik): most of the time we want to assert that size ==
+    //                section.size(), except for the special case of long
+    //                boxes where we pass size == 1 and write the size
+    //                later.  there is also a use case where we want to
+    //                declare the box larger than the data we actually add.
     fn make_box<F>(size: u32, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
         where F: Fn(Section) -> Section {
         let section = Section::new()
@@ -1157,15 +1162,13 @@ mod tests {
 
     #[test]
     fn read_ftyp() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 24]; // size
-        write!(&mut test, "ftyp").unwrap(); // type
-        write!(&mut test, "mp42").unwrap(); // major brand
-        test.extend(vec![0, 0, 0, 0]);      // minor version
-        write!(&mut test, "isom").unwrap(); // compatible brands...
-        write!(&mut test, "mp42").unwrap();
-        assert_eq!(test.len(), 24);
-
-        let mut stream = Cursor::new(test);
+        let mut stream = make_box(24, b"ftyp", |s| {
+            s
+                .append_bytes(b"mp42")
+                .B32(0) // minor version
+                .append_bytes(b"isom")
+                .append_bytes(b"mp42")
+        });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_ftyp(&mut stream, &header).unwrap();
         assert_eq!(parsed.header.name, FourCC(*b"ftyp"));
@@ -1179,132 +1182,126 @@ mod tests {
 
     #[test]
     fn read_elst_v0() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 28]; // size
-        write!(&mut test, "elst").unwrap(); // type
-        test.extend(vec![0, 0, 0, 0]); // fullbox
-        test.extend(vec![0, 0, 0, 1]); // count
-        test.extend(vec![1, 2, 3, 4,
-                         5, 6, 7, 8,
-                         9, 10,
-                         11, 12]);
-        assert_eq!(test.len(), 28);
-
-        let mut stream = Cursor::new(test);
+        let mut stream = make_box(28, b"elst", |s| {
+            s
+                .B8(0)             // fullbox version
+                .B8(0).B8(0).B8(0) // fullbox flags
+                .B32(1) // list count
+                // first entry
+                .B32(1234) // duration
+                .B32(5678) // time
+                .B16(12) // rate integer
+                .B16(34) // rate fraction
+        });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_elst(&mut stream, &header).unwrap();
         assert_eq!(parsed.header.name, FourCC(*b"elst"));
         assert_eq!(parsed.header.size, 28);
         assert_eq!(parsed.edits.len(), 1);
-        assert_eq!(parsed.edits[0].segment_duration, 16909060);
-        assert_eq!(parsed.edits[0].media_time, 84281096);
-        assert_eq!(parsed.edits[0].media_rate_integer, 2314);
-        assert_eq!(parsed.edits[0].media_rate_fraction, 2828);
+        assert_eq!(parsed.edits[0].segment_duration, 1234);
+        assert_eq!(parsed.edits[0].media_time, 5678);
+        assert_eq!(parsed.edits[0].media_rate_integer, 12);
+        assert_eq!(parsed.edits[0].media_rate_fraction, 34);
     }
 
     #[test]
     fn read_elst_v1() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 56]; // size
-        write!(&mut test, "elst").unwrap(); // type
-        test.extend(vec![1, 0, 0, 0]); // fullbox
-        test.extend(vec![0, 0, 0, 2]); // count
-        test.extend(vec![1, 2, 3, 4, 1, 2, 3, 4,
-                         5, 6, 7, 8, 5, 6, 7, 8,
-                         9, 10,
-                         11, 12]);
-        test.extend(vec![1, 2, 3, 4, 1, 2, 3, 4,
-                         5, 6, 7, 8, 5, 6, 7, 8,
-                         9, 10,
-                         11, 12]);
-        assert_eq!(test.len(), 56);
+        let mut stream = make_box(56, b"elst", |s| {
+            s
+                .B8(1)             // fullbox version
+                .B8(0).B8(0).B8(0) // fullbox flags
+                .B32(2) // list count
+                // first entry
+                .B64(1234) // duration
+                .B64(5678) // time
+                .B16(12) // rate integer
+                .B16(34) // rate fraction
+                // second entry
+                .B64(1234) // duration
+                .B64(5678) // time
+                .B16(12) // rate integer
+                .B16(34) // rate fraction
 
-        let mut stream = Cursor::new(test);
+        });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_elst(&mut stream, &header).unwrap();
         assert_eq!(parsed.header.name, FourCC(*b"elst"));
         assert_eq!(parsed.header.size, 56);
         assert_eq!(parsed.edits.len(), 2);
-        assert_eq!(parsed.edits[1].segment_duration, 72623859723010820);
-        assert_eq!(parsed.edits[1].media_time, 361984551075317512);
-        assert_eq!(parsed.edits[1].media_rate_integer, 2314);
-        assert_eq!(parsed.edits[1].media_rate_fraction, 2828);
+        assert_eq!(parsed.edits[1].segment_duration, 1234);
+        assert_eq!(parsed.edits[1].media_time, 5678);
+        assert_eq!(parsed.edits[1].media_rate_integer, 12);
+        assert_eq!(parsed.edits[1].media_rate_fraction, 34);
     }
 
     #[test]
     fn read_mdhd_v0() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 32]; // size
-        write!(&mut test, "mdhd").unwrap(); // type
-        test.extend(vec![0, 0, 0, 0]); // fullbox
-        test.extend(vec![0, 0, 0, 0,
-                         0, 0, 0, 0,
-                         1, 2, 3, 4,
-                         5, 6, 7, 8,
-                         0, 0, 0, 0]);
-        assert_eq!(test.len(), 32);
-
-        let mut stream = Cursor::new(test);
+        let mut stream = make_box(32, b"mdhd", |s| {
+            s
+                .B8(0)             // fullbox version
+                .B8(0).B8(0).B8(0) // fullbox flags
+                .B32(0).B32(0)
+                .B32(1234) // timescale
+                .B32(5678) // duration
+                .B32(0)
+        });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_mdhd(&mut stream, &header).unwrap();
         assert_eq!(parsed.header.name, FourCC(*b"mdhd"));
         assert_eq!(parsed.header.size, 32);
-        assert_eq!(parsed.timescale, 16909060);
-        assert_eq!(parsed.duration, 84281096);
+        assert_eq!(parsed.timescale, 1234);
+        assert_eq!(parsed.duration, 5678);
     }
 
     #[test]
     fn read_mdhd_v1() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 44]; // size
-        write!(&mut test, "mdhd").unwrap(); // type
-        test.extend(vec![1, 0, 0, 0]); // fullbox
-        test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
-                         0, 0, 0, 0, 0, 0, 0, 0,
-                         1, 2, 3, 4,
-                         5, 6, 7, 8, 5, 6, 7, 8,
-                         0, 0, 0, 0]);
-        assert_eq!(test.len(), 44);
-
-        let mut stream = Cursor::new(test);
+        let mut stream = make_box(44, b"mdhd", |s| {
+            s
+                .B8(1)             // fullbox version
+                .B8(0).B8(0).B8(0) // fullbox flags
+                .B64(0).B64(0)
+                .B32(1234) // timescale
+                .B64(5678) // duration
+                .B32(0)
+        });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_mdhd(&mut stream, &header).unwrap();
         assert_eq!(parsed.header.name, FourCC(*b"mdhd"));
         assert_eq!(parsed.header.size, 44);
-        assert_eq!(parsed.timescale, 16909060);
-        assert_eq!(parsed.duration, 361984551075317512);
+        assert_eq!(parsed.timescale, 1234);
+        assert_eq!(parsed.duration, 5678);
     }
 
     #[test]
     fn read_mdhd_unknown_duration() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 32]; // size
-        write!(&mut test, "mdhd").unwrap(); // type
-        test.extend(vec![0, 0, 0, 0]); // fullbox
-        test.extend(vec![0, 0, 0, 0,
-                         0, 0, 0, 0,
-                         1, 2, 3, 4,
-                         0xff, 0xff, 0xff, 0xff,
-                         0, 0, 0, 0]);
-        assert_eq!(test.len(), 32);
-
-        let mut stream = Cursor::new(test);
+        let mut stream = make_box(32, b"mdhd", |s| {
+            s
+                .B8(0)             // fullbox version
+                .B8(0).B8(0).B8(0) // fullbox flags
+                .B32(0).B32(0)
+                .B32(1234) // timescale
+                .B32(::std::u32::MAX) // duration
+                .B32(0)
+        });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_mdhd(&mut stream, &header).unwrap();
         assert_eq!(parsed.header.name, FourCC(*b"mdhd"));
         assert_eq!(parsed.header.size, 32);
-        assert_eq!(parsed.timescale, 16909060);
+        assert_eq!(parsed.timescale, 1234);
         assert_eq!(parsed.duration, ::std::u64::MAX);
     }
 
     #[test]
     fn read_mdhd_invalid_timescale() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 44]; // size
-        write!(&mut test, "mdhd").unwrap(); // type
-        test.extend(vec![1, 0, 0, 0]); // fullbox
-        test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
-                         0, 0, 0, 0, 0, 0, 0, 0,
-                         0, 0, 0, 0,
-                         5, 6, 7, 8, 5, 6, 7, 8,
-                         0, 0, 0, 0]);
-        assert_eq!(test.len(), 44);
-
-        let mut stream = Cursor::new(test);
+        let mut stream = make_box(44, b"mdhd", |s| {
+            s
+                .B8(1)             // fullbox version
+                .B8(0).B8(0).B8(0) // fullbox flags
+                .B64(0).B64(0)
+                .B32(0) // timescale
+                .B64(5678) // duration
+                .B32(0)
+        });
         let header = read_box_header(&mut stream).unwrap();
         let r = super::parse_mdhd(&mut stream, &header, 0);
         assert_eq!(r.is_err(), true);
@@ -1312,59 +1309,53 @@ mod tests {
 
     #[test]
     fn read_mvhd_v0() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 108]; // size
-        write!(&mut test, "mvhd").unwrap(); // type
-        test.extend(vec![0, 0, 0, 0]); // fullbox
-        test.extend(vec![0, 0, 0, 0,
-                         0, 0, 0, 0,
-                         1, 2, 3, 4,
-                         5, 6, 7, 8]);
-        test.extend(vec![0; 80]);
-        assert_eq!(test.len(), 108);
-
-        let mut stream = Cursor::new(test);
+        let mut stream = make_box(108, b"mvhd", |s| {
+            s
+                .B8(0)             // fullbox version
+                .B8(0).B8(0).B8(0) // fullbox flags
+                .B32(0).B32(0)
+                .B32(1234)
+                .B32(5678)
+                .append_repeated(0, 80)
+        });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_mvhd(&mut stream, &header).unwrap();
         assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
         assert_eq!(parsed.header.size, 108);
-        assert_eq!(parsed.timescale, 16909060);
-        assert_eq!(parsed.duration, 84281096);
+        assert_eq!(parsed.timescale, 1234);
+        assert_eq!(parsed.duration, 5678);
     }
 
     #[test]
     fn read_mvhd_v1() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 120]; // size
-        write!(&mut test, "mvhd").unwrap(); // type
-        test.extend(vec![1, 0, 0, 0]); // fullbox
-        test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
-                         0, 0, 0, 0, 0, 0, 0, 0,
-                         1, 2, 3, 4,
-                         5, 6, 7, 8, 5, 6, 7, 8]);
-        test.extend(vec![0; 80]);
-        assert_eq!(test.len(), 120);
-
-        let mut stream = Cursor::new(test);
+        let mut stream = make_box(120, b"mvhd", |s| {
+            s
+                .B8(1)             // fullbox version
+                .B8(0).B8(0).B8(0) // fullbox flags
+                .B64(0).B64(0)
+                .B32(1234)
+                .B64(5678)
+                .append_repeated(0, 80)
+        });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_mvhd(&mut stream, &header).unwrap();
         assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
         assert_eq!(parsed.header.size, 120);
-        assert_eq!(parsed.timescale, 16909060);
-        assert_eq!(parsed.duration, 361984551075317512);
+        assert_eq!(parsed.timescale, 1234);
+        assert_eq!(parsed.duration, 5678);
     }
 
     #[test]
     fn read_mvhd_invalid_timescale() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 120]; // size
-        write!(&mut test, "mvhd").unwrap(); // type
-        test.extend(vec![1, 0, 0, 0]); // fullbox
-        test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
-                         0, 0, 0, 0, 0, 0, 0, 0,
-                         0, 0, 0, 0,
-                         5, 6, 7, 8, 5, 6, 7, 8]);
-        test.extend(vec![0; 80]);
-        assert_eq!(test.len(), 120);
-
-        let mut stream = Cursor::new(test);
+        let mut stream = make_box(120, b"mvhd", |s| {
+            s
+                .B8(1)             // fullbox version
+                .B8(0).B8(0).B8(0) // fullbox flags
+                .B64(0).B64(0)
+                .B32(0)
+                .B64(5678)
+                .append_repeated(0, 80)
+        });
         let header = read_box_header(&mut stream).unwrap();
         let r = super::parse_mvhd(&mut stream, &header);
         assert_eq!(r.is_err(), true);
@@ -1372,22 +1363,20 @@ mod tests {
 
     #[test]
     fn read_mvhd_unknown_duration() {
-        let mut test: Vec<u8> = vec![0, 0, 0, 108]; // size
-        write!(&mut test, "mvhd").unwrap(); // type
-        test.extend(vec![0, 0, 0, 0]); // fullbox
-        test.extend(vec![0, 0, 0, 0,
-                         0, 0, 0, 0,
-                         1, 2, 3, 4,
-                         0xff, 0xff, 0xff, 0xff]);
-        test.extend(vec![0; 80]);
-        assert_eq!(test.len(), 108);
-
-        let mut stream = Cursor::new(test);
+        let mut stream = make_box(108, b"mvhd", |s| {
+            s
+                .B8(0)             // fullbox version
+                .B8(0).B8(0).B8(0) // fullbox flags
+                .B32(0).B32(0)
+                .B32(1234)
+                .B32(::std::u32::MAX)
+                .append_repeated(0, 80)
+        });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_mvhd(&mut stream, &header).unwrap();
         assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
         assert_eq!(parsed.header.size, 108);
-        assert_eq!(parsed.timescale, 16909060);
+        assert_eq!(parsed.timescale, 1234);
         assert_eq!(parsed.duration, ::std::u64::MAX);
     }
 }
