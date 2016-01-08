@@ -674,7 +674,14 @@ fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     let timescale = try!(be_u32(src));
     let duration = match version {
         1 => try!(be_u64(src)),
-        0 => try!(be_u32(src)) as u64,
+        0 => {
+            let d = try!(be_u32(src));
+            if d == std::u32::MAX {
+                std::u64::MAX
+            } else {
+                d as u64
+            }
+        }
         _ => return Err(Error::InvalidData),
     };
     // Skip remaining fields.
