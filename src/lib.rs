@@ -1122,11 +1122,11 @@ fn be_fourcc<T: Read>(src: &mut T) -> Result<FourCC> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Cursor, Write};
     use super::*;
 
     #[test]
     fn read_box_header_short() {
-        use std::io::{Cursor, Write};
         let mut test: Vec<u8> = vec![0, 0, 0, 8]; // minimal box length
         write!(&mut test, "test").unwrap(); // box type
         let mut stream = Cursor::new(test);
@@ -1137,7 +1137,6 @@ mod tests {
 
     #[test]
     fn read_box_header_long() {
-        use std::io::Cursor;
         let mut test: Vec<u8> = vec![0, 0, 0, 1]; // long box extension code
         test.extend("long".to_string().into_bytes()); // box type
         test.extend(vec![0, 0, 0, 0, 0, 0, 16, 0]); // 64 bit size
@@ -1150,7 +1149,6 @@ mod tests {
 
     #[test]
     fn read_ftyp() {
-        use std::io::{Cursor, Write};
         let mut test: Vec<u8> = vec![0, 0, 0, 24]; // size
         write!(&mut test, "ftyp").unwrap(); // type
         write!(&mut test, "mp42").unwrap(); // major brand
@@ -1173,7 +1171,6 @@ mod tests {
 
     #[test]
     fn read_elst_v0() {
-        use std::io::{Cursor, Write};
         let mut test: Vec<u8> = vec![0, 0, 0, 28]; // size
         write!(&mut test, "elst").unwrap(); // type
         test.extend(vec![0, 0, 0, 0]); // fullbox
@@ -1198,7 +1195,6 @@ mod tests {
 
     #[test]
     fn read_elst_v1() {
-        use std::io::{Cursor, Write};
         let mut test: Vec<u8> = vec![0, 0, 0, 56]; // size
         write!(&mut test, "elst").unwrap(); // type
         test.extend(vec![1, 0, 0, 0]); // fullbox
@@ -1227,7 +1223,6 @@ mod tests {
 
     #[test]
     fn read_mdhd_v0() {
-        use std::io::{Cursor, Write};
         let mut test: Vec<u8> = vec![0, 0, 0, 32]; // size
         write!(&mut test, "mdhd").unwrap(); // type
         test.extend(vec![0, 0, 0, 0]); // fullbox
@@ -1249,7 +1244,6 @@ mod tests {
 
     #[test]
     fn read_mdhd_v1() {
-        use std::io::{Cursor, Write};
         let mut test: Vec<u8> = vec![0, 0, 0, 44]; // size
         write!(&mut test, "mdhd").unwrap(); // type
         test.extend(vec![1, 0, 0, 0]); // fullbox
@@ -1271,7 +1265,6 @@ mod tests {
 
     #[test]
     fn read_mdhd_unknown_duration() {
-        use std::io::{Cursor, Write};
         let mut test: Vec<u8> = vec![0, 0, 0, 32]; // size
         write!(&mut test, "mdhd").unwrap(); // type
         test.extend(vec![0, 0, 0, 0]); // fullbox
@@ -1293,7 +1286,6 @@ mod tests {
 
     #[test]
     fn read_mdhd_invalid_timescale() {
-        use std::io::{Cursor, Write};
         let mut test: Vec<u8> = vec![0, 0, 0, 44]; // size
         write!(&mut test, "mdhd").unwrap(); // type
         test.extend(vec![1, 0, 0, 0]); // fullbox
@@ -1312,7 +1304,6 @@ mod tests {
 
     #[test]
     fn read_mvhd_v0() {
-        use std::io::{Cursor, Write};
         let mut test: Vec<u8> = vec![0, 0, 0, 108]; // size
         write!(&mut test, "mvhd").unwrap(); // type
         test.extend(vec![0, 0, 0, 0]); // fullbox
@@ -1334,7 +1325,6 @@ mod tests {
 
     #[test]
     fn read_mvhd_v1() {
-        use std::io::{Cursor, Write};
         let mut test: Vec<u8> = vec![0, 0, 0, 120]; // size
         write!(&mut test, "mvhd").unwrap(); // type
         test.extend(vec![1, 0, 0, 0]); // fullbox
@@ -1356,7 +1346,6 @@ mod tests {
 
     #[test]
     fn read_mvhd_invalid_timescale() {
-        use std::io::{Cursor, Write};
         let mut test: Vec<u8> = vec![0, 0, 0, 120]; // size
         write!(&mut test, "mvhd").unwrap(); // type
         test.extend(vec![1, 0, 0, 0]); // fullbox
@@ -1375,7 +1364,6 @@ mod tests {
 
     #[test]
     fn read_mvhd_unknown_duration() {
-        use std::io::{Cursor, Write};
         let mut test: Vec<u8> = vec![0, 0, 0, 108]; // size
         write!(&mut test, "mvhd").unwrap(); // type
         test.extend(vec![0, 0, 0, 0]); // fullbox
