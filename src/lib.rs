@@ -436,16 +436,21 @@ pub fn read_mp4<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
     })
 }
 
+fn parse_mvhd<T: BufRead>(f: &mut T, h: &BoxHeader) -> Result<(MovieHeaderBox, Option<MediaTimeScale>)> {
+    let mvhd = try!(read_mvhd(f, &h));
+    if mvhd.timescale == 0 {
+        return Err(Error::InvalidData);
+    }
+    let timescale = Some(MediaTimeScale(mvhd.timescale as u64));
+    Ok((mvhd, timescale))
+}
+
 fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -> Result<()> {
     driver(f, context, |context, h, mut content| {
         match &h.name.0 {
             b"mvhd" => {
-                let mvhd = try!(read_mvhd(&mut content, &h));
-                if mvhd.timescale > 0 {
-                    context.timescale = Some(MediaTimeScale(mvhd.timescale as u64));
-                } else {
-                    return Err(Error::InvalidData);
-                }
+                let (mvhd, timescale) = try!(parse_mvhd(content, &h));
+                context.timescale = timescale;
                 log!(context, "  {:?}", mvhd);
             }
             b"trak" => {
@@ -1307,4 +1312,92 @@ fn test_read_mdhd_invalid_timescale() {
     let header = read_box_header(&mut stream).unwrap();
     let r = parse_mdhd(&mut stream, &header, 0);
     assert_eq!(r.is_err(), true);
+}
+
+#[test]
+fn test_read_mvhd_v0() {
+    use std::io::{Cursor, Write};
+    let mut test: Vec<u8> = vec![0, 0, 0, 108]; // size
+    write!(&mut test, "mvhd").unwrap(); // type
+    test.extend(vec![0, 0, 0, 0]); // fullbox
+    test.extend(vec![0, 0, 0, 0,
+                     0, 0, 0, 0,
+                     1, 2, 3, 4,
+                     5, 6, 7, 8]);
+    test.extend(vec![0; 80]);
+    assert_eq!(test.len(), 108);
+
+        let mut stream = Cursor::new(test);
+    let header = read_box_header(&mut stream).unwrap();
+    let parsed = read_mvhd(&mut stream, &header).unwrap();
+    assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
+    assert_eq!(parsed.header.size, 108);
+    assert_eq!(parsed.timescale, 16909060);
+    assert_eq!(parsed.duration, 84281096);
+    println!("box {:?}", parsed);
+}
+
+#[test]
+fn test_read_mvhd_v1() {
+    use std::io::{Cursor, Write};
+    let mut test: Vec<u8> = vec![0, 0, 0, 120]; // size
+    write!(&mut test, "mvhd").unwrap(); // type
+    test.extend(vec![1, 0, 0, 0]); // fullbox
+    test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
+                     0, 0, 0, 0, 0, 0, 0, 0,
+                     1, 2, 3, 4,
+                     5, 6, 7, 8, 5, 6, 7, 8]);
+    test.extend(vec![0; 80]);
+    assert_eq!(test.len(), 120);
+
+        let mut stream = Cursor::new(test);
+    let header = read_box_header(&mut stream).unwrap();
+    let parsed = read_mvhd(&mut stream, &header).unwrap();
+    assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
+    assert_eq!(parsed.header.size, 120);
+    assert_eq!(parsed.timescale, 16909060);
+    assert_eq!(parsed.duration, 361984551075317512);
+    println!("box {:?}", parsed);
+}
+
+#[test]
+fn test_read_mvhd_invalid_timescale() {
+    use std::io::{Cursor, Write};
+    let mut test: Vec<u8> = vec![0, 0, 0, 120]; // size
+    write!(&mut test, "mvhd").unwrap(); // type
+    test.extend(vec![1, 0, 0, 0]); // fullbox
+    test.extend(vec![0, 0, 0, 0, 0, 0, 0, 0,
+                     0, 0, 0, 0, 0, 0, 0, 0,
+                     0, 0, 0, 0,
+                     5, 6, 7, 8, 5, 6, 7, 8]);
+    test.extend(vec![0; 80]);
+    assert_eq!(test.len(), 120);
+
+    let mut stream = Cursor::new(test);
+    let header = read_box_header(&mut stream).unwrap();
+    let r = parse_mvhd(&mut stream, &header);
+    assert_eq!(r.is_err(), true);
+}
+
+#[test]
+fn test_read_mvhd_unknown_duration() {
+    use std::io::{Cursor, Write};
+    let mut test: Vec<u8> = vec![0, 0, 0, 108]; // size
+    write!(&mut test, "mvhd").unwrap(); // type
+    test.extend(vec![0, 0, 0, 0]); // fullbox
+    test.extend(vec![0, 0, 0, 0,
+                     0, 0, 0, 0,
+                     1, 2, 3, 4,
+                     0xff, 0xff, 0xff, 0xff]);
+    test.extend(vec![0; 80]);
+    assert_eq!(test.len(), 108);
+
+    let mut stream = Cursor::new(test);
+    let header = read_box_header(&mut stream).unwrap();
+    let parsed = read_mvhd(&mut stream, &header).unwrap();
+    assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
+    assert_eq!(parsed.header.size, 108);
+    assert_eq!(parsed.timescale, 16909060);
+    assert_eq!(parsed.duration, std::u64::MAX);
+    println!("box {:?}", parsed);
 }
