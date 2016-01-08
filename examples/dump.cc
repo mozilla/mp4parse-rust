@@ -65,7 +65,7 @@ void read_file(const char* filename)
   FILE* f = fopen(filename, "rb");
   assert(f != nullptr);
 
-  size_t len = 4096;
+  size_t len = 4096*16;
   std::vector<uint8_t> buf(len);
   size_t read = fread(buf.data(), sizeof(decltype(buf)::value_type), buf.size(), f);
   buf.resize(read);
