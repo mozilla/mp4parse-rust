@@ -28,6 +28,8 @@ pub enum Error {
     Unsupported,
     /// Reflect `byteorder::Error::UnexpectedEOF` for short data.
     UnexpectedEOF,
+    /// Caught panic! or assert! meaning the parser couldn't recover.
+    AssertCaught,
     /// Propagate underlying errors from `std::io`.
     Io(std::io::Error),
 }
@@ -402,6 +404,10 @@ fn driver<F, T: BufRead>(f: &mut T, context: &mut MediaContext, action: F) -> Re
             Err(Error::Unsupported) => {
                 log!(context, "Unsupported BMFF construct");
                 return Err(Error::Unsupported);
+            }
+            Err(Error::AssertCaught) => {
+                log!(context, "Unrecoverable error or assertion");
+                return Err(Error::AssertCaught);
             }
             Err(Error::Io(e)) => {
                 log!(context,

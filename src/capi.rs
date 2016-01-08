@@ -42,7 +42,8 @@ const MP4PARSE_ERROR_BADARG: i32 = -1;
 const MP4PARSE_ERROR_INVALID: i32 = -2;
 const MP4PARSE_ERROR_UNSUPPORTED: i32 = -3;
 const MP4PARSE_ERROR_EOF: i32 = -4;
-const MP4PARSE_ERROR_IO: i32 = -5;
+const MP4PARSE_ASSERT: i32 = -5;
+const MP4PARSE_ERROR_IO: i32 = -6;
 
 /// Map TrackType to uint32 constants.
 const TRACK_TYPE_H264: u32 = 0;
@@ -92,7 +93,7 @@ pub unsafe extern "C" fn mp4parse_free(context: *mut MediaContext) {
 }
 
 /// Feed a buffer through `read_mp4()` with the given rust-side
-/// parser context, returning the number of detected tracks.
+/// parser context, returning success or an error code.
 ///
 /// This is safe to call with NULL arguments but will crash
 /// if given invalid pointers, as is usual for C.
@@ -111,19 +112,33 @@ pub unsafe extern "C" fn mp4parse_read(context: *mut MediaContext, buffer: *cons
 
     // Parse in a subthread to catch any panics.
     let task = std::thread::spawn(move || {
-        match read_mp4(&mut c, &mut context) {
-            Ok(_) => {}
-            Err(Error::UnexpectedEOF) => {}
-            Err(e) => {
-                panic!(e);
-            }
-        }
-        // Make sure the track count fits in an i32 so we can use
-        // negative values for failure.
-        assert!(context.tracks.len() < i32::max_value() as usize);
-        context.tracks.len() as i32
+        read_mp4(&mut c, &mut context)
     });
-    task.join().unwrap_or(MP4PARSE_ERROR_BADARG)
+    // The task's JoinHandle will return an error result if the
+    // thread panicked, and will wrap the closure's return'd
+    // result in an Ok(..) otherwise, meaning we could see
+    // Ok(Err(Error::..)) here. So map thread failures back
+    // to an mp4parse::Error before converting to a C return value.
+    match task.join().or(Err(Error::AssertCaught)) {
+        Ok(_) => MP4PARSE_OK,
+        Err(Error::InvalidData) => MP4PARSE_ERROR_INVALID,
+        Err(Error::Unsupported) => MP4PARSE_ERROR_UNSUPPORTED,
+        Err(Error::UnexpectedEOF) => MP4PARSE_ERROR_EOF,
+        Err(Error::AssertCaught) => MP4PARSE_ASSERT,
+        Err(Error::Io(_)) => MP4PARSE_ERROR_IO,
+    }
+}
+
+/// Return the number of tracks parsed by previous `read_mp4()` calls.
+#[no_mangle]
+pub unsafe extern "C" fn mp4parse_get_track_count(context: *const MediaContext) -> u32 {
+    // Validate argument from C.
+    assert!(!context.is_null());
+    let context = &*context;
+
+    // Make sure the track count fits in a u32.
+    assert!(context.tracks.len() < u32::max_value() as usize);
+    context.tracks.len() as u32
 }
 
 #[no_mangle]

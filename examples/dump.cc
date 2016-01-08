@@ -91,13 +91,14 @@ int32_t read_file(const char* filename)
 
   fprintf(stderr, "Parsing %lu byte buffer.\n", (unsigned long)read);
   int32_t rv = mp4parse_read(context, buf.data(), buf.size());
-  if (rv < MP4PARSE_OK) {
+  if (rv != MP4PARSE_OK) {
     fprintf(stderr, "Parsing failed: %s\n", errorstring(rv));
     return rv;
   }
-  fprintf(stderr, "%d tracks returned to C code.\n", rv);
+  uint32_t tracks = mp4parse_get_track_count(context);
+  fprintf(stderr, "%u tracks returned to C code.\n", tracks);
 
-  for (int i = 0; i < rv; ++i) {
+  for (uint32_t i = 0; i < tracks; ++i) {
     mp4parse_track_info track_info;
     int32_t rv2 = mp4parse_get_track_info(context, i, &track_info);
     assert(rv2 >= 0);
