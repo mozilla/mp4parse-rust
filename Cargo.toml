@@ -20,4 +20,6 @@ exclude = [
 
 [dependencies]
 byteorder = "0.4.2"
+
+[dev-dependencies]
 test-assembler = "0.1.0"
