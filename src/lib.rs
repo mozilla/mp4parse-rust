@@ -488,7 +488,7 @@ fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
                 try!(skip_box_content(&mut content, &h));
             }
         };
-        Ok(()) // and_then needs a Result to return.
+        Ok(())
     })
 }
 
