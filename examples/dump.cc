@@ -60,7 +60,22 @@ const char * tracktype2mimetype(uint32_t type)
   return "unknown";
 }
 
-void read_file(const char* filename)
+const char * errorstring(int32_t error)
+{
+  if (error >= MP4PARSE_OK) {
+    return "Ok";
+  }
+  switch (error) {
+    case MP4PARSE_ERROR_BADARG: return "Invalid argument";
+    case MP4PARSE_ERROR_INVALID: return "Invalid data";
+    case MP4PARSE_ERROR_UNSUPPORTED: return "Feature unsupported";
+    case MP4PARSE_ERROR_EOF: return "Unexpected end-of-file";
+    case MP4PARSE_ERROR_IO: return "I/O error";
+  }
+  return "Unknown error";
+}
+
+int32_t read_file(const char* filename)
 {
   FILE* f = fopen(filename, "rb");
   assert(f != nullptr);
@@ -76,7 +91,10 @@ void read_file(const char* filename)
 
   fprintf(stderr, "Parsing %lu byte buffer.\n", (unsigned long)read);
   int32_t rv = mp4parse_read(context, buf.data(), buf.size());
-  assert(rv >= 0);
+  if (rv < MP4PARSE_OK) {
+    fprintf(stderr, "Parsing failed: %s\n", errorstring(rv));
+    return rv;
+  }
   fprintf(stderr, "%d tracks returned to C code.\n", rv);
 
   for (int i = 0; i < rv; ++i) {
@@ -88,6 +106,8 @@ void read_file(const char* filename)
   }
 
   mp4parse_free(context);
+
+  return MP4PARSE_OK;
 }
 
 int main(int argc, char* argv[])
