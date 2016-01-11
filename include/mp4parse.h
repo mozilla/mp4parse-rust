@@ -60,11 +60,11 @@ int32_t mp4parse_read(struct mp4parse_state* state, uint8_t *buffer, size_t size
 
 uint32_t mp4parse_get_track_count(struct mp4parse_state* state);
 
-int32_t mp4parse_get_track_info(struct mp4parse_state* state, int32_t track, struct mp4parse_track_info* track_info);
+int32_t mp4parse_get_track_info(struct mp4parse_state* state, uint32_t track, struct mp4parse_track_info* track_info);
 
-int32_t mp4parse_get_track_audio_info(struct mp4parse_state* state, int32_t track, struct mp4parse_track_audio_info* track_info);
+int32_t mp4parse_get_track_audio_info(struct mp4parse_state* state, uint32_t track, struct mp4parse_track_audio_info* track_info);
 
-int32_t mp4parse_get_track_video_info(struct mp4parse_state* state, int32_t track, struct mp4parse_track_video_info* track_info);
+int32_t mp4parse_get_track_video_info(struct mp4parse_state* state, uint32_t track, struct mp4parse_track_video_info* track_info);
 
 #ifdef __cplusplus
 }

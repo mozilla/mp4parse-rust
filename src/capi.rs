@@ -142,8 +142,8 @@ pub unsafe extern "C" fn mp4parse_get_track_count(context: *const MediaContext) 
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut MediaContext, track: i32, info: *mut TrackInfo) -> i32 {
-    if context.is_null() || track < 0 || info.is_null() {
+pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut MediaContext, track: u32, info: *mut TrackInfo) -> i32 {
+    if context.is_null() || info.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
 
@@ -188,8 +188,8 @@ pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut MediaContext, tra
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mp4parse_get_track_audio_info(context: *mut MediaContext, track: i32, info: *mut TrackAudioInfo) -> i32 {
-    if context.is_null() || track < 0 || info.is_null() {
+pub unsafe extern "C" fn mp4parse_get_track_audio_info(context: *mut MediaContext, track: u32, info: *mut TrackAudioInfo) -> i32 {
+    if context.is_null() || info.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
 
@@ -224,8 +224,8 @@ pub unsafe extern "C" fn mp4parse_get_track_audio_info(context: *mut MediaContex
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mp4parse_get_track_video_info(context: *mut MediaContext, track: i32, info: *mut TrackVideoInfo) -> i32 {
-    if context.is_null() || track < 0 || info.is_null() {
+pub unsafe extern "C" fn mp4parse_get_track_video_info(context: *mut MediaContext, track: u32, info: *mut TrackVideoInfo) -> i32 {
+    if context.is_null() || info.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
 
