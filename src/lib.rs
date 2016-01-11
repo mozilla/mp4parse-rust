@@ -13,8 +13,7 @@ use std::fmt;
 
 // Expose C api wrapper.
 pub mod capi;
-// FIXME: We can 'pub use capi::*' in rustc 1.5 and later.
-pub use capi::{mp4parse_new, mp4parse_free, mp4parse_read};
+pub use capi::*;
 
 /// Describes parser failures.
 ///
