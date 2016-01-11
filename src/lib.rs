@@ -285,6 +285,7 @@ struct TrackScaledTime(u64, usize);
 
 #[derive(Debug)]
 struct Track {
+    id: usize,
     track_type: TrackType,
     empty_duration: Option<MediaScaledTime>,
     media_time: Option<TrackScaledTime>,
@@ -297,8 +298,9 @@ struct Track {
 }
 
 impl Track {
-    fn new() -> Track {
+    fn new(id: usize) -> Track {
         Track {
+            id: id,
             track_type: TrackType::Unknown,
             empty_duration: None,
             media_time: None,
@@ -373,8 +375,8 @@ fn limit<'a, T: BufRead>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
     f.take(h.size - h.offset)
 }
 
-fn driver<F, T: BufRead>(f: &mut T, context: &mut MediaContext, action: F) -> Result<()>
-    where F: Fn(&mut MediaContext, BoxHeader, &mut Take<&mut T>) -> Result<()>
+fn driver<F, T: BufRead>(f: &mut T, context: &mut MediaContext, mut action: F) -> Result<()>
+    where F: FnMut(&mut MediaContext, BoxHeader, &mut Take<&mut T>) -> Result<()>
 {
     loop {
         let r = read_box_header(f).and_then(|h| {
@@ -460,8 +462,9 @@ fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
                 log!(context, "  {:?}", mvhd);
             }
             b"trak" => {
-                context.tracks.push(Track::new());
-                try!(read_trak(&mut content, &h, context));
+                let mut track = Track::new(context.tracks.len());
+                try!(read_trak(&mut content, &h, context, &mut track));
+                context.tracks.push(track);
             }
             _ => {
                 // Skip the contents of unknown chunks.
@@ -473,21 +476,17 @@ fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
     })
 }
 
-fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -> Result<()> {
+fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     driver(f, context, |context, h, mut content| {
         match &h.name.0 {
             b"tkhd" => {
                 let tkhd = try!(read_tkhd(&mut content, &h));
-                if let Some(track) = context.tracks.last_mut() {
-                    track.track_id = Some(tkhd.track_id);
-                    track.tkhd = Some(tkhd.clone())
-                } else {
-                    return Err(Error::InvalidData);
-                }
+                track.track_id = Some(tkhd.track_id);
+                track.tkhd = Some(tkhd.clone());
                 log!(context, "  {:?}", tkhd);
             }
-            b"edts" => try!(read_edts(&mut content, &h, context)),
-            b"mdia" => try!(read_mdia(&mut content, &h, context)),
+            b"edts" => try!(read_edts(&mut content, &h, context, track)),
+            b"mdia" => try!(read_mdia(&mut content, &h, context, track)),
             _ => {
                 // Skip the contents of unknown chunks.
                 log!(context, "{:?} (skipped)", h);
@@ -498,31 +497,26 @@ fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
     })
 }
 
-fn read_edts<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -> Result<()> {
+fn read_edts<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     driver(f, context, |context, h, mut content| {
         match &h.name.0 {
             b"elst" => {
                 let elst = try!(read_elst(&mut content, &h));
                 let mut empty_duration = 0;
-                let track_idx = context.tracks.len() - 1;
-                if let Some(track) = context.tracks.last_mut() {
-                    let mut idx = 0;
-                    if elst.edits.len() > 2 {
-                        return Err(Error::Unsupported);
-                    }
-                    if elst.edits[idx].media_time == -1 {
-                        empty_duration = elst.edits[0].segment_duration;
-                        idx += 1;
-                    }
-                    track.empty_duration = Some(MediaScaledTime(empty_duration));
-                    if elst.edits[idx].media_time < 0 {
-                        return Err(Error::InvalidData);
-                    }
-                    track.media_time = Some(TrackScaledTime(elst.edits[idx].media_time as u64,
-                                                            track_idx));
-                } else {
+                let mut idx = 0;
+                if elst.edits.len() > 2 {
+                    return Err(Error::Unsupported);
+                }
+                if elst.edits[idx].media_time == -1 {
+                    empty_duration = elst.edits[0].segment_duration;
+                    idx += 1;
+                }
+                track.empty_duration = Some(MediaScaledTime(empty_duration));
+                if elst.edits[idx].media_time < 0 {
                     return Err(Error::InvalidData);
                 }
+                track.media_time = Some(TrackScaledTime(elst.edits[idx].media_time as u64,
+                                                        track.id));
                 log!(context, "  {:?}", elst);
             }
             _ => {
@@ -535,48 +529,38 @@ fn read_edts<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
     })
 }
 
-fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track_idx: usize) -> Result<(MediaHeaderBox, Option<TrackScaledTime>, Option<TrackTimeScale>)> {
+fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track: &mut Track) -> Result<(MediaHeaderBox, Option<TrackScaledTime>, Option<TrackTimeScale>)> {
     let mdhd = try!(read_mdhd(f, h));
     let duration = match mdhd.duration {
         std::u64::MAX => None,
-        duration => Some(TrackScaledTime(duration, track_idx)),
+        duration => Some(TrackScaledTime(duration, track.id)),
     };
     if mdhd.timescale == 0 {
         return Err(Error::InvalidData);
     }
-    let timescale = Some(TrackTimeScale(mdhd.timescale as u64, track_idx));
+    let timescale = Some(TrackTimeScale(mdhd.timescale as u64, track.id));
     Ok((mdhd, duration, timescale))
 }
 
-fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -> Result<()> {
+fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     driver(f, context, |context, h, mut content| {
         match &h.name.0 {
             b"mdhd" => {
-                let track_idx = context.tracks.len() - 1;
-                let (mdhd, duration, timescale) = try!(parse_mdhd(content, &h, track_idx));
-
-                if let Some(track) = context.tracks.last_mut() {
-                    track.duration = duration;
-                    track.timescale = timescale;
-                } else {
-                    return Err(Error::InvalidData);
-                }
+                let (mdhd, duration, timescale) = try!(parse_mdhd(content, &h, track));
+                track.duration = duration;
+                track.timescale = timescale;
                 log!(context, "  {:?}", mdhd);
             }
             b"hdlr" => {
                 let hdlr = try!(read_hdlr(&mut content, &h));
-                if let Some(track) = context.tracks.last_mut() {
-                    match &hdlr.handler_type.0 {
-                        b"vide" => track.track_type = TrackType::Video,
-                        b"soun" => track.track_type = TrackType::Audio,
-                        _ => (),
-                    }
-                } else {
-                    return Err(Error::InvalidData);
+                match &hdlr.handler_type.0 {
+                    b"vide" => track.track_type = TrackType::Video,
+                    b"soun" => track.track_type = TrackType::Audio,
+                    _ => (),
                 }
                 log!(context, "  {:?}", hdlr);
             }
-            b"minf" => try!(read_minf(&mut content, &h, context)),
+            b"minf" => try!(read_minf(&mut content, &h, context, track)),
             _ => {
                 // Skip the contents of unknown chunks.
                 log!(context, "{:?} (skipped)", h);
@@ -587,10 +571,10 @@ fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
     })
 }
 
-fn read_minf<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -> Result<()> {
+fn read_minf<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     driver(f, context, |context, h, mut content| {
         match &h.name.0 {
-            b"stbl" => try!(read_stbl(&mut content, &h, context)),
+            b"stbl" => try!(read_stbl(&mut content, &h, context, track)),
             _ => {
                 // Skip the contents of unknown chunks.
                 log!(context, "{:?} (skipped)", h);
@@ -601,16 +585,12 @@ fn read_minf<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
     })
 }
 
-fn read_stbl<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -> Result<()> {
+fn read_stbl<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     driver(f, context, |context, h, mut content| {
         match &h.name.0 {
             b"stsd" => {
-                if let Some(track) = context.tracks.last_mut() {
-                    let stsd = try!(read_stsd(&mut content, &h, track));
-                    log!(context, "  {:?}", stsd);
-                } else {
-                    return Err(Error::InvalidData);
-                }
+                let stsd = try!(read_stsd(&mut content, &h, track));
+                log!(context, "  {:?}", stsd);
             }
             b"stts" => {
                 let stts = try!(read_stts(&mut content, &h));
@@ -1360,7 +1340,7 @@ mod tests {
              .B32(0)
         });
         let header = read_box_header(&mut stream).unwrap();
-        let r = super::parse_mdhd(&mut stream, &header, 0);
+        let r = super::parse_mdhd(&mut stream, &header, &mut super::Track::new(0));
         assert_eq!(r.is_err(), true);
     }
 
