@@ -1133,32 +1133,51 @@ mod tests {
     extern crate test_assembler;
     use self::test_assembler::*;
 
-    // TODO(kinetik): most of the time we want to assert that size ==
-    //                section.size(), except for the special case of long
-    //                boxes where we pass size == 1 and write the size
-    //                later.  there is also a use case where we want to
-    //                declare the box larger than the data we actually add.
+    enum BoxSize {
+        Short(u32),
+        Long(u64),
+    }
+
+    fn make_box_raw<F>(size: BoxSize, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
+        where F: Fn(Section) -> Section {
+        let mut section = Section::new();
+        section = match size {
+            BoxSize::Short(size) => section.B32(size),
+            BoxSize::Long(_) => section.B32(1),
+        };
+        section = section.append_bytes(name);
+        if let BoxSize::Long(size) = size {
+            // The spec allows the 32-bit size to be 0 to indicate unknown
+            // length streams.  It's not clear if this is valid when using a
+            // 64-bit size, so prohibit it for now.
+            assert!(size > 0);
+            section = section.B64(size);
+        }
+        section = func(section);
+        match size {
+            BoxSize::Short(size) => assert_eq!(size as u64, section.size()),
+            BoxSize::Long(size) => assert_eq!(size, section.size()),
+        }
+        Cursor::new(section.get_contents().unwrap())
+    }
+
     fn make_box<F>(size: u32, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
         where F: Fn(Section) -> Section {
-        let section = Section::new()
-            .B32(size)
-            .append_bytes(name);
-        Cursor::new(func(section).get_contents().unwrap())
+        make_box_raw(BoxSize::Short(size), name, func)
     }
 
     fn make_fullbox<F>(size: u32, name: &[u8; 4], version: u8, func: F) -> Cursor<Vec<u8>>
         where F: Fn(Section) -> Section {
-        let section = Section::new()
-            .B32(size)
-            .append_bytes(name)
-            .B8(version)
-            .B8(0).B8(0).B8(0);
-        Cursor::new(func(section).get_contents().unwrap())
+        make_box_raw(BoxSize::Short(size), name, |s| {
+            func(s
+                 .B8(version)
+                 .B8(0).B8(0).B8(0))
+        })
     }
 
     #[test]
     fn read_box_header_short() {
-        let mut stream = make_box(8, b"test", |s| {
+        let mut stream = make_box_raw(BoxSize::Short(8), b"test", |s| {
             s
         });
         let parsed = read_box_header(&mut stream).unwrap();
@@ -1168,12 +1187,12 @@ mod tests {
 
     #[test]
     fn read_box_header_long() {
-        let mut stream = make_box(1, b"long", |s| {
-            s.B64(4096) // fake 64-bit size
+        let mut stream = make_box_raw(BoxSize::Long(16), b"test", |s| {
+            s
         });
         let parsed = read_box_header(&mut stream).unwrap();
-        assert_eq!(parsed.name, FourCC(*b"long"));
-        assert_eq!(parsed.size, 4096);
+        assert_eq!(parsed.name, FourCC(*b"test"));
+        assert_eq!(parsed.size, 16);
     }
 
     #[test]
