@@ -26,12 +26,6 @@ struct mp4parse_track_audio_info {
   uint16_t channels;
   uint16_t bit_depth;
   uint32_t sample_rate;
-  //int32_t profile;
-  //int32_t extended_profile; // check types
-
-  // TODO(kinetik):
-  // extra_data
-  // codec_specific_config
 };
 
 struct mp4parse_track_video_info {
@@ -39,10 +33,6 @@ struct mp4parse_track_video_info {
   uint32_t display_height;
   uint16_t image_width;
   uint16_t image_height;
-
-  // TODO(kinetik):
-  // extra_data
-  // codec_specific_config
 };
 
 struct mp4parse_track_info {
@@ -50,7 +40,6 @@ struct mp4parse_track_info {
   uint32_t track_id;
   uint64_t duration;
   int64_t media_time;
-  // TODO(kinetik): crypto guff
 };
 
 struct mp4parse_state* mp4parse_new(void);

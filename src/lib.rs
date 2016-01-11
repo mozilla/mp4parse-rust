@@ -94,7 +94,6 @@ struct MovieHeaderBox {
     header: BoxHeader,
     timescale: u32,
     duration: u64,
-    // Ignore other fields.
 }
 
 /// Track header box 'tkhd'
@@ -375,7 +374,8 @@ fn limit<'a, T: BufRead>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
 }
 
 fn driver<F, T: BufRead>(f: &mut T, context: &mut MediaContext, action: F) -> Result<()>
-    where F: Fn(&mut MediaContext, BoxHeader, &mut Take<&mut T>) -> Result<()> {
+    where F: Fn(&mut MediaContext, BoxHeader, &mut Take<&mut T>) -> Result<()>
+{
     loop {
         let r = read_box_header(f).and_then(|h| {
             let mut content = limit(f, &h);
@@ -1141,7 +1141,8 @@ mod tests {
     }
 
     fn make_box_raw<F>(size: BoxSize, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
-        where F: Fn(Section) -> Section {
+        where F: Fn(Section) -> Section
+    {
         let mut section = Section::new();
         section = match size {
             BoxSize::Short(size) | BoxSize::UncheckedShort(size) => section.B32(size),
@@ -1152,13 +1153,20 @@ mod tests {
             // The spec allows the 32-bit size to be 0 to indicate unknown
             // length streams.  It's not clear if this is valid when using a
             // 64-bit size, so prohibit it for now.
-            BoxSize::Long(size) => { assert!(size > 0); section.B64(size) }
+            BoxSize::Long(size) => {
+                assert!(size > 0);
+                section.B64(size)
+            }
             BoxSize::UncheckedLong(size) => section.B64(size),
             _ => section,
         };
         section = func(section);
         match size {
-            BoxSize::Short(size) => if size > 0 { assert_eq!(size as u64, section.size()) },
+            BoxSize::Short(size) => {
+                if size > 0 {
+                    assert_eq!(size as u64, section.size())
+                }
+            }
             BoxSize::Long(size) => assert_eq!(size, section.size()),
             _ => (),
         }
@@ -1166,24 +1174,25 @@ mod tests {
     }
 
     fn make_box<F>(size: u32, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
-        where F: Fn(Section) -> Section {
+        where F: Fn(Section) -> Section
+    {
         make_box_raw(BoxSize::Short(size), name, func)
     }
 
     fn make_fullbox<F>(size: u32, name: &[u8; 4], version: u8, func: F) -> Cursor<Vec<u8>>
-        where F: Fn(Section) -> Section {
+        where F: Fn(Section) -> Section
+    {
         make_box_raw(BoxSize::Short(size), name, |s| {
-            func(s
-                 .B8(version)
-                 .B8(0).B8(0).B8(0))
+            func(s.B8(version)
+                  .B8(0)
+                  .B8(0)
+                  .B8(0))
         })
     }
 
     #[test]
     fn read_box_header_short() {
-        let mut stream = make_box_raw(BoxSize::Short(8), b"test", |s| {
-            s
-        });
+        let mut stream = make_box_raw(BoxSize::Short(8), b"test", |s| s);
         let parsed = read_box_header(&mut stream).unwrap();
         assert_eq!(parsed.name, FourCC(*b"test"));
         assert_eq!(parsed.size, 8);
@@ -1191,9 +1200,7 @@ mod tests {
 
     #[test]
     fn read_box_header_long() {
-        let mut stream = make_box_raw(BoxSize::Long(16), b"test", |s| {
-            s
-        });
+        let mut stream = make_box_raw(BoxSize::Long(16), b"test", |s| s);
         let parsed = read_box_header(&mut stream).unwrap();
         assert_eq!(parsed.name, FourCC(*b"test"));
         assert_eq!(parsed.size, 16);
@@ -1201,9 +1208,7 @@ mod tests {
 
     #[test]
     fn read_box_header_short_unknown_size() {
-        let mut stream = make_box_raw(BoxSize::Short(0), b"test", |s| {
-            s
-        });
+        let mut stream = make_box_raw(BoxSize::Short(0), b"test", |s| s);
         match read_box_header(&mut stream) {
             Err(Error::Unsupported) => (),
             _ => panic!("unexpected result reading box with unknown size"),
@@ -1212,9 +1217,7 @@ mod tests {
 
     #[test]
     fn read_box_header_short_invalid_size() {
-        let mut stream = make_box_raw(BoxSize::UncheckedShort(2), b"test", |s| {
-            s
-        });
+        let mut stream = make_box_raw(BoxSize::UncheckedShort(2), b"test", |s| s);
         match read_box_header(&mut stream) {
             Err(Error::InvalidData) => (),
             _ => panic!("unexpected result reading box with invalid size"),
@@ -1223,9 +1226,7 @@ mod tests {
 
     #[test]
     fn read_box_header_long_invalid_size() {
-        let mut stream = make_box_raw(BoxSize::UncheckedLong(2), b"test", |s| {
-            s
-        });
+        let mut stream = make_box_raw(BoxSize::UncheckedLong(2), b"test", |s| s);
         match read_box_header(&mut stream) {
             Err(Error::InvalidData) => (),
             _ => panic!("unexpected result reading box with invalid size"),
@@ -1235,11 +1236,10 @@ mod tests {
     #[test]
     fn read_ftyp() {
         let mut stream = make_box(24, b"ftyp", |s| {
-            s
-                .append_bytes(b"mp42")
-                .B32(0) // minor version
-                .append_bytes(b"isom")
-                .append_bytes(b"mp42")
+            s.append_bytes(b"mp42")
+             .B32(0) // minor version
+             .append_bytes(b"isom")
+             .append_bytes(b"mp42")
         });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_ftyp(&mut stream, &header).unwrap();
@@ -1255,13 +1255,12 @@ mod tests {
     #[test]
     fn read_elst_v0() {
         let mut stream = make_fullbox(28, b"elst", 0, |s| {
-            s
-                .B32(1) // list count
-                // first entry
-                .B32(1234) // duration
-                .B32(5678) // time
-                .B16(12) // rate integer
-                .B16(34) // rate fraction
+            s.B32(1) // list count
+              // first entry
+             .B32(1234) // duration
+             .B32(5678) // time
+             .B16(12) // rate integer
+             .B16(34) // rate fraction
         });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_elst(&mut stream, &header).unwrap();
@@ -1277,19 +1276,17 @@ mod tests {
     #[test]
     fn read_elst_v1() {
         let mut stream = make_fullbox(56, b"elst", 1, |s| {
-            s
-                .B32(2) // list count
-                // first entry
-                .B64(1234) // duration
-                .B64(5678) // time
-                .B16(12) // rate integer
-                .B16(34) // rate fraction
-                // second entry
-                .B64(1234) // duration
-                .B64(5678) // time
-                .B16(12) // rate integer
-                .B16(34) // rate fraction
-
+            s.B32(2) // list count
+             // first entry
+             .B64(1234) // duration
+             .B64(5678) // time
+             .B16(12) // rate integer
+             .B16(34) // rate fraction
+             // second entry
+             .B64(1234) // duration
+             .B64(5678) // time
+             .B16(12) // rate integer
+             .B16(34) // rate fraction
         });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_elst(&mut stream, &header).unwrap();
@@ -1305,11 +1302,11 @@ mod tests {
     #[test]
     fn read_mdhd_v0() {
         let mut stream = make_fullbox(32, b"mdhd", 0, |s| {
-            s
-                .B32(0).B32(0)
-                .B32(1234) // timescale
-                .B32(5678) // duration
-                .B32(0)
+            s.B32(0)
+             .B32(0)
+             .B32(1234) // timescale
+             .B32(5678) // duration
+             .B32(0)
         });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_mdhd(&mut stream, &header).unwrap();
@@ -1322,11 +1319,11 @@ mod tests {
     #[test]
     fn read_mdhd_v1() {
         let mut stream = make_fullbox(44, b"mdhd", 1, |s| {
-            s
-                .B64(0).B64(0)
-                .B32(1234) // timescale
-                .B64(5678) // duration
-                .B32(0)
+            s.B64(0)
+             .B64(0)
+             .B32(1234) // timescale
+             .B64(5678) // duration
+             .B32(0)
         });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_mdhd(&mut stream, &header).unwrap();
@@ -1339,11 +1336,11 @@ mod tests {
     #[test]
     fn read_mdhd_unknown_duration() {
         let mut stream = make_fullbox(32, b"mdhd", 0, |s| {
-            s
-                .B32(0).B32(0)
-                .B32(1234) // timescale
-                .B32(::std::u32::MAX) // duration
-                .B32(0)
+            s.B32(0)
+             .B32(0)
+             .B32(1234) // timescale
+             .B32(::std::u32::MAX) // duration
+             .B32(0)
         });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_mdhd(&mut stream, &header).unwrap();
@@ -1356,11 +1353,11 @@ mod tests {
     #[test]
     fn read_mdhd_invalid_timescale() {
         let mut stream = make_fullbox(44, b"mdhd", 1, |s| {
-            s
-                .B64(0).B64(0)
-                .B32(0) // timescale
-                .B64(5678) // duration
-                .B32(0)
+            s.B64(0)
+             .B64(0)
+             .B32(0) // timescale
+             .B64(5678) // duration
+             .B32(0)
         });
         let header = read_box_header(&mut stream).unwrap();
         let r = super::parse_mdhd(&mut stream, &header, 0);
@@ -1370,11 +1367,11 @@ mod tests {
     #[test]
     fn read_mvhd_v0() {
         let mut stream = make_fullbox(108, b"mvhd", 0, |s| {
-            s
-                .B32(0).B32(0)
-                .B32(1234)
-                .B32(5678)
-                .append_repeated(0, 80)
+            s.B32(0)
+             .B32(0)
+             .B32(1234)
+             .B32(5678)
+             .append_repeated(0, 80)
         });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_mvhd(&mut stream, &header).unwrap();
@@ -1387,11 +1384,11 @@ mod tests {
     #[test]
     fn read_mvhd_v1() {
         let mut stream = make_fullbox(120, b"mvhd", 1, |s| {
-            s
-                .B64(0).B64(0)
-                .B32(1234)
-                .B64(5678)
-                .append_repeated(0, 80)
+            s.B64(0)
+             .B64(0)
+             .B32(1234)
+             .B64(5678)
+             .append_repeated(0, 80)
         });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_mvhd(&mut stream, &header).unwrap();
@@ -1404,11 +1401,11 @@ mod tests {
     #[test]
     fn read_mvhd_invalid_timescale() {
         let mut stream = make_fullbox(120, b"mvhd", 1, |s| {
-            s
-                .B64(0).B64(0)
-                .B32(0)
-                .B64(5678)
-                .append_repeated(0, 80)
+            s.B64(0)
+             .B64(0)
+             .B32(0)
+             .B64(5678)
+             .append_repeated(0, 80)
         });
         let header = read_box_header(&mut stream).unwrap();
         let r = super::parse_mvhd(&mut stream, &header);
@@ -1418,11 +1415,11 @@ mod tests {
     #[test]
     fn read_mvhd_unknown_duration() {
         let mut stream = make_fullbox(108, b"mvhd", 0, |s| {
-            s
-                .B32(0).B32(0)
-                .B32(1234)
-                .B32(::std::u32::MAX)
-                .append_repeated(0, 80)
+            s.B32(0)
+             .B32(0)
+             .B32(1234)
+             .B32(::std::u32::MAX)
+             .append_repeated(0, 80)
         });
         let header = read_box_header(&mut stream).unwrap();
         let parsed = super::read_mvhd(&mut stream, &header).unwrap();

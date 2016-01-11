@@ -47,7 +47,7 @@ const MP4PARSE_ERROR_IO: i32 = -6;
 
 /// Map TrackType to uint32 constants.
 const TRACK_TYPE_H264: u32 = 0;
-const TRACK_TYPE_AAC:  u32 = 1;
+const TRACK_TYPE_AAC: u32 = 1;
 
 // These structs *must* match those declared in include/mp4parse.h.
 
@@ -57,6 +57,7 @@ pub struct TrackInfo {
     track_id: u32,
     duration: u64,
     media_time: i64, // wants to be u64? understand how elst adjustment works
+    // TODO(kinetik): include crypto guff
 }
 
 #[repr(C)]
@@ -64,8 +65,11 @@ pub struct TrackAudioInfo {
     channels: u16,
     bit_depth: u16,
     sample_rate: u32,
-//    profile: i32,
-//    extended_profile: i32, // check types
+    // TODO(kinetik):
+    // int32_t profile;
+    // int32_t extended_profile; // check types
+    // extra_data
+    // codec_specific_config
 }
 
 #[repr(C)]
@@ -74,6 +78,9 @@ pub struct TrackVideoInfo {
     display_height: u32,
     image_width: u16,
     image_height: u16,
+    // TODO(kinetik):
+    // extra_data
+    // codec_specific_config
 }
 
 // C API wrapper functions.
@@ -111,9 +118,7 @@ pub unsafe extern "C" fn mp4parse_read(context: *mut MediaContext, buffer: *cons
     let mut c = Cursor::new(b);
 
     // Parse in a subthread to catch any panics.
-    let task = std::thread::spawn(move || {
-        read_mp4(&mut c, &mut context)
-    });
+    let task = std::thread::spawn(move || read_mp4(&mut c, &mut context));
     // The task's JoinHandle will return an error result if the
     // thread panicked, and will wrap the closure's return'd
     // result in an Ok(..) otherwise, meaning we could see
