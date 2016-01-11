@@ -1155,7 +1155,7 @@ mod tests {
         }
         section = func(section);
         match size {
-            BoxSize::Short(size) => assert_eq!(size as u64, section.size()),
+            BoxSize::Short(size) => if size > 0 { assert_eq!(size as u64, section.size()) },
             BoxSize::Long(size) => assert_eq!(size, section.size()),
         }
         Cursor::new(section.get_contents().unwrap())
@@ -1193,6 +1193,17 @@ mod tests {
         let parsed = read_box_header(&mut stream).unwrap();
         assert_eq!(parsed.name, FourCC(*b"test"));
         assert_eq!(parsed.size, 16);
+    }
+
+    #[test]
+    fn read_box_header_short_unknown_size() {
+        let mut stream = make_box_raw(BoxSize::Short(0), b"test", |s| {
+            s
+        });
+        match read_box_header(&mut stream) {
+            Err(Error::Unsupported) => (),
+            _ => panic!("unexpected result reading box with unknown size"),
+        };
     }
 
     #[test]
