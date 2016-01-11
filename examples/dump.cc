@@ -23,22 +23,22 @@ void test_arg_validation(mp4parse_state *context)
   int32_t rv;
 
   rv = mp4parse_read(nullptr, nullptr, 0);
-  assert(rv < 0);
+  assert(rv == MP4PARSE_ERROR_BADARG);
 
   rv = mp4parse_read(context, nullptr, 0);
-  assert(rv < 0);
+  assert(rv == MP4PARSE_ERROR_BADARG);
 
   size_t len = 4097;
   rv = mp4parse_read(context, nullptr, len);
-  assert(rv < 0);
+  assert(rv == MP4PARSE_ERROR_BADARG);
 
   std::vector<uint8_t> buf;
   rv = mp4parse_read(context, buf.data(), buf.size());
-  assert(rv < 0);
+  assert(rv == MP4PARSE_ERROR_BADARG);
 
   buf.reserve(len);
   rv = mp4parse_read(context, buf.data(), buf.size());
-  assert(rv < 0);
+  assert(rv == MP4PARSE_ERROR_BADARG);
 }
 
 void test_arg_validation()
@@ -101,7 +101,7 @@ int32_t read_file(const char* filename)
   for (uint32_t i = 0; i < tracks; ++i) {
     mp4parse_track_info track_info;
     int32_t rv2 = mp4parse_get_track_info(context, i, &track_info);
-    assert(rv2 >= 0);
+    assert(rv2 == MP4PARSE_OK);
     fprintf(stderr, "Track %d: mime_type='%s' duration=%" PRId64 " media_time=%" PRId64 " track_id=%d\n",
             i, tracktype2mimetype(track_info.track_type), track_info.duration, track_info.media_time, track_info.track_id);
   }
