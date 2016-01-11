@@ -1136,27 +1136,31 @@ mod tests {
     enum BoxSize {
         Short(u32),
         Long(u64),
+        UncheckedShort(u32),
+        UncheckedLong(u64),
     }
 
     fn make_box_raw<F>(size: BoxSize, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
         where F: Fn(Section) -> Section {
         let mut section = Section::new();
         section = match size {
-            BoxSize::Short(size) => section.B32(size),
-            BoxSize::Long(_) => section.B32(1),
+            BoxSize::Short(size) | BoxSize::UncheckedShort(size) => section.B32(size),
+            BoxSize::Long(_) | BoxSize::UncheckedLong(_) => section.B32(1),
         };
         section = section.append_bytes(name);
-        if let BoxSize::Long(size) = size {
+        section = match size {
             // The spec allows the 32-bit size to be 0 to indicate unknown
             // length streams.  It's not clear if this is valid when using a
             // 64-bit size, so prohibit it for now.
-            assert!(size > 0);
-            section = section.B64(size);
-        }
+            BoxSize::Long(size) => { assert!(size > 0); section.B64(size) }
+            BoxSize::UncheckedLong(size) => section.B64(size),
+            _ => section,
+        };
         section = func(section);
         match size {
             BoxSize::Short(size) => if size > 0 { assert_eq!(size as u64, section.size()) },
             BoxSize::Long(size) => assert_eq!(size, section.size()),
+            _ => (),
         }
         Cursor::new(section.get_contents().unwrap())
     }
@@ -1203,6 +1207,28 @@ mod tests {
         match read_box_header(&mut stream) {
             Err(Error::Unsupported) => (),
             _ => panic!("unexpected result reading box with unknown size"),
+        };
+    }
+
+    #[test]
+    fn read_box_header_short_invalid_size() {
+        let mut stream = make_box_raw(BoxSize::UncheckedShort(2), b"test", |s| {
+            s
+        });
+        match read_box_header(&mut stream) {
+            Err(Error::InvalidData) => (),
+            _ => panic!("unexpected result reading box with invalid size"),
+        };
+    }
+
+    #[test]
+    fn read_box_header_long_invalid_size() {
+        let mut stream = make_box_raw(BoxSize::UncheckedLong(2), b"test", |s| {
+            s
+        });
+        match read_box_header(&mut stream) {
+            Err(Error::InvalidData) => (),
+            _ => panic!("unexpected result reading box with invalid size"),
         };
     }
 
