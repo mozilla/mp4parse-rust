@@ -379,12 +379,12 @@ fn limit<'a, T: BufRead>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
 }
 
 fn driver<F, T: BufRead>(f: &mut T, context: &mut MediaContext, mut action: F) -> Result<()>
-    where F: FnMut(&mut MediaContext, BoxHeader, &mut Take<&mut T>) -> Result<()>
+    where F: FnMut(&mut Take<&mut T>, BoxHeader, &mut MediaContext) -> Result<()>
 {
     loop {
         let r = read_box_header(f).and_then(|h| {
             let mut content = limit(f, &h);
-            let r = action(context, h, &mut content);
+            let r = action(&mut content, h, context);
             if r.is_ok() {
                 // TODO(kinetik): can check this for "non-fatal" errors (e.g. EOF) too.
                 log!(context, "{} content bytes left", content.limit());
@@ -431,7 +431,7 @@ fn driver<F, T: BufRead>(f: &mut T, context: &mut MediaContext, mut action: F) -
 /// Metadata is accumulated in the passed-through MediaContext struct,
 /// which can be examined later.
 pub fn read_mp4<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()> {
-    driver(f, context, |context, h, mut content| {
+    driver(f, context, |mut content, h, context| {
         match &h.name.0 {
             b"ftyp" => {
                 let ftyp = try!(read_ftyp(&mut content, &h));
@@ -457,7 +457,7 @@ fn parse_mvhd<T: BufRead>(f: &mut T, h: &BoxHeader) -> Result<(MovieHeaderBox, O
 }
 
 fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -> Result<()> {
-    driver(f, context, |context, h, mut content| {
+    driver(f, context, |mut content, h, context| {
         match &h.name.0 {
             b"mvhd" => {
                 let (mvhd, timescale) = try!(parse_mvhd(content, &h));
@@ -480,7 +480,7 @@ fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
 }
 
 fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
-    driver(f, context, |context, h, mut content| {
+    driver(f, context, |mut content, h, context| {
         match &h.name.0 {
             b"tkhd" => {
                 let tkhd = try!(read_tkhd(&mut content, &h));
@@ -501,7 +501,7 @@ fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
 }
 
 fn read_edts<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
-    driver(f, context, |context, h, mut content| {
+    driver(f, context, |mut content, h, context| {
         match &h.name.0 {
             b"elst" => {
                 let elst = try!(read_elst(&mut content, &h));
@@ -546,7 +546,7 @@ fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track: &mut Track) -> Result
 }
 
 fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
-    driver(f, context, |context, h, mut content| {
+    driver(f, context, |mut content, h, context| {
         match &h.name.0 {
             b"mdhd" => {
                 let (mdhd, duration, timescale) = try!(parse_mdhd(content, &h, track));
@@ -575,7 +575,7 @@ fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
 }
 
 fn read_minf<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
-    driver(f, context, |context, h, mut content| {
+    driver(f, context, |mut content, h, context| {
         match &h.name.0 {
             b"stbl" => try!(read_stbl(&mut content, &h, context, track)),
             _ => {
@@ -589,7 +589,7 @@ fn read_minf<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
 }
 
 fn read_stbl<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
-    driver(f, context, |context, h, mut content| {
+    driver(f, context, |mut content, h, context| {
         match &h.name.0 {
             b"stsd" => {
                 let stsd = try!(read_stsd(&mut content, &h, track));
