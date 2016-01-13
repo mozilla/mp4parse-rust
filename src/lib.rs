@@ -386,9 +386,13 @@ fn driver<F, T: BufRead>(f: &mut T, context: &mut MediaContext, mut action: F) -
             let mut content = limit(f, &h);
             let r = action(&mut content, h, context);
             if r.is_ok() {
-                // TODO(kinetik): can check this for "non-fatal" errors (e.g. EOF) too.
-                log!(context, "{} content bytes left", content.limit());
-                assert!(content.limit() == 0);
+                if content.limit() > 0 {
+                    // It's possible that this is a parser bug rather than a
+                    // bad file (e.g. if we forgot to read the entire box
+                    // contents).
+                    log!(context, "bad parser state: {} content bytes left", content.limit());
+                    return Err(Error::InvalidData);
+                }
                 log!(context, "read_box context: {:?}", context);
             }
             r
