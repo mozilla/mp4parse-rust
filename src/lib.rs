@@ -242,7 +242,7 @@ pub struct MediaContext {
 }
 
 impl MediaContext {
-    pub fn new() -> MediaContext {
+    pub fn new() -> Self {
         MediaContext {
             timescale: None,
             tracks: Vec::new(),
@@ -301,7 +301,7 @@ struct Track {
 }
 
 impl Track {
-    fn new(id: usize) -> Track {
+    fn new(id: usize) -> Self {
         Track {
             id: id,
             track_type: TrackType::Unknown,
