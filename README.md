@@ -5,3 +5,5 @@ This is an mp4 track metadata parser.
 
 Our primary interest is writing a pure-rust replacement for the
 the track metadata parser needed by Firefox.
+
+To enable it on Mac and Linux builds of Firefox, add `ac_add_options --enable-rust` to your `.mozconfig`.
