@@ -17,8 +17,17 @@ exclude = [
   "*.mp4",
 ]
 
+build = "build.rs"
+
 [dependencies]
 byteorder = "0.4.2"
 
 [dev-dependencies]
 test-assembler = "0.1.0"
+
+[build-dependencies]
+rusty-cheddar = { version = "0.3.0", optional = true }
+
+[features]
+cheddar = ["rusty-cheddar"]
+
