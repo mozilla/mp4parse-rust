@@ -59,6 +59,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct FourCC([u8; 4]);
 
+impl FourCC {
+    fn as_bytes(&self) -> &[u8; 4] {
+        &self.0
+    }
+}
+
 impl fmt::Debug for FourCC {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "'{}'", String::from_utf8_lossy(&self.0))
@@ -436,7 +442,7 @@ fn driver<F, T: BufRead>(f: &mut T, context: &mut MediaContext, mut action: F) -
 /// which can be examined later.
 pub fn read_mp4<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     driver(f, context, |mut content, h, context| {
-        match &h.name.0 {
+        match h.name.as_bytes() {
             b"ftyp" => {
                 let ftyp = try!(read_ftyp(&mut content, &h));
                 log!(context, "{:?}", ftyp);
@@ -462,7 +468,7 @@ fn parse_mvhd<T: BufRead>(f: &mut T, h: &BoxHeader) -> Result<(MovieHeaderBox, O
 
 fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -> Result<()> {
     driver(f, context, |mut content, h, context| {
-        match &h.name.0 {
+        match h.name.as_bytes() {
             b"mvhd" => {
                 let (mvhd, timescale) = try!(parse_mvhd(content, &h));
                 context.timescale = timescale;
@@ -485,7 +491,7 @@ fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
 
 fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     driver(f, context, |mut content, h, context| {
-        match &h.name.0 {
+        match h.name.as_bytes() {
             b"tkhd" => {
                 let tkhd = try!(read_tkhd(&mut content, &h));
                 track.track_id = Some(tkhd.track_id);
@@ -506,7 +512,7 @@ fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
 
 fn read_edts<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     driver(f, context, |mut content, h, context| {
-        match &h.name.0 {
+        match h.name.as_bytes() {
             b"elst" => {
                 let elst = try!(read_elst(&mut content, &h));
                 let mut empty_duration = 0;
@@ -551,7 +557,7 @@ fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track: &mut Track) -> Result
 
 fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     driver(f, context, |mut content, h, context| {
-        match &h.name.0 {
+        match h.name.as_bytes() {
             b"mdhd" => {
                 let (mdhd, duration, timescale) = try!(parse_mdhd(content, &h, track));
                 track.duration = duration;
@@ -580,7 +586,7 @@ fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
 
 fn read_minf<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     driver(f, context, |mut content, h, context| {
-        match &h.name.0 {
+        match h.name.as_bytes() {
             b"stbl" => try!(read_stbl(&mut content, &h, context, track)),
             _ => {
                 // Skip the contents of unknown chunks.
@@ -594,7 +600,7 @@ fn read_minf<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
 
 fn read_stbl<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     driver(f, context, |mut content, h, context| {
-        match &h.name.0 {
+        match h.name.as_bytes() {
             b"stsd" => {
                 let stsd = try!(read_stsd(&mut content, &h, track));
                 log!(context, "  {:?}", stsd);
@@ -935,7 +941,7 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
 fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
     let h = try!(read_box_header(src));
     // TODO(kinetik): encv here also?
-    if &h.name.0 != b"avc1" && &h.name.0 != b"avc3" {
+    if h.name.as_bytes() != b"avc1" && h.name.as_bytes() != b"avc3" {
         return Err(Error::Unsupported);
     }
 
@@ -955,7 +961,7 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, tra
 
     // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
     let h = try!(read_box_header(src));
-    if &h.name.0 != b"avcC" {
+    if h.name.as_bytes() != b"avcC" {
         return Err(Error::InvalidData);
     }
     let mut data: Vec<u8> = vec![0; (h.size - h.offset) as usize];
@@ -979,7 +985,7 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, tra
 fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, _: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
     let h = try!(read_box_header(src));
     // TODO(kinetik): enca here also?
-    if &h.name.0 != b"mp4a" {
+    if h.name.as_bytes() != b"mp4a" {
         return Err(Error::Unsupported);
     }
 
@@ -1001,7 +1007,7 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, _: &BoxHeader, track:
 
     // TODO(kinetik): Parse esds atom?  For now we just stash the data.
     let h = try!(read_box_header(src));
-    if &h.name.0 != b"esds" {
+    if h.name.as_bytes() != b"esds" {
         return Err(Error::InvalidData);
     }
     let (_, _) = try!(read_fullbox_extra(src));
