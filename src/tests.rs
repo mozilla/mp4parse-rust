@@ -130,7 +130,7 @@ fn read_ftyp() {
 }
 
 #[test]
-#[should_panic]
+#[should_panic(expected = "expected an error result")]
 fn read_truncated_ftyp() {
     // We declare a 24 byte box, but only write 20 bytes.
     let mut stream = make_box_raw(BoxSize::UncheckedShort(24), b"ftyp", |s| {
