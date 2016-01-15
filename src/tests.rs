@@ -130,6 +130,24 @@ fn read_ftyp() {
 }
 
 #[test]
+#[ignore]
+fn read_truncated_ftyp() {
+    // We declare a 24 byte box, but only write 20 bytes.
+    let mut stream = make_box_raw(BoxSize::UncheckedShort(24), b"ftyp", |s| {
+        s.append_bytes(b"mp42")
+            .B32(0) // minor version
+            .append_bytes(b"isom")
+    });
+    let mut context = MediaContext::new();
+    context.trace(true);
+    match read_mp4(&mut stream, &mut context) {
+        Err(Error::UnexpectedEOF) => (),
+        Ok(_) => assert!(false, "expected an error result"),
+        _ => assert!(false, "expected a different error result"),
+    }
+}
+
+#[test]
 fn read_elst_v0() {
     let mut stream = make_fullbox(28, b"elst", 0, |s| {
         s.B32(1) // list count
