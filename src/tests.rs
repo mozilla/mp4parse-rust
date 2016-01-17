@@ -139,7 +139,6 @@ fn read_truncated_ftyp() {
             .append_bytes(b"isom")
     });
     let mut context = MediaContext::new();
-    context.trace(true);
     match read_mp4(&mut stream, &mut context) {
         Err(Error::UnexpectedEOF) => (),
         Ok(_) => assert!(false, "expected an error result"),
