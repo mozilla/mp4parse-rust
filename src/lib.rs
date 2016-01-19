@@ -262,9 +262,9 @@ impl MediaContext {
 }
 
 macro_rules! log {
-    ( $ctx:expr, $( $args:expr),* ) => {
+    ( $ctx:expr, $( $args:tt )* ) => {
         if $ctx.trace {
-            println!( $( $args, )* );
+            println!( $( $args )* );
         }
     }
 }
