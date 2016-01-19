@@ -262,9 +262,35 @@ impl MediaContext {
     }
 }
 
+/// Trait for types usable as a logging context.
+trait Trace {
+    /// Turn tracing on/off.
+    fn trace(&mut self, on: bool);
+    /// Whether tracing enabled.
+    fn trace_enabled(&self) -> bool;
+}
+
+impl Trace for MediaContext {
+    fn trace_enabled(&self) -> bool {
+        self.trace
+    }
+    pub fn trace(&mut self, on: bool) {
+        self.trace = on;
+    }
+}
+
+impl Trace for Track {
+    fn trace_enabled(&self) -> bool {
+        self.trace
+    }
+    pub fn trace(&mut self, on: bool) {
+        self.trace = on;
+    }
+}
+
 macro_rules! log {
     ( $ctx:expr, $( $args:tt )* ) => {
-        if $ctx.trace {
+        if $ctx.trace_enabled() {
             println!( $( $args )* );
         }
     }
@@ -305,6 +331,7 @@ struct Track {
     mime_type: String,
     data: Option<SampleEntry>,
     tkhd: Option<TrackHeaderBox>, // TODO(kinetik): find a nicer way to export this.
+    trace: bool,
 }
 
 impl Track {
@@ -320,6 +347,7 @@ impl Track {
             mime_type: String::new(),
             data: None,
             tkhd: None,
+            trace: false,
         }
     }
 }
@@ -385,8 +413,14 @@ fn limit<'a, T: BufRead>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
     f.take(h.size - h.offset)
 }
 
-fn driver<F, T: BufRead>(f: &mut T, context: &mut MediaContext, mut action: F) -> Result<()>
-    where F: FnMut(&mut Take<&mut T>, BoxHeader, &mut MediaContext) -> Result<()>
+/// Helper to recursively parse a the contents of a box.
+/// Reads a box header from the source given in the first argument
+/// and then calls the passed closure to dispatch further based
+/// on that header.
+fn driver<F, C, T>(f: &mut T, context: &mut C, mut action: F) -> Result<()>
+    where F: FnMut(&mut Take<&mut T>, BoxHeader, &mut C) -> Result<()>,
+          C: Trace + std::fmt::Debug,
+          T: BufRead,
 {
     loop {
         let r = read_box_header(f).and_then(|h| {
