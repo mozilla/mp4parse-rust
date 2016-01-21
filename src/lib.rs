@@ -209,13 +209,20 @@ enum SampleEntry {
     Unknown,
 }
 
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone)]
+enum AudioCodecSpecific {
+    ES_Descriptor(Vec<u8>),
+    OpusSpecificBox(Vec<u8>),
+}
+
 #[derive(Debug, Clone)]
 struct AudioSampleEntry {
     data_reference_index: u16,
     channelcount: u16,
     samplesize: u16,
     samplerate: u32,
-    esds: ES_Descriptor,
+    codec_specific: AudioCodecSpecific,
 }
 
 #[derive(Debug, Clone)]
@@ -228,12 +235,6 @@ struct VideoSampleEntry {
 
 #[derive(Debug, Clone)]
 struct AVCDecoderConfigurationRecord {
-    data: Vec<u8>,
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Debug, Clone)]
-struct ES_Descriptor {
     data: Vec<u8>,
 }
 
@@ -985,8 +986,10 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, tra
 fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, _: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
     let h = try!(read_box_header(src));
     // TODO(kinetik): enca here also?
-    if h.name.as_bytes() != b"mp4a" {
-        return Err(Error::Unsupported);
+    match h.name.as_bytes() {
+        b"mp4a" => (),
+        b"Opus" => (),
+        _ => return Err(Error::Unsupported),
     }
 
     // Skip uninteresting fields.
@@ -1005,26 +1008,40 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, _: &BoxHeader, track:
 
     let samplerate = try!(be_u32(src));
 
-    // TODO(kinetik): Parse esds atom?  For now we just stash the data.
     let h = try!(read_box_header(src));
-    if h.name.as_bytes() != b"esds" {
-        return Err(Error::InvalidData);
-    }
-    let (_, _) = try!(read_fullbox_extra(src));
-    let mut data: Vec<u8> = vec![0; (h.size - h.offset - 4) as usize];
-    let r = try!(src.read(&mut data));
-    assert!(r == data.len());
-    let esds = ES_Descriptor { data: data };
+    let codec_specific = match h.name.as_bytes() {
+        b"esds" => {
+            let (_, _) = try!(read_fullbox_extra(src));
+            let mut data: Vec<u8> = vec![0; (h.size - h.offset - 4) as usize];
+            let r = try!(src.read(&mut data));
+            assert!(r == data.len());
 
-    // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
-    track.mime_type = String::from("audio/mp4a-latm");
+            // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
+            track.mime_type = String::from("audio/mp4a-latm");
 
+            // TODO(kinetik): Parse esds atom?  For now we just stash the data.
+            AudioCodecSpecific::ES_Descriptor(data)
+        }
+        b"dOps" => {
+            let (_, _) = try!(read_fullbox_extra(src));
+            let mut data: Vec<u8> = vec![0; (h.size - h.offset - 4) as usize];
+            let r = try!(src.read(&mut data));
+            assert!(r == data.len());
+
+            // TODO(kinetik): stagefright doesn't have a MIME mapping for this, revisit.
+            track.mime_type = String::from("audio/ogg; codecs=opus");
+
+            // TODO(kinetik): parse contents of OpusSpecificBox
+            AudioCodecSpecific::OpusSpecificBox(data)
+        }
+        _ => return Err(Error::Unsupported),
+    };
     Ok(SampleEntry::Audio(AudioSampleEntry {
         data_reference_index: data_reference_index,
         channelcount: channelcount,
         samplesize: samplesize,
         samplerate: samplerate,
-        esds: esds,
+        codec_specific: codec_specific,
     }))
 }
 
