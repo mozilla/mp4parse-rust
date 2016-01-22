@@ -270,21 +270,16 @@ trait Trace {
     fn trace_enabled(&self) -> bool;
 }
 
-impl Trace for MediaContext {
-    fn trace_enabled(&self) -> bool {
-        self.trace
-    }
-    pub fn trace(&mut self, on: bool) {
-        self.trace = on;
-    }
-}
-
-impl Trace for Track {
-    fn trace_enabled(&self) -> bool {
-        self.trace
-    }
-    pub fn trace(&mut self, on: bool) {
-        self.trace = on;
+macro_rules! trace_impl {
+    ( $s:ty ) => {
+        impl Trace for $s {
+            fn trace_enabled(&self) -> bool {
+                self.trace
+            }
+            fn trace(&mut self, on: bool) {
+                self.trace = on;
+            }
+        }
     }
 }
 
@@ -295,6 +290,9 @@ macro_rules! log {
         }
     }
 }
+
+trace_impl!(MediaContext);
+trace_impl!(Track);
 
 #[derive(Debug)]
 enum TrackType {
