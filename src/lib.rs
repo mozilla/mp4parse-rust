@@ -511,6 +511,7 @@ fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
             }
             b"trak" => {
                 let mut track = Track::new(context.tracks.len());
+                track.trace(context.trace_enabled());
                 try!(read_trak(&mut content, &h, context, &mut track));
                 context.tracks.push(track);
             }
