@@ -1029,7 +1029,7 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, _: &BoxHeader, track:
             assert!(r == data.len());
 
             // TODO(kinetik): stagefright doesn't have a MIME mapping for this, revisit.
-            track.mime_type = String::from("audio/ogg; codecs=opus");
+            track.mime_type = String::from("audio/opus");
 
             // TODO(kinetik): parse contents of OpusSpecificBox
             AudioCodecSpecific::OpusSpecificBox(data)
