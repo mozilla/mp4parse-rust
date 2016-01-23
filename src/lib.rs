@@ -268,37 +268,13 @@ impl MediaContext {
     }
 }
 
-/// Trait for types usable as a logging context.
-trait Trace {
-    /// Turn tracing on/off.
-    fn trace(&mut self, on: bool);
-    /// Whether tracing enabled.
-    fn trace_enabled(&self) -> bool;
-}
-
-macro_rules! trace_impl {
-    ( $s:ty ) => {
-        impl Trace for $s {
-            fn trace_enabled(&self) -> bool {
-                self.trace
-            }
-            fn trace(&mut self, on: bool) {
-                self.trace = on;
-            }
-        }
-    }
-}
-
 macro_rules! log {
     ( $ctx:expr, $( $args:tt )* ) => {
-        if $ctx.trace_enabled() {
+        if $ctx.trace {
             println!( $( $args )* );
         }
     }
 }
-
-trace_impl!(MediaContext);
-trace_impl!(Track);
 
 #[derive(Debug)]
 enum TrackType {
@@ -421,9 +397,8 @@ fn limit<'a, T: BufRead>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
 /// Reads a box header from the source given in the first argument
 /// and then calls the passed closure to dispatch further based
 /// on that header.
-fn driver<F, C, T>(f: &mut T, context: &mut C, mut action: F) -> Result<()>
-    where F: FnMut(&mut Take<&mut T>, BoxHeader, &mut C) -> Result<()>,
-          C: Trace + std::fmt::Debug,
+fn driver<F, T>(f: &mut T, context: &mut MediaContext, mut action: F) -> Result<()>
+    where F: FnMut(&mut Take<&mut T>, BoxHeader, &mut MediaContext) -> Result<()>,
           T: BufRead,
 {
     loop {
@@ -515,7 +490,7 @@ fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
             }
             b"trak" => {
                 let mut track = Track::new(context.tracks.len());
-                track.trace(context.trace_enabled());
+                track.trace = context.trace;
                 try!(read_trak(&mut content, &h, context, &mut track));
                 context.tracks.push(track);
             }
