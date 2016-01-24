@@ -213,7 +213,7 @@ enum SampleEntry {
 #[derive(Debug, Clone)]
 enum AudioCodecSpecific {
     ES_Descriptor(Vec<u8>),
-    OpusSpecificBox(Vec<u8>),
+    OpusSpecificBox(OpusSpecificBox),
 }
 
 #[derive(Debug, Clone)]
@@ -227,7 +227,7 @@ struct AudioSampleEntry {
 
 #[derive(Debug, Clone)]
 enum VideoCodecSpecific {
-    AVCConfig(AVCDecoderConfigurationRecord),
+    AVCConfig(Vec<u8>),
     VPxConfig(VPxConfigBox),
 }
 
@@ -239,14 +239,9 @@ struct VideoSampleEntry {
     codec_specific: VideoCodecSpecific,
 }
 
+/// Represent a Video Partition Codec Configuration 'vpcC' box (aka vp9).
 #[derive(Debug, Clone)]
-struct AVCDecoderConfigurationRecord {
-    data: Vec<u8>,
-}
-
-/// Represent a Video Partition Codec Configuration (aka vp9).
-#[derive(Debug, Clone)]
-pub struct VPxConfigBox {
+struct VPxConfigBox {
     profile: u8,
     level: u8,
     bit_depth: u8,
@@ -255,6 +250,25 @@ pub struct VPxConfigBox {
     transfer_function: u8,
     video_full_range: bool,
     codec_init: Vec<u8>, // Empty for vp8/vp9.
+}
+
+#[derive(Debug, Clone)]
+struct ChannelMappingTable {
+    stream_count: u8,
+    coupled_count: u8,
+    channel_mapping: Vec<u8>,
+}
+
+/// Represent an OpusSpecificBox 'dOps'
+#[derive(Debug, Clone)]
+struct OpusSpecificBox {
+    version: u8,
+    output_channel_count: u8,
+    pre_skip: u16,
+    input_sample_rate: u32,
+    output_gain: i16,
+    channel_mapping_family: u8,
+    channel_mapping_table: Option<ChannelMappingTable>,
 }
 
 /// Internal data structures.
@@ -981,6 +995,49 @@ fn read_vpcc<T: ReadBytesExt>(src: &mut T) -> Result<VPxConfigBox> {
     })
 }
 
+/// Parse OpusSpecificBox.
+fn read_dops<T: ReadBytesExt>(src: &mut T) -> Result<OpusSpecificBox> {
+    let version = try!(src.read_u8());
+    if version != 0 {
+        return Err(Error::Unsupported);
+    }
+
+    let output_channel_count = try!(src.read_u8());
+    let pre_skip = try!(be_u16(src));
+    let input_sample_rate = try!(be_u32(src));
+    let output_gain = try!(be_i16(src));
+    let channel_mapping_family = try!(src.read_u8());
+
+    let channel_mapping_table = if channel_mapping_family == 0 {
+        None
+    } else {
+        let stream_count = try!(src.read_u8());
+        let coupled_count = try!(src.read_u8());
+        let mut channel_mapping = Vec::<u8>::with_capacity(output_channel_count as usize);
+        let r = try!(src.read(&mut channel_mapping));
+        if r != output_channel_count as usize {
+            return Err(Error::InvalidData);
+        }
+
+        Some(ChannelMappingTable {
+            stream_count: stream_count,
+            coupled_count: coupled_count,
+            channel_mapping: channel_mapping,
+        })
+    };
+
+    // TODO(kinetik): validate field value ranges.
+    Ok(OpusSpecificBox {
+        version: version,
+        output_channel_count: output_channel_count,
+        pre_skip: pre_skip,
+        input_sample_rate: input_sample_rate,
+        output_gain: output_gain,
+        channel_mapping_family: channel_mapping_family,
+        channel_mapping_table: channel_mapping_table,
+    })
+}
+
 /// Parse a hdlr box.
 fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<HandlerBox> {
     let (_, _) = try!(read_fullbox_extra(src));
@@ -1032,10 +1089,9 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, tra
     let codec_specific = match h.name.as_bytes() {
         b"avcC" => {
             // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
-            let mut data: Vec<u8> = vec![0; (h.size - h.offset) as usize];
-            let r = try!(src.read(&mut data));
-            assert!(r == data.len());
-            let avcc = AVCDecoderConfigurationRecord { data: data };
+            let mut avcc: Vec<u8> = vec![0; (h.size - h.offset) as usize];
+            let r = try!(src.read(&mut avcc));
+            assert!(r == avcc.len());
 
             try!(skip_remaining_box_content(src, head));
 
@@ -1099,16 +1155,11 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, _: &BoxHeader, track:
             AudioCodecSpecific::ES_Descriptor(data)
         }
         b"dOps" => {
-            let (_, _) = try!(read_fullbox_extra(src));
-            let mut data: Vec<u8> = vec![0; (h.size - h.offset - 4) as usize];
-            let r = try!(src.read(&mut data));
-            assert!(r == data.len());
-
+            let dops = try!(read_dops(src));
             // TODO(kinetik): stagefright doesn't have a MIME mapping for this, revisit.
             track.mime_type = String::from("audio/opus");
 
-            // TODO(kinetik): parse contents of OpusSpecificBox
-            AudioCodecSpecific::OpusSpecificBox(data)
+            AudioCodecSpecific::OpusSpecificBox(dops)
         }
         _ => return Err(Error::Unsupported),
     };
