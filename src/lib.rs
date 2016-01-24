@@ -244,6 +244,19 @@ struct AVCDecoderConfigurationRecord {
     data: Vec<u8>,
 }
 
+/// Represent a Video Partition Codec Configuration (aka vp9).
+#[derive(Debug, Clone)]
+pub struct VPxConfigBox {
+    profile: u8,
+    level: u8,
+    bit_depth: u8,
+    color_space: u8, // Really an enum
+    chroma_subsampling: u8,
+    transfer_function: u8,
+    video_full_range: bool,
+    codec_init: Vec<u8>, // Empty for vp8/vp9.
+}
+
 /// Internal data structures.
 #[derive(Debug)]
 pub struct MediaContext {
@@ -930,64 +943,8 @@ fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TimeToSam
     })
 }
 
-/// Represent a Video Partition Codec Sample Entry Box (aka vp9).
-#[derive(Debug, Clone)]
-pub struct VPxBox {
-    /// Codec variety (VP8 vs. VP9) from the fourcc of the Sample Entry Box.
-    codec: FourCC,
-    /// Informative string.
-    config: VPxConfigBox,
-}
-
-/// Represent a Video Partition Codec Configuration (aka vp9).
-#[derive(Debug, Clone)]
-pub struct VPxConfigBox {
-    profile: u8,
-    level: u8,
-    bit_depth: u8,
-    color_space: u8, // Really an enum
-    chroma_subsampling: u8,
-    transfer_function: u8,
-    video_full_range: bool,
-    codec_init: Vec<u8>, // Empty for vp8/vp9.
-}
-
-/// Parse a VPx Box.
-fn read_vpxx<T: ReadBytesExt+BufRead>(src: &mut T, _: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
-    // Common SampleEntry fields.
-    // Skip 6 reserved bytes (should be zero).
-    try!(skip(src, 6));
-
-    let data_reference_index = try!(be_u16(src));
-
-    // Common VisualSampleEntry fields.
-    // Skip uninteresting fields.
-    try!(skip(src, 16));
-
-    let width = try!(be_u16(src));
-    let height = try!(be_u16(src));
-
-    // Skip uninteresting fields.
-    try!(skip(src, 50));
-
-    let h = try!(read_box_header(src));
-    if h.name.as_bytes() != b"vpcC" {
-        log!(track, "Didn't find expected vpcC box!");
-        return Err(Error::Unsupported);
-    }
-    let config = try!(read_vpcc(src, &h));
-    log!(track, "  vpcC {:?}", config);
-
-    Ok(SampleEntry::Video(VideoSampleEntry {
-        data_reference_index: data_reference_index,
-        width: width,
-        height: height,
-        codec_specific: VideoCodecSpecific::VPxConfig(config),
-    }))
-}
-
 /// Parse a VPx Config Box.
-fn read_vpcc<T: ReadBytesExt>(src: &mut T, _: &BoxHeader) -> Result<VPxConfigBox> {
+fn read_vpcc<T: ReadBytesExt>(src: &mut T) -> Result<VPxConfigBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     if version != 0 {
         return Err(Error::Unsupported);
@@ -1012,7 +969,6 @@ fn read_vpcc<T: ReadBytesExt>(src: &mut T, _: &BoxHeader) -> Result<VPxConfigBox
     }
 
     // TODO(rillian): validate field value ranges.
-
     Ok(VPxConfigBox {
         profile: profile,
         level: level,
@@ -1048,25 +1004,16 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
 }
 
 /// Parse an video description inside an stsd box.
-fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, _: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
+fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
     let h = try!(read_box_header(src));
     match h.name.as_bytes() {
-        b"avc1" => {
-            read_avc(src, &h, track)
-        },
-        b"avc3" => {
-            read_avc(src, &h, track)
-        },
-        b"vp09" => {
-            track.mime_type = String::from("video/vp9");
-            read_vpxx(src, &h, track)
-        },
+        b"avc1" => (),
+        b"avc3" => (),
+        b"vp09" => (),
         // TODO(kinetik): encv here also.
-        _ => Err(Error::Unsupported),
+        _ => return Err(Error::Unsupported),
     }
-}
 
-fn read_avc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
     // Skip uninteresting fields.
     try!(skip(src, 6));
 
@@ -1081,25 +1028,33 @@ fn read_avc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &mu
     // Skip uninteresting fields.
     try!(skip(src, 50));
 
-    // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
     let h = try!(read_box_header(src));
-    if h.name.as_bytes() != b"avcC" {
-        return Err(Error::InvalidData);
-    }
-    let mut data: Vec<u8> = vec![0; (h.size - h.offset) as usize];
-    let r = try!(src.read(&mut data));
-    assert!(r == data.len());
-    let avcc = AVCDecoderConfigurationRecord { data: data };
+    let codec_specific = match h.name.as_bytes() {
+        b"avcC" => {
+            // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
+            let mut data: Vec<u8> = vec![0; (h.size - h.offset) as usize];
+            let r = try!(src.read(&mut data));
+            assert!(r == data.len());
+            let avcc = AVCDecoderConfigurationRecord { data: data };
 
-    try!(skip_remaining_box_content(src, head));
+            try!(skip_remaining_box_content(src, head));
 
-    track.mime_type = String::from("video/avc");
+            track.mime_type = String::from("video/avc");
 
+            VideoCodecSpecific::AVCConfig(avcc)
+        }
+        b"vpcC" => {
+            let vpcc = try!(read_vpcc(src));
+            track.mime_type = String::from("video/vp9");
+            VideoCodecSpecific::VPxConfig(vpcc)
+        }
+        _ => return Err(Error::Unsupported),
+    };
     Ok(SampleEntry::Video(VideoSampleEntry {
         data_reference_index: data_reference_index,
         width: width,
         height: height,
-        codec_specific: VideoCodecSpecific::AVCConfig(avcc),
+        codec_specific: codec_specific,
     }))
 }
 
