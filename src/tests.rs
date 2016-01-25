@@ -322,3 +322,21 @@ fn read_mvhd_unknown_duration() {
     assert_eq!(parsed.timescale, 1234);
     assert_eq!(parsed.duration, ::std::u64::MAX);
 }
+
+#[test]
+fn read_vpcc() {
+    let data_length = 12u16;
+    let box_length = 8 + 4 + 6 + data_length as u32;
+    let mut stream = make_fullbox(box_length, b"vpcC", 0, |s| {
+        s.B8(2)
+         .B8(0)
+         .B8(0x82)
+         .B8(0)
+         .B16(data_length)
+         .append_repeated(42, data_length as usize)
+    });
+    let header = read_box_header(&mut stream).unwrap();
+    assert_eq!(header.name.as_bytes(), b"vpcC");
+    let r = super::read_vpcc(&mut stream);
+    assert!(r.is_ok());
+}
