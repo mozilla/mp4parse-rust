@@ -52,6 +52,12 @@ impl From<byteorder::Error> for Error {
     }
 }
 
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(_: std::string::FromUtf8Error) -> Error {
+        Error::InvalidData
+    }
+}
+
 /// Result shorthand using our Error enum.
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -1042,9 +1048,7 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     // Skip uninteresting fields.
     try!(skip(src, 12));
 
-    // TODO(kinetik): Find a copy of ISO/IEC 14496-1 to work out how strings are encoded.
-    // As a hack, just consume the rest of the box.
-    try!(skip_remaining_box_content(src, head));
+    let _name = try!(read_null_terminated_string(src));
 
     Ok(HandlerBox {
         header: *head,
@@ -1075,7 +1079,12 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, tra
     let height = try!(be_u16(src));
 
     // Skip uninteresting fields.
-    try!(skip(src, 50));
+    try!(skip(src, 14));
+
+    let _compressorname = try!(read_fixed_length_pascal_string(src, 32));
+
+    // Skip uninteresting fields.
+    try!(skip(src, 4));
 
     let h = try!(read_box_header(src));
     let codec_specific = match h.name.as_bytes() {
@@ -1214,6 +1223,33 @@ fn read_buf<T: ReadBytesExt>(src: &mut T, size: usize) -> Result<Vec<u8>> {
         return Err(Error::InvalidData);
     }
     Ok(buf)
+}
+
+// TODO(kinetik): Find a copy of ISO/IEC 14496-1 to confirm various string encodings.
+fn read_null_terminated_string<T: ReadBytesExt>(src: &mut T) -> Result<String> {
+    let mut buf = Vec::new();
+    loop {
+        let c = try!(src.read_u8());
+        if c == 0 {
+            break;
+        }
+        buf.push(c);
+    }
+    Ok(try!(String::from_utf8(buf)))
+}
+
+fn read_pascal_string<T: ReadBytesExt>(src: &mut T) -> Result<String> {
+    let len = try!(src.read_u8());
+    let buf = try!(read_buf(src, len as usize));
+    Ok(try!(String::from_utf8(buf)))
+}
+
+// Weird string encoding with a length prefix and a fixed sized buffer which
+// contains padding if the string doesn't fill the buffer.
+fn read_fixed_length_pascal_string<T: BufRead>(src: &mut T, size: usize) -> Result<String> {
+    let s = try!(read_pascal_string(src));
+    try!(skip(src, size - 1 - s.len()));
+    Ok(s)
 }
 
 fn media_time_to_ms(time: MediaScaledTime, scale: MediaTimeScale) -> u64 {
