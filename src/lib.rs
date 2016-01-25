@@ -976,11 +976,7 @@ fn read_vpcc<T: ReadBytesExt>(src: &mut T) -> Result<VPxConfigBox> {
     };
 
     let codec_init_size = try!(be_u16(src));
-    let mut codec_init = Vec::<u8>::with_capacity(codec_init_size as usize);
-    let r = try!(src.read(&mut codec_init));
-    if r != codec_init_size as usize {
-        return Err(Error::InvalidData);
-    }
+    let codec_init = try!(read_buf(src, codec_init_size as usize));
 
     // TODO(rillian): validate field value ranges.
     Ok(VPxConfigBox {
@@ -1013,11 +1009,7 @@ fn read_dops<T: ReadBytesExt>(src: &mut T) -> Result<OpusSpecificBox> {
     } else {
         let stream_count = try!(src.read_u8());
         let coupled_count = try!(src.read_u8());
-        let mut channel_mapping = Vec::<u8>::with_capacity(output_channel_count as usize);
-        let r = try!(src.read(&mut channel_mapping));
-        if r != output_channel_count as usize {
-            return Err(Error::InvalidData);
-        }
+        let channel_mapping = try!(read_buf(src, output_channel_count as usize));
 
         Some(ChannelMappingTable {
             stream_count: stream_count,
@@ -1089,9 +1081,7 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, tra
     let codec_specific = match h.name.as_bytes() {
         b"avcC" => {
             // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
-            let mut avcc: Vec<u8> = vec![0; (h.size - h.offset) as usize];
-            let r = try!(src.read(&mut avcc));
-            assert!(r == avcc.len());
+            let avcc = try!(read_buf(src, (h.size - h.offset) as usize));
 
             track.mime_type = String::from("video/avc");
             VideoCodecSpecific::AVCConfig(avcc)
@@ -1146,15 +1136,13 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, _: &BoxHeader, track:
     let codec_specific = match h.name.as_bytes() {
         b"esds" => {
             let (_, _) = try!(read_fullbox_extra(src));
-            let mut data: Vec<u8> = vec![0; (h.size - h.offset - 4) as usize];
-            let r = try!(src.read(&mut data));
-            assert!(r == data.len());
+            let esds = try!(read_buf(src, (h.size - h.offset - 4) as usize));
 
             // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
             track.mime_type = String::from("audio/mp4a-latm");
 
             // TODO(kinetik): Parse esds atom?  For now we just stash the data.
-            AudioCodecSpecific::ES_Descriptor(data)
+            AudioCodecSpecific::ES_Descriptor(esds)
         }
         b"dOps" => {
             let dops = try!(read_dops(src));
@@ -1216,6 +1204,16 @@ fn skip<T: BufRead>(src: &mut T, bytes: usize) -> Result<usize> {
     }
     assert!(bytes_to_skip == 0);
     Ok(bytes)
+}
+
+/// Read size bytes into a Vector or return error.
+fn read_buf<T: ReadBytesExt>(src: &mut T, size: usize) -> Result<Vec<u8>> {
+    let mut buf = vec![0; size];
+    let r = try!(src.read(&mut buf));
+    if r != size {
+        return Err(Error::InvalidData);
+    }
+    Ok(buf)
 }
 
 fn media_time_to_ms(time: MediaScaledTime, scale: MediaTimeScale) -> u64 {
