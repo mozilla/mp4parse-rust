@@ -975,10 +975,10 @@ fn read_vpcc<T: ReadBytesExt>(src: &mut T) -> Result<VPxConfigBox> {
         ((byte >> 4) & 0x0f, (byte >> 1) & 0x07, (byte & 1) == 1)
     };
 
-    let data_size = try!(be_u16(src));
-    let mut data = Vec::<u8>::with_capacity(data_size as usize);
-    let data_read = try!(src.read(&mut data));
-    if data_read != data_size as usize {
+    let codec_init_size = try!(be_u16(src));
+    let mut codec_init = Vec::<u8>::with_capacity(codec_init_size as usize);
+    let r = try!(src.read(&mut codec_init));
+    if r != codec_init_size as usize {
         return Err(Error::InvalidData);
     }
 
@@ -991,7 +991,7 @@ fn read_vpcc<T: ReadBytesExt>(src: &mut T) -> Result<VPxConfigBox> {
         chroma_subsampling: chroma_subsampling,
         transfer_function: transfer_function,
         video_full_range: video_full_range,
-        codec_init: data,
+        codec_init: codec_init,
     })
 }
 
@@ -1093,19 +1093,21 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, tra
             let r = try!(src.read(&mut avcc));
             assert!(r == avcc.len());
 
-            try!(skip_remaining_box_content(src, head));
-
             track.mime_type = String::from("video/avc");
-
             VideoCodecSpecific::AVCConfig(avcc)
         }
         b"vpcC" => {
             let vpcc = try!(read_vpcc(src));
+
             track.mime_type = String::from("video/vp9");
             VideoCodecSpecific::VPxConfig(vpcc)
         }
         _ => return Err(Error::Unsupported),
     };
+
+    // Skip clap/pasp/etc. for now.
+    try!(skip_remaining_box_content(src, head));
+
     Ok(SampleEntry::Video(VideoSampleEntry {
         data_reference_index: data_reference_index,
         width: width,
