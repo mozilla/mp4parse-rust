@@ -65,10 +65,10 @@ fn make_box<F>(size: u32, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
     make_box_raw(BoxSize::Short(size), name, func)
 }
 
-fn make_fullbox<F>(size: u32, name: &[u8; 4], version: u8, func: F) -> Cursor<Vec<u8>>
+fn make_fullbox<F>(size: BoxSize, name: &[u8; 4], version: u8, func: F) -> Cursor<Vec<u8>>
     where F: Fn(Section) -> Section
 {
-    make_box_raw(BoxSize::Short(size), name, |s| {
+    make_box_raw(size, name, |s| {
         func(s.B8(version)
               .B8(0)
               .B8(0)
@@ -157,7 +157,7 @@ fn read_truncated_ftyp() {
 
 #[test]
 fn read_elst_v0() {
-    let mut stream = make_fullbox(28, b"elst", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Auto, b"elst", 0, |s| {
         s.B32(1) // list count
           // first entry
          .B32(1234) // duration
@@ -178,7 +178,7 @@ fn read_elst_v0() {
 
 #[test]
 fn read_elst_v1() {
-    let mut stream = make_fullbox(56, b"elst", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Auto, b"elst", 1, |s| {
         s.B32(2) // list count
          // first entry
          .B64(1234) // duration
@@ -204,7 +204,7 @@ fn read_elst_v1() {
 
 #[test]
 fn read_mdhd_v0() {
-    let mut stream = make_fullbox(32, b"mdhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Auto, b"mdhd", 0, |s| {
         s.B32(0)
          .B32(0)
          .B32(1234) // timescale
@@ -221,7 +221,7 @@ fn read_mdhd_v0() {
 
 #[test]
 fn read_mdhd_v1() {
-    let mut stream = make_fullbox(44, b"mdhd", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Auto, b"mdhd", 1, |s| {
         s.B64(0)
          .B64(0)
          .B32(1234) // timescale
@@ -238,7 +238,7 @@ fn read_mdhd_v1() {
 
 #[test]
 fn read_mdhd_unknown_duration() {
-    let mut stream = make_fullbox(32, b"mdhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Auto, b"mdhd", 0, |s| {
         s.B32(0)
          .B32(0)
          .B32(1234) // timescale
@@ -255,7 +255,7 @@ fn read_mdhd_unknown_duration() {
 
 #[test]
 fn read_mdhd_invalid_timescale() {
-    let mut stream = make_fullbox(44, b"mdhd", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Auto, b"mdhd", 1, |s| {
         s.B64(0)
          .B64(0)
          .B32(0) // timescale
@@ -269,7 +269,7 @@ fn read_mdhd_invalid_timescale() {
 
 #[test]
 fn read_mvhd_v0() {
-    let mut stream = make_fullbox(108, b"mvhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Auto, b"mvhd", 0, |s| {
         s.B32(0)
          .B32(0)
          .B32(1234)
@@ -286,7 +286,7 @@ fn read_mvhd_v0() {
 
 #[test]
 fn read_mvhd_v1() {
-    let mut stream = make_fullbox(120, b"mvhd", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Auto, b"mvhd", 1, |s| {
         s.B64(0)
          .B64(0)
          .B32(1234)
@@ -303,7 +303,7 @@ fn read_mvhd_v1() {
 
 #[test]
 fn read_mvhd_invalid_timescale() {
-    let mut stream = make_fullbox(120, b"mvhd", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Auto, b"mvhd", 1, |s| {
         s.B64(0)
          .B64(0)
          .B32(0)
@@ -317,7 +317,7 @@ fn read_mvhd_invalid_timescale() {
 
 #[test]
 fn read_mvhd_unknown_duration() {
-    let mut stream = make_fullbox(108, b"mvhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Auto, b"mvhd", 0, |s| {
         s.B32(0)
          .B32(0)
          .B32(1234)
@@ -335,8 +335,7 @@ fn read_mvhd_unknown_duration() {
 #[test]
 fn read_vpcc() {
     let data_length = 12u16;
-    let box_length = 8 + 4 + 6 + data_length as u32;
-    let mut stream = make_fullbox(box_length, b"vpcC", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Auto, b"vpcC", 0, |s| {
         s.B8(2)
          .B8(0)
          .B8(0x82)
