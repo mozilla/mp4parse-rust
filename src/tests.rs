@@ -157,7 +157,7 @@ fn read_truncated_ftyp() {
 
 #[test]
 fn read_elst_v0() {
-    let mut stream = make_fullbox(BoxSize::Auto, b"elst", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(28), b"elst", 0, |s| {
         s.B32(1) // list count
           // first entry
          .B32(1234) // duration
@@ -178,7 +178,7 @@ fn read_elst_v0() {
 
 #[test]
 fn read_elst_v1() {
-    let mut stream = make_fullbox(BoxSize::Auto, b"elst", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(56), b"elst", 1, |s| {
         s.B32(2) // list count
          // first entry
          .B64(1234) // duration
@@ -204,7 +204,7 @@ fn read_elst_v1() {
 
 #[test]
 fn read_mdhd_v0() {
-    let mut stream = make_fullbox(BoxSize::Auto, b"mdhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(32), b"mdhd", 0, |s| {
         s.B32(0)
          .B32(0)
          .B32(1234) // timescale
@@ -221,7 +221,7 @@ fn read_mdhd_v0() {
 
 #[test]
 fn read_mdhd_v1() {
-    let mut stream = make_fullbox(BoxSize::Auto, b"mdhd", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(44), b"mdhd", 1, |s| {
         s.B64(0)
          .B64(0)
          .B32(1234) // timescale
@@ -238,7 +238,7 @@ fn read_mdhd_v1() {
 
 #[test]
 fn read_mdhd_unknown_duration() {
-    let mut stream = make_fullbox(BoxSize::Auto, b"mdhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(32), b"mdhd", 0, |s| {
         s.B32(0)
          .B32(0)
          .B32(1234) // timescale
@@ -255,7 +255,7 @@ fn read_mdhd_unknown_duration() {
 
 #[test]
 fn read_mdhd_invalid_timescale() {
-    let mut stream = make_fullbox(BoxSize::Auto, b"mdhd", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(44), b"mdhd", 1, |s| {
         s.B64(0)
          .B64(0)
          .B32(0) // timescale
@@ -269,7 +269,7 @@ fn read_mdhd_invalid_timescale() {
 
 #[test]
 fn read_mvhd_v0() {
-    let mut stream = make_fullbox(BoxSize::Auto, b"mvhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(108), b"mvhd", 0, |s| {
         s.B32(0)
          .B32(0)
          .B32(1234)
@@ -286,7 +286,7 @@ fn read_mvhd_v0() {
 
 #[test]
 fn read_mvhd_v1() {
-    let mut stream = make_fullbox(BoxSize::Auto, b"mvhd", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(120), b"mvhd", 1, |s| {
         s.B64(0)
          .B64(0)
          .B32(1234)
@@ -303,7 +303,7 @@ fn read_mvhd_v1() {
 
 #[test]
 fn read_mvhd_invalid_timescale() {
-    let mut stream = make_fullbox(BoxSize::Auto, b"mvhd", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(120), b"mvhd", 1, |s| {
         s.B64(0)
          .B64(0)
          .B32(0)
@@ -317,7 +317,7 @@ fn read_mvhd_invalid_timescale() {
 
 #[test]
 fn read_mvhd_unknown_duration() {
-    let mut stream = make_fullbox(BoxSize::Auto, b"mvhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(108), b"mvhd", 0, |s| {
         s.B32(0)
          .B32(0)
          .B32(1234)
