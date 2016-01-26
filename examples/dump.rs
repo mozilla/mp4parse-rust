@@ -4,8 +4,6 @@ use std::env;
 use std::fs::File;
 use std::io::BufReader;
 
-extern crate byteorder;
-
 fn dump_file(filename: &String) {
     let file = File::open(filename).unwrap();
     let mut reader = BufReader::new(file);

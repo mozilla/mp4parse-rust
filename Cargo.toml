@@ -1,5 +1,4 @@
 [package]
-
 name = "mp4parse"
 version = "0.1.6"
 authors = [
