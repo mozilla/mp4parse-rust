@@ -15,15 +15,18 @@ enum BoxSize {
     Long(u64),
     UncheckedShort(u32),
     UncheckedLong(u64),
+    Auto,
 }
 
 fn make_box_raw<F>(size: BoxSize, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
     where F: Fn(Section) -> Section
 {
     let mut section = Section::new();
+    let box_size = Label::new();
     section = match size {
         BoxSize::Short(size) | BoxSize::UncheckedShort(size) => section.B32(size),
         BoxSize::Long(_) | BoxSize::UncheckedLong(_) => section.B32(1),
+        BoxSize::Auto => section.B32(&box_size),
     };
     section = section.append_bytes(name);
     section = match size {
@@ -45,6 +48,12 @@ fn make_box_raw<F>(size: BoxSize, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
             }
         }
         BoxSize::Long(size) => assert_eq!(size, section.size()),
+        BoxSize::Auto => {
+            assert!(section.size() <= u32::max_value() as u64,
+              "Tried to use a long box with BoxSize::Auto");
+            box_size.set_const(section.size());
+        },
+        // Skip checking BoxSize::Unchecked* cases.
         _ => (),
     }
     Cursor::new(section.get_contents().unwrap())
