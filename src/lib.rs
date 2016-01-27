@@ -1048,7 +1048,14 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     // Skip uninteresting fields.
     try!(skip(src, 12));
 
-    let _name = try!(read_null_terminated_string(src));
+    // XXX(kinetik): need to verify if this zero-length string handling
+    // applies to all "null-terminated" strings (in which case
+    // read_null_terminated_string should handle this check) or this is
+    // specific to the hdlr box.
+    let bytes_left = head.size - head.offset - 24;
+    if bytes_left > 0 {
+        let _name = try!(read_null_terminated_string(src));
+    }
 
     Ok(HandlerBox {
         header: *head,

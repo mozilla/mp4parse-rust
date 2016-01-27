@@ -322,3 +322,54 @@ fn read_mvhd_unknown_duration() {
     assert_eq!(parsed.timescale, 1234);
     assert_eq!(parsed.duration, ::std::u64::MAX);
 }
+
+#[test]
+fn read_hdlr() {
+    let mut stream = make_fullbox(45, b"mvhd", 0, |s| {
+        s.B32(0)
+         .append_bytes(b"vide")
+         .B32(0)
+         .B32(0)
+         .B32(0)
+         .append_bytes(b"VideoHandler")
+         .B8(0) // null-terminate string
+    });
+    let header = read_box_header(&mut stream).unwrap();
+    let parsed = super::read_hdlr(&mut stream, &header).unwrap();
+    assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
+    assert_eq!(parsed.header.size, 45);
+    assert_eq!(parsed.handler_type, FourCC(*b"vide"));
+}
+
+#[test]
+fn read_hdlr_short_name() {
+    let mut stream = make_fullbox(33, b"mvhd", 0, |s| {
+        s.B32(0)
+         .append_bytes(b"vide")
+         .B32(0)
+         .B32(0)
+         .B32(0)
+         .B8(0) // null-terminate string
+    });
+    let header = read_box_header(&mut stream).unwrap();
+    let parsed = super::read_hdlr(&mut stream, &header).unwrap();
+    assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
+    assert_eq!(parsed.header.size, 33);
+    assert_eq!(parsed.handler_type, FourCC(*b"vide"));
+}
+
+#[test]
+fn read_hdlr_zero_length_name() {
+    let mut stream = make_fullbox(32, b"mvhd", 0, |s| {
+        s.B32(0)
+         .append_bytes(b"vide")
+         .B32(0)
+         .B32(0)
+         .B32(0)
+    });
+    let header = read_box_header(&mut stream).unwrap();
+    let parsed = super::read_hdlr(&mut stream, &header).unwrap();
+    assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
+    assert_eq!(parsed.header.size, 32);
+    assert_eq!(parsed.handler_type, FourCC(*b"vide"));
+}
