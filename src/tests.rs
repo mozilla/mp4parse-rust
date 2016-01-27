@@ -15,15 +15,18 @@ enum BoxSize {
     Long(u64),
     UncheckedShort(u32),
     UncheckedLong(u64),
+    Auto,
 }
 
 fn make_box_raw<F>(size: BoxSize, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
     where F: Fn(Section) -> Section
 {
     let mut section = Section::new();
+    let box_size = Label::new();
     section = match size {
         BoxSize::Short(size) | BoxSize::UncheckedShort(size) => section.B32(size),
         BoxSize::Long(_) | BoxSize::UncheckedLong(_) => section.B32(1),
+        BoxSize::Auto => section.B32(&box_size),
     };
     section = section.append_bytes(name);
     section = match size {
@@ -45,6 +48,12 @@ fn make_box_raw<F>(size: BoxSize, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
             }
         }
         BoxSize::Long(size) => assert_eq!(size, section.size()),
+        BoxSize::Auto => {
+            assert!(section.size() <= u32::max_value() as u64,
+              "Tried to use a long box with BoxSize::Auto");
+            box_size.set_const(section.size());
+        },
+        // Skip checking BoxSize::Unchecked* cases.
         _ => (),
     }
     Cursor::new(section.get_contents().unwrap())
@@ -56,10 +65,10 @@ fn make_box<F>(size: u32, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
     make_box_raw(BoxSize::Short(size), name, func)
 }
 
-fn make_fullbox<F>(size: u32, name: &[u8; 4], version: u8, func: F) -> Cursor<Vec<u8>>
+fn make_fullbox<F>(size: BoxSize, name: &[u8; 4], version: u8, func: F) -> Cursor<Vec<u8>>
     where F: Fn(Section) -> Section
 {
-    make_box_raw(BoxSize::Short(size), name, |s| {
+    make_box_raw(size, name, |s| {
         func(s.B8(version)
               .B8(0)
               .B8(0)
@@ -148,7 +157,7 @@ fn read_truncated_ftyp() {
 
 #[test]
 fn read_elst_v0() {
-    let mut stream = make_fullbox(28, b"elst", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(28), b"elst", 0, |s| {
         s.B32(1) // list count
           // first entry
          .B32(1234) // duration
@@ -169,7 +178,7 @@ fn read_elst_v0() {
 
 #[test]
 fn read_elst_v1() {
-    let mut stream = make_fullbox(56, b"elst", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(56), b"elst", 1, |s| {
         s.B32(2) // list count
          // first entry
          .B64(1234) // duration
@@ -195,7 +204,7 @@ fn read_elst_v1() {
 
 #[test]
 fn read_mdhd_v0() {
-    let mut stream = make_fullbox(32, b"mdhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(32), b"mdhd", 0, |s| {
         s.B32(0)
          .B32(0)
          .B32(1234) // timescale
@@ -212,7 +221,7 @@ fn read_mdhd_v0() {
 
 #[test]
 fn read_mdhd_v1() {
-    let mut stream = make_fullbox(44, b"mdhd", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(44), b"mdhd", 1, |s| {
         s.B64(0)
          .B64(0)
          .B32(1234) // timescale
@@ -229,7 +238,7 @@ fn read_mdhd_v1() {
 
 #[test]
 fn read_mdhd_unknown_duration() {
-    let mut stream = make_fullbox(32, b"mdhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(32), b"mdhd", 0, |s| {
         s.B32(0)
          .B32(0)
          .B32(1234) // timescale
@@ -246,7 +255,7 @@ fn read_mdhd_unknown_duration() {
 
 #[test]
 fn read_mdhd_invalid_timescale() {
-    let mut stream = make_fullbox(44, b"mdhd", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(44), b"mdhd", 1, |s| {
         s.B64(0)
          .B64(0)
          .B32(0) // timescale
@@ -260,7 +269,7 @@ fn read_mdhd_invalid_timescale() {
 
 #[test]
 fn read_mvhd_v0() {
-    let mut stream = make_fullbox(108, b"mvhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(108), b"mvhd", 0, |s| {
         s.B32(0)
          .B32(0)
          .B32(1234)
@@ -277,7 +286,7 @@ fn read_mvhd_v0() {
 
 #[test]
 fn read_mvhd_v1() {
-    let mut stream = make_fullbox(120, b"mvhd", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(120), b"mvhd", 1, |s| {
         s.B64(0)
          .B64(0)
          .B32(1234)
@@ -294,7 +303,7 @@ fn read_mvhd_v1() {
 
 #[test]
 fn read_mvhd_invalid_timescale() {
-    let mut stream = make_fullbox(120, b"mvhd", 1, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(120), b"mvhd", 1, |s| {
         s.B64(0)
          .B64(0)
          .B32(0)
@@ -308,7 +317,7 @@ fn read_mvhd_invalid_timescale() {
 
 #[test]
 fn read_mvhd_unknown_duration() {
-    let mut stream = make_fullbox(108, b"mvhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(108), b"mvhd", 0, |s| {
         s.B32(0)
          .B32(0)
          .B32(1234)
@@ -324,8 +333,25 @@ fn read_mvhd_unknown_duration() {
 }
 
 #[test]
+fn read_vpcc() {
+    let data_length = 12u16;
+    let mut stream = make_fullbox(BoxSize::Auto, b"vpcC", 0, |s| {
+        s.B8(2)
+         .B8(0)
+         .B8(0x82)
+         .B8(0)
+         .B16(data_length)
+         .append_repeated(42, data_length as usize)
+    });
+    let header = read_box_header(&mut stream).unwrap();
+    assert_eq!(header.name.as_bytes(), b"vpcC");
+    let r = super::read_vpcc(&mut stream);
+    assert!(r.is_ok());
+}
+
+#[test]
 fn read_hdlr() {
-    let mut stream = make_fullbox(45, b"mvhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(45), b"mvhd", 0, |s| {
         s.B32(0)
          .append_bytes(b"vide")
          .B32(0)
@@ -343,7 +369,7 @@ fn read_hdlr() {
 
 #[test]
 fn read_hdlr_short_name() {
-    let mut stream = make_fullbox(33, b"mvhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(33), b"mvhd", 0, |s| {
         s.B32(0)
          .append_bytes(b"vide")
          .B32(0)
@@ -360,7 +386,7 @@ fn read_hdlr_short_name() {
 
 #[test]
 fn read_hdlr_zero_length_name() {
-    let mut stream = make_fullbox(32, b"mvhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(32), b"mvhd", 0, |s| {
         s.B32(0)
          .append_bytes(b"vide")
          .B32(0)

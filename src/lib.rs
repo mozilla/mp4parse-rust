@@ -1066,13 +1066,13 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
 /// Parse an video description inside an stsd box.
 fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
     let h = try!(read_box_header(src));
-    match h.name.as_bytes() {
-        b"avc1" => (),
-        b"avc3" => (),
-        b"vp09" => (),
+    track.mime_type = match h.name.as_bytes() {
+        b"avc1" | b"avc3" => String::from("video/avc"),
+        b"vp08" => String::from("video/vp8"),
+        b"vp09" => String::from("video/vp9"),
         // TODO(kinetik): encv here also.
         _ => return Err(Error::Unsupported),
-    }
+    };
 
     // Skip uninteresting fields.
     try!(skip(src, 6));
@@ -1098,14 +1098,10 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, tra
         b"avcC" => {
             // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
             let avcc = try!(read_buf(src, (h.size - h.offset) as usize));
-
-            track.mime_type = String::from("video/avc");
             VideoCodecSpecific::AVCConfig(avcc)
         }
         b"vpcC" => {
             let vpcc = try!(read_vpcc(src));
-
-            track.mime_type = String::from("video/vp9");
             VideoCodecSpecific::VPxConfig(vpcc)
         }
         _ => return Err(Error::Unsupported),
