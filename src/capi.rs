@@ -13,7 +13,7 @@
 //! let context = mp4parse::mp4parse_new();
 //! unsafe {
 //!     let rv = mp4parse::mp4parse_read(context, data.as_ptr(), data.len());
-//!     assert_eq!(0, rv);
+//!     assert_eq!(rv, mp4parse::mp4parse_error::MP4PARSE_OK);
 //!     mp4parse::mp4parse_free(context);
 //! }
 //! ```
