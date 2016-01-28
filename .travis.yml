@@ -1,4 +1,10 @@
 language: rust
 rust:
-- stable
-- nightly
+  - stable
+  - nightly
+script:
+  - cargo build --features=$FEATURES --verbose
+  - cargo test  --features=$FEATURES --verbose
+env:
+  - FEATURES=""
+  - FEATURES="cheddar"
