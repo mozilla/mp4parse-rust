@@ -3,3 +3,4 @@
 *.o
 libmp4parse.a*
 examples/test
+include/mp4parse.h
