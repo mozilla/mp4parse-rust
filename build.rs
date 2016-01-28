@@ -10,12 +10,10 @@ fn main() {
         .run_build("include/mp4parse.h");
 
     // Try compiling it.
-    let job = std::process::Command::new("sh")
+    let job = std::process::Command::new("/bin/sh")
         .arg("-c")
         .arg("make -C examples")
-        .output()
-        .unwrap_or_else(|e| { panic!("Failed to invoke makefile: {}", e); });
-    for line in job.stdout {
-        println!("{}", line);
-    }
+        .status()
+        .expect("error: Unable to invoke makefile.");
+    assert!(job.success(), "error: C++ test build failed.");
 }
