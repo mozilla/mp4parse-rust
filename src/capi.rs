@@ -48,8 +48,8 @@ pub enum mp4parse_error {
 
 #[repr(C)]
 pub enum mp4parse_track_type {
-    MP4PARSE_TRACK_TYPE_H264 = 0,
-    MP4PARSE_TRACK_TYPE_AAC = 1,
+    MP4PARSE_TRACK_TYPE_VIDEO = 0,
+    MP4PARSE_TRACK_TYPE_AUDIO = 1,
 }
 
 #[repr(C)]
@@ -166,8 +166,8 @@ pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut mp4parse_state, t
     }
 
     info.track_type = match context.tracks[track_index].track_type {
-        TrackType::Video => mp4parse_track_type::MP4PARSE_TRACK_TYPE_H264,
-        TrackType::Audio => mp4parse_track_type::MP4PARSE_TRACK_TYPE_AAC,
+        TrackType::Video => mp4parse_track_type::MP4PARSE_TRACK_TYPE_VIDEO,
+        TrackType::Audio => mp4parse_track_type::MP4PARSE_TRACK_TYPE_AUDIO,
         TrackType::Unknown => return mp4parse_error::MP4PARSE_ERROR_UNSUPPORTED,
     };
 
