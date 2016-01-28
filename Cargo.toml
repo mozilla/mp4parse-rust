@@ -26,8 +26,4 @@ byteorder = "0.4.2"
 test-assembler = "0.1.0"
 
 [build-dependencies]
-rusty-cheddar = { version = "0.3.1", optional = true }
-
-[features]
-cheddar = ["rusty-cheddar"]
-
+rusty-cheddar = "0.3.1"
