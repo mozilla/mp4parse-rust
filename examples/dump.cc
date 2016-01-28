@@ -51,11 +51,11 @@ void test_arg_validation()
   mp4parse_free(context);
 }
 
-const char * tracktype2mimetype(uint32_t type)
+const char * tracktype2str(uint32_t type)
 {
   switch (type) {
-    case MP4PARSE_TRACK_TYPE_H264: return "video/avc";
-    case MP4PARSE_TRACK_TYPE_AAC:  return "audio/mp4a-latm";
+    case MP4PARSE_TRACK_TYPE_H264: return "video";
+    case MP4PARSE_TRACK_TYPE_AAC:  return "audio";
   }
   return "unknown";
 }
@@ -102,8 +102,8 @@ int32_t read_file(const char* filename)
     mp4parse_track_info track_info;
     int32_t rv2 = mp4parse_get_track_info(context, i, &track_info);
     assert(rv2 == MP4PARSE_OK);
-    fprintf(stderr, "Track %d: mime_type='%s' duration=%" PRId64 " media_time=%" PRId64 " track_id=%d\n",
-            i, tracktype2mimetype(track_info.track_type), track_info.duration, track_info.media_time, track_info.track_id);
+    fprintf(stderr, "Track %d: type=%s duration=%" PRId64 " media_time=%" PRId64 " track_id=%d\n",
+            i, tracktype2str(track_info.track_type), track_info.duration, track_info.media_time, track_info.track_id);
   }
 
   mp4parse_free(context);
