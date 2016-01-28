@@ -393,3 +393,49 @@ fn read_hdlr_zero_length_name() {
     assert_eq!(parsed.header.size, 32);
     assert_eq!(parsed.handler_type, FourCC(*b"vide"));
 }
+
+#[test]
+fn read_opus() {
+    let mut stream = make_box(BoxSize::Auto, b"Opus", |s| {
+        s.append_repeated(0, 6)
+         .B16(1) // data reference index
+         .B32(0)
+         .B32(0)
+         .B16(2) // channel count
+         .B16(16) // bits per sample
+         .B16(0)
+         .B16(0)
+         .B32(48000 << 16) // Sample rate is always 48 kHz for Opus.
+         .append_bytes(&make_dops().into_inner())
+    });
+    // Dummy header to pass to read_audio_desc(), which ignores it.
+    let header = BoxHeader {
+        name: FourCC(*b"stsd"),
+        size: u32::max_value() as u64,
+        offset: 0,
+    };
+    let mut track = super::Track::new(0);
+    let r = super::read_audio_desc(&mut stream, &header, &mut track);
+    assert!(r.is_ok());
+}
+
+fn make_dops() -> Cursor<Vec<u8>> {
+    make_box(BoxSize::Auto, b"dOps", |s| {
+        s.B8(0) // version
+         .B8(2) // channel count
+         .B16(348) // pre-skip
+         .B32(44100) // original sample rate
+         .B16(0) // gain
+         .B8(0) // channel mapping
+    })
+}
+
+#[test]
+/// Test OpusSpecificBox parsing.
+fn read_dops() {
+    let mut stream = make_dops();
+    let header = read_box_header(&mut stream).unwrap();
+    assert_eq!(header.name.as_bytes(), b"dOps");
+    let r = super::read_dops(&mut stream);
+    assert!(r.is_ok());
+}
