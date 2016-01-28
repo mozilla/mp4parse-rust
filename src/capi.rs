@@ -35,6 +35,7 @@ use track_time_to_ms;
 use SampleEntry;
 
 #[repr(C)]
+#[derive(PartialEq,Debug)]
 pub enum mp4parse_error {
     MP4PARSE_OK = 0,
     MP4PARSE_ERROR_BADARG = 1,
