@@ -23,7 +23,7 @@ build = "build.rs"
 byteorder = "0.4.2"
 
 [dev-dependencies]
-test-assembler = "0.1.0"
+test-assembler = "0.1.1"
 
 [build-dependencies]
 rusty-cheddar = "0.3.1"
