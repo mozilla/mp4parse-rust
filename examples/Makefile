@@ -11,8 +11,8 @@ CXXFLAGS = -g -Wall -std=c++11 -I$(dir $(HEADER))
 
 libmp4parse.a libmp4parse.a.out : ../src/lib.rs
 	rustc -g --crate-type staticlib --crate-name mp4parse \
-	  --emit dep-info,link=$@ \
-	  -L ../target/debug/deps/ $< 2> libmp4parse.a.out
+	  --emit dep-info,link=$@ -L ../target/debug/deps/ $< \
+	  2> libmp4parse.a.out || cat libmp4parse.a.out >&2
 
 -include mp4parse.d
 
