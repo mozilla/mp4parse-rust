@@ -8,7 +8,7 @@
 //! extern crate mp4parse;
 //!
 //! // Minimal valid mp4 containing no tracks.
-//! let data = b"\0\0\0\x0cftypmp42";
+//! let data = b"\0\0\0\x10ftypmp42\0\0\0\0";
 //!
 //! let context = mp4parse::mp4parse_new();
 //! unsafe {

@@ -435,29 +435,35 @@ fn driver<F, T>(f: &mut T, context: &mut MediaContext, mut action: F) -> Result<
           T: BufRead
 {
     loop {
-        let r = read_box_header(f).and_then(|h| {
-            let mut content = limit(f, &h);
-            let r = action(&mut content, h, context);
-            if r.is_ok() {
-                if content.limit() > 0 {
+        let r = match read_box_header(f) {
+            Ok(h) => {
+                let mut content = limit(f, &h);
+                let r = action(&mut content, h, context);
+                if r.is_ok() && content.limit() > 0 {
                     // It's possible that this is a parser bug rather than a
                     // bad file (e.g. if we forgot to read the entire box
                     // contents).
                     log!(context, "bad parser state: {} content bytes left", content.limit());
                     return Err(Error::InvalidData);
                 }
-                log!(context, "read_box context: {:?}", context);
+                //log!(context, "read_box context: {:?}", context);
+                log!(context, "{:?}", h);
+                r
             }
-            r
-        });
-        match r {
-            Ok(_) => {}
             Err(Error::UnexpectedEOF) => {
                 // byteorder returns EOF at the end of the buffer.
                 // This isn't an error for us, just an signal to
                 // stop recursion.
-                log!(context, "Caught Error::UnexpectedEOF");
-                break;
+                log!(context, "Box read, backing up.");
+                return Ok(());
+            }
+            Err(e) => Err(e),
+        };
+        match r {
+            Ok(_) => (),
+            Err(Error::UnexpectedEOF) => {
+                log!(context, "Unexpected EOF");
+                return Err(Error::UnexpectedEOF);
             }
             Err(Error::InvalidData) => {
                 log!(context, "Invalid data");
@@ -480,7 +486,6 @@ fn driver<F, T>(f: &mut T, context: &mut MediaContext, mut action: F) -> Result<
             }
         }
     }
-    Ok(())
 }
 
 /// Read the contents of a box, including sub boxes.
@@ -497,6 +502,7 @@ pub fn read_mp4<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
             b"moov" => try!(read_moov(&mut content, &h, context)),
             _ => {
                 // Skip the contents of unknown chunks.
+                log!(context, "{:?} (skipped)", h);
                 try!(skip_box_content(&mut content, &h));
             }
         };
