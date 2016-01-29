@@ -36,9 +36,16 @@ void test_arg_validation(mp4parse_state *context)
   rv = mp4parse_read(context, buf.data(), buf.size());
   assert(rv == MP4PARSE_ERROR_BADARG);
 
-  buf.reserve(len);
+  buf.resize(len);
   rv = mp4parse_read(context, buf.data(), buf.size());
-  assert(rv == MP4PARSE_ERROR_BADARG);
+  if (context) {
+    // This fails with UNSUPPORTED because buf contains zeroes, so the first
+    // box read is zero (unknown) length, which the parser doesn't currently
+    // support.
+    assert(rv == MP4PARSE_ERROR_UNSUPPORTED);
+  } else {
+    assert(rv == MP4PARSE_ERROR_BADARG);
+  }
 }
 
 void test_arg_validation()
