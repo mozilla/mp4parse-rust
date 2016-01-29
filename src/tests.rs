@@ -50,9 +50,9 @@ fn make_box_raw<F>(size: BoxSize, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
         BoxSize::Long(size) => assert_eq!(size, section.size()),
         BoxSize::Auto => {
             assert!(section.size() <= u32::max_value() as u64,
-              "Tried to use a long box with BoxSize::Auto");
+                    "Tried to use a long box with BoxSize::Auto");
             box_size.set_const(section.size());
-        },
+        }
         // Skip checking BoxSize::Unchecked* cases.
         _ => (),
     }

@@ -432,7 +432,7 @@ fn limit<'a, T: BufRead>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
 /// on that header.
 fn driver<F, T>(f: &mut T, context: &mut MediaContext, mut action: F) -> Result<()>
     where F: FnMut(&mut Take<&mut T>, BoxHeader, &mut MediaContext) -> Result<()>,
-          T: BufRead,
+          T: BufRead
 {
     loop {
         let r = read_box_header(f).and_then(|h| {
