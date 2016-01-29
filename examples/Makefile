@@ -6,14 +6,15 @@ all: test
 check: all
 	./test
 
-CXXFLAGS = -g -Wall -std=c++11 -I../include
-RUST_LIBS = -ldl -lpthread -lrt -lgcc_s -lpthread -lc -lm
-
 HEADER := ../include/mp4parse.h
-RUST_SRCS := ../src/lib.rs $(wildcard ../src/*.rs)
+CXXFLAGS = -g -Wall -std=c++11 -I$(dir $(HEADER))
 
-libmp4parse.a libmp4parse.a.out : $(RUST_SRCS) $(HEADER)
-	rustc -g --crate-type staticlib -o libmp4parse.a -L ../target/debug/deps/ $< 2> libmp4parse.a.out
+libmp4parse.a libmp4parse.a.out : ../src/lib.rs
+	rustc -g --crate-type staticlib --crate-name mp4parse \
+	  --emit dep-info,link=$@ \
+	  -L ../target/debug/deps/ $< 2> libmp4parse.a.out
+
+-include mp4parse.d
 
 test: RUST_LIBS = $(shell awk '/^note: library: / {print "-l"$$3}' libmp4parse.a.out)
 test: test.cc libmp4parse.a $(HEADER)
@@ -24,3 +25,4 @@ clean:
 	$(RM) test
 	$(RM) *.a.out
 	$(RM) *.o *.a
+	$(RM) *.d
