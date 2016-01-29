@@ -13,3 +13,8 @@ addons:
 env:
   global:
     - CXX=g++-4.8
+
+script:
+  - cargo build --verbose
+  - cargo test --verbose
+  - make -C examples
