@@ -16,7 +16,7 @@ libmp4parse.a libmp4parse.a.out : $(RUST_SRCS) $(HEADER)
 	rustc -g --crate-type staticlib -o libmp4parse.a -L ../target/debug/deps/ $< 2> libmp4parse.a.out
 
 test: RUST_LIBS = $(shell awk '/^note: library: / {print "-l"$$3}' libmp4parse.a.out)
-test: dump.cc libmp4parse.a $(HEADER)
+test: test.cc libmp4parse.a $(HEADER)
 	$(CXX) $(CXXFLAGS) -c $(filter %.cc,$^)
 	$(CXX) $(CXXFLAGS) -o $@ *.o libmp4parse.a $(RUST_LIBS)
 
