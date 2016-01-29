@@ -6,7 +6,7 @@ all: test
 check: all
 	./test
 
-CXXFLAGS = -g -Wall -std=c++1y -I../include
+CXXFLAGS = -g -Wall -std=c++11 -I../include
 RUST_LIBS = -ldl -lpthread -lrt -lgcc_s -lpthread -lc -lm
 
 HEADER := ../include/mp4parse.h
