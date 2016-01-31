@@ -533,7 +533,7 @@ pub fn read_mp4<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
                 let ftyp = try!(read_ftyp(&mut b.content, &b.head));
                 log!(context, "{:?}", ftyp);
             }
-            b"moov" => try!(read_moov(&mut b.content, &b.head, context)),
+            b"moov" => try!(read_moov(&mut b.content, context)),
             _ => {
                 // Skip the contents of unknown chunks.
                 log!(context, "{:?} (skipped)", b.head);
@@ -553,7 +553,7 @@ fn parse_mvhd<T: BufRead>(f: &mut T, h: &BoxHeader) -> Result<(MovieHeaderBox, O
     Ok((mvhd, timescale))
 }
 
-fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -> Result<()> {
+fn read_moov<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     let mut x = Input { src: f };
     while let Some(mut b) = x.next() {
         match b.head.name.as_bytes() {
@@ -565,7 +565,7 @@ fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
             b"trak" => {
                 let mut track = Track::new(context.tracks.len());
                 track.trace = context.trace;
-                try!(read_trak(&mut b.content, &b.head, context, &mut track));
+                try!(read_trak(&mut b.content, context, &mut track));
                 context.tracks.push(track);
             }
             _ => {
@@ -578,7 +578,7 @@ fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -
     Ok(())
 }
 
-fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_trak<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     let mut x = Input { src: f };
     while let Some(mut b) = x.next() {
         match b.head.name.as_bytes() {
@@ -588,8 +588,8 @@ fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
                 track.tkhd = Some(tkhd.clone());
                 log!(context, "  {:?}", tkhd);
             }
-            b"edts" => try!(read_edts(&mut b.content, &b.head, context, track)),
-            b"mdia" => try!(read_mdia(&mut b.content, &b.head, context, track)),
+            b"edts" => try!(read_edts(&mut b.content, context, track)),
+            b"mdia" => try!(read_mdia(&mut b.content, context, track)),
             _ => {
                 // Skip the contents of unknown chunks.
                 log!(context, "{:?} (skipped)", b.head);
@@ -600,7 +600,7 @@ fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
     Ok(())
 }
 
-fn read_edts<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_edts<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     let mut x = Input { src: f };
     while let Some(mut b) = x.next() {
         match b.head.name.as_bytes() {
@@ -649,7 +649,7 @@ fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track: &mut Track) -> Result
     Ok((mdhd, duration, timescale))
 }
 
-fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_mdia<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     let mut x = Input { src: f };
     while let Some(mut b) = x.next() {
         match b.head.name.as_bytes() {
@@ -668,7 +668,7 @@ fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
                 }
                 log!(context, "  {:?}", hdlr);
             }
-            b"minf" => try!(read_minf(&mut b.content, &b.head, context, track)),
+            b"minf" => try!(read_minf(&mut b.content, context, track)),
             _ => {
                 // Skip the contents of unknown chunks.
                 log!(context, "{:?} (skipped)", b.head);
@@ -679,11 +679,11 @@ fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
     Ok(())
 }
 
-fn read_minf<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_minf<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     let mut x = Input { src: f };
     while let Some(mut b) = x.next() {
         match b.head.name.as_bytes() {
-            b"stbl" => try!(read_stbl(&mut b.content, &b.head, context, track)),
+            b"stbl" => try!(read_stbl(&mut b.content, context, track)),
             _ => {
                 // Skip the contents of unknown chunks.
                 log!(context, "{:?} (skipped)", b.head);
@@ -694,7 +694,7 @@ fn read_minf<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
     Ok(())
 }
 
-fn read_stbl<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_stbl<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     let mut x = Input { src: f };
     while let Some(mut b) = x.next() {
         match b.head.name.as_bytes() {
@@ -1175,7 +1175,7 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, tra
 }
 
 /// Parse an audio description inside an stsd box.
-fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, _: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
+fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) -> Result<SampleEntry> {
     let h = try!(read_box_header(src));
     // TODO(kinetik): enca here also?
     match h.name.as_bytes() {
@@ -1254,7 +1254,7 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &m
     for _ in 0..description_count {
         let description = match track.track_type {
             TrackType::Video => try!(read_video_desc(src, head, track)),
-            TrackType::Audio => try!(read_audio_desc(src, head, track)),
+            TrackType::Audio => try!(read_audio_desc(src, track)),
             TrackType::Unknown => SampleEntry::Unknown,
         };
         if track.data.is_none() {
