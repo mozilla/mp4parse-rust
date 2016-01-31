@@ -442,14 +442,6 @@ fn skip_box_content<T: BufRead>(src: &mut T, header: &BoxHeader) -> Result<usize
     skip(src, (header.size - header.offset) as usize)
 }
 
-/// Skip over the remaining contents of a box.
-fn skip_remaining_box_content<T: BufRead>(src: &mut T, header: &BoxHeader) -> Result<()> {
-    match skip(src, (header.size - header.offset) as usize) {
-        Ok(_) | Err(Error::UnexpectedEOF) => Ok(()),
-        e => Err(e.err().unwrap()),
-    }
-}
-
 /// Helper to construct a Take over the contents of a box.
 fn limit<'a, T: BufRead>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
     f.take(h.size - h.offset)
@@ -1116,8 +1108,9 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
 }
 
 /// Parse an video description inside an stsd box.
-fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
+fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) -> Result<SampleEntry> {
     let h = try!(read_box_header(src));
+    // TODO(kinetik): enforce expected subbox, e.g. avc1 should have avcC not vpcC
     track.mime_type = match h.name.as_bytes() {
         b"avc1" | b"avc3" => String::from("video/avc"),
         b"vp08" => String::from("video/vp8"),
@@ -1145,44 +1138,56 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, tra
     // Skip uninteresting fields.
     try!(skip(src, 4));
 
-    let h = try!(read_box_header(src));
-    let codec_specific = match h.name.as_bytes() {
-        b"avcC" => {
-            let avcc_size = h.size - h.offset;
-            if avcc_size > BUF_SIZE_LIMIT {
-                return Err(Error::InvalidData);
-            }
-            let avcc = try!(read_buf(src, avcc_size as usize));
-            // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
-            VideoCodecSpecific::AVCConfig(avcc)
-        }
-        b"vpcC" => {
-            let vpcc = try!(read_vpcc(src));
-            VideoCodecSpecific::VPxConfig(vpcc)
-        }
-        _ => return Err(Error::Unsupported),
-    };
-
     // Skip clap/pasp/etc. for now.
-    try!(skip_remaining_box_content(src, head));
+    let mut x = Input { src: src };
+    let mut codec_specific = None;
+    while let Some(mut b) = x.next() {
+        match b.head.name.as_bytes() {
+            b"avcC" => {
+                let avcc_size = h.size - h.offset;
+                if avcc_size > BUF_SIZE_LIMIT {
+                    return Err(Error::InvalidData);
+                }
+                let avcc = try!(read_buf(&mut b.content, avcc_size as usize));
+                // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
+                codec_specific = Some(VideoCodecSpecific::AVCConfig(avcc));
+            }
+            b"vpcC" => {
+                let vpcc = try!(read_vpcc(&mut b.content));
+                codec_specific = Some(VideoCodecSpecific::VPxConfig(vpcc));
+            }
+            _ => {
+                // Skip the contents of unknown chunks.
+                log!(track, "{:?} (skipped)", b.head);
+                try!(skip_box_content(&mut b.content, &b.head));
+            }
+        }
+    }
+
+    if codec_specific.is_none() {
+        return Err(Error::InvalidData);
+    }
 
     Ok(SampleEntry::Video(VideoSampleEntry {
         data_reference_index: data_reference_index,
         width: width,
         height: height,
-        codec_specific: codec_specific,
+        codec_specific: codec_specific.unwrap(),
     }))
 }
 
 /// Parse an audio description inside an stsd box.
 fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) -> Result<SampleEntry> {
     let h = try!(read_box_header(src));
-    // TODO(kinetik): enca here also?
-    match h.name.as_bytes() {
-        b"mp4a" => (),
-        b"Opus" => (),
+    // TODO(kinetik): enforce expected subbox, e.g. mp4a should have esds not dOps
+    track.mime_type = match h.name.as_bytes() {
+        // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
+        b"mp4a" => String::from("audio/mp4a-latm"),
+        // TODO(kinetik): stagefright doesn't have a MIME mapping for this, revisit.
+        b"Opus" => String::from("audio/opus"),
+        // TODO(kinetik): enca here also?
         _ => return Err(Error::Unsupported),
-    }
+    };
 
     // Skip uninteresting fields.
     try!(skip(src, 6));
@@ -1200,46 +1205,45 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) ->
 
     let samplerate = try!(be_u32(src));
 
-    let h = try!(read_box_header(src));
-    let codec_specific = match h.name.as_bytes() {
-        b"esds" => {
-            let (_, _) = try!(read_fullbox_extra(src));
-            // We expect it's valid to subtract 4 bytes from the remaining
-            // box size if read_fullbox_extra succeeded, but we haven't
-            // performed a limit() on the esds subbox, so it's possible for
-            // read_fullbox_extra to steal bytes from a parent/sibling and
-            // the following calculation to underflow.
-            let esds_size = if h.size - h.offset >= 4 {
-                h.size - h.offset - 4
-            } else {
-                return Err(Error::InvalidData);
-            };
-            if esds_size > BUF_SIZE_LIMIT {
-                return Err(Error::InvalidData);
+    // Skip chan/etc. for now.
+    let mut x = Input { src: src };
+    let mut codec_specific = None;
+    while let Some(mut b) = x.next() {
+        match b.head.name.as_bytes() {
+            b"esds" => {
+                let (_, _) = try!(read_fullbox_extra(&mut b.content));
+                let esds_size = h.size - h.offset - 4;
+                if esds_size > BUF_SIZE_LIMIT {
+                    return Err(Error::InvalidData);
+                }
+                let esds = try!(read_buf(&mut b.content, esds_size as usize));
+
+                // TODO(kinetik): Parse esds atom?  For now we just stash the data.
+                codec_specific = Some(AudioCodecSpecific::ES_Descriptor(esds));
             }
-            let esds = try!(read_buf(src, esds_size as usize));
+            b"dOps" => {
+                let dops = try!(read_dops(&mut b.content));
 
-            // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
-            track.mime_type = String::from("audio/mp4a-latm");
-
-            // TODO(kinetik): Parse esds atom?  For now we just stash the data.
-            AudioCodecSpecific::ES_Descriptor(esds)
+                codec_specific = Some(AudioCodecSpecific::OpusSpecificBox(dops));
+            }
+            _ => {
+                // Skip the contents of unknown chunks.
+                log!(track, "{:?} (skipped)", b.head);
+                try!(skip_box_content(&mut b.content, &b.head));
+            }
         }
-        b"dOps" => {
-            let dops = try!(read_dops(src));
-            // TODO(kinetik): stagefright doesn't have a MIME mapping for this, revisit.
-            track.mime_type = String::from("audio/opus");
+    }
 
-            AudioCodecSpecific::OpusSpecificBox(dops)
-        }
-        _ => return Err(Error::Unsupported),
-    };
+    if codec_specific.is_none() {
+        return Err(Error::InvalidData);
+    }
+
     Ok(SampleEntry::Audio(AudioSampleEntry {
         data_reference_index: data_reference_index,
         channelcount: channelcount,
         samplesize: samplesize,
         samplerate: samplerate,
-        codec_specific: codec_specific,
+        codec_specific: codec_specific.unwrap(),
     }))
 }
 
@@ -1253,7 +1257,7 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &m
     // TODO(kinetik): check if/when more than one desc per track? do we need to support?
     for _ in 0..description_count {
         let description = match track.track_type {
-            TrackType::Video => try!(read_video_desc(src, head, track)),
+            TrackType::Video => try!(read_video_desc(src, track)),
             TrackType::Audio => try!(read_audio_desc(src, track)),
             TrackType::Unknown => SampleEntry::Unknown,
         };
