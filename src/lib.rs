@@ -372,6 +372,28 @@ impl Track {
     }
 }
 
+struct BMFFBox<'a, T: 'a + BufRead> {
+    head: BoxHeader,
+    content: Take<&'a mut T>,
+}
+
+struct Input<'a, T: 'a + BufRead> {
+    src: &'a mut T,
+}
+
+impl<'b, 'a, T: 'a + BufRead> Input<'b, T> {
+    fn next(&'a mut self) -> Option<BMFFBox<'a, T>> {
+        let r = read_box_header(self.src);
+        match r {
+            Ok(h) => Some(BMFFBox {
+                head: h,
+                content: limit(self.src, &h),
+            }),
+            _ => None,
+        }
+    }
+}
+
 /// Read and parse a box header.
 ///
 /// Call this first to determine the type of a particular mp4 box
@@ -499,21 +521,27 @@ fn driver<F, T>(f: &mut T, context: &mut MediaContext, mut action: F) -> Result<
 /// Metadata is accumulated in the passed-through MediaContext struct,
 /// which can be examined later.
 pub fn read_mp4<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()> {
-    driver(f, context, |mut content, h, context| {
-        match h.name.as_bytes() {
+    /* issues: - see driver() impl
+    - disambiguating errors inside next(), uxeof vs other error
+      (could return result but less ergonomic)
+    - content.limit check - where can it go?
+     */
+    let mut x = Input { src: f };
+    while let Some(mut b) = x.next() {
+        match b.head.name.as_bytes() {
             b"ftyp" => {
-                let ftyp = try!(read_ftyp(&mut content, &h));
+                let ftyp = try!(read_ftyp(&mut b.content, &b.head));
                 log!(context, "{:?}", ftyp);
             }
-            b"moov" => try!(read_moov(&mut content, &h, context)),
+            b"moov" => try!(read_moov(&mut b.content, &b.head, context)),
             _ => {
                 // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", h);
-                try!(skip_box_content(&mut content, &h));
+                log!(context, "{:?} (skipped)", b.head);
+                try!(skip_box_content(&mut b.content, &b.head));
             }
         };
-        Ok(())
-    })
+    }
+    Ok(())
 }
 
 fn parse_mvhd<T: BufRead>(f: &mut T, h: &BoxHeader) -> Result<(MovieHeaderBox, Option<MediaTimeScale>)> {
