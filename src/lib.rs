@@ -554,55 +554,58 @@ fn parse_mvhd<T: BufRead>(f: &mut T, h: &BoxHeader) -> Result<(MovieHeaderBox, O
 }
 
 fn read_moov<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext) -> Result<()> {
-    driver(f, context, |mut content, h, context| {
-        match h.name.as_bytes() {
+    let mut x = Input { src: f };
+    while let Some(mut b) = x.next() {
+        match b.head.name.as_bytes() {
             b"mvhd" => {
-                let (mvhd, timescale) = try!(parse_mvhd(content, &h));
+                let (mvhd, timescale) = try!(parse_mvhd(&mut b.content, &b.head));
                 context.timescale = timescale;
                 log!(context, "  {:?}", mvhd);
             }
             b"trak" => {
                 let mut track = Track::new(context.tracks.len());
                 track.trace = context.trace;
-                try!(read_trak(&mut content, &h, context, &mut track));
+                try!(read_trak(&mut b.content, &b.head, context, &mut track));
                 context.tracks.push(track);
             }
             _ => {
                 // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", h);
-                try!(skip_box_content(&mut content, &h));
+                log!(context, "{:?} (skipped)", b.head);
+                try!(skip_box_content(&mut b.content, &b.head));
             }
         };
-        Ok(())
-    })
+    }
+    Ok(())
 }
 
 fn read_trak<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
-    driver(f, context, |mut content, h, context| {
-        match h.name.as_bytes() {
+    let mut x = Input { src: f };
+    while let Some(mut b) = x.next() {
+        match b.head.name.as_bytes() {
             b"tkhd" => {
-                let tkhd = try!(read_tkhd(&mut content, &h));
+                let tkhd = try!(read_tkhd(&mut b.content, &b.head));
                 track.track_id = Some(tkhd.track_id);
                 track.tkhd = Some(tkhd.clone());
                 log!(context, "  {:?}", tkhd);
             }
-            b"edts" => try!(read_edts(&mut content, &h, context, track)),
-            b"mdia" => try!(read_mdia(&mut content, &h, context, track)),
+            b"edts" => try!(read_edts(&mut b.content, &b.head, context, track)),
+            b"mdia" => try!(read_mdia(&mut b.content, &b.head, context, track)),
             _ => {
                 // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", h);
-                try!(skip_box_content(&mut content, &h));
+                log!(context, "{:?} (skipped)", b.head);
+                try!(skip_box_content(&mut b.content, &b.head));
             }
         };
-        Ok(())
-    })
+    }
+    Ok(())
 }
 
 fn read_edts<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
-    driver(f, context, |mut content, h, context| {
-        match h.name.as_bytes() {
+    let mut x = Input { src: f };
+    while let Some(mut b) = x.next() {
+        match b.head.name.as_bytes() {
             b"elst" => {
-                let elst = try!(read_elst(&mut content, &h));
+                let elst = try!(read_elst(&mut b.content, &b.head));
                 let mut empty_duration = 0;
                 let mut idx = 0;
                 if elst.edits.len() > 2 {
@@ -625,12 +628,12 @@ fn read_edts<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
             }
             _ => {
                 // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", h);
-                try!(skip_box_content(&mut content, &h));
+                log!(context, "{:?} (skipped)", b.head);
+                try!(skip_box_content(&mut b.content, &b.head));
             }
         };
-        Ok(())
-    })
+    }
+    Ok(())
 }
 
 fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track: &mut Track) -> Result<(MediaHeaderBox, Option<TrackScaledTime>, Option<TrackTimeScale>)> {
@@ -647,16 +650,17 @@ fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track: &mut Track) -> Result
 }
 
 fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
-    driver(f, context, |mut content, h, context| {
-        match h.name.as_bytes() {
+    let mut x = Input { src: f };
+    while let Some(mut b) = x.next() {
+        match b.head.name.as_bytes() {
             b"mdhd" => {
-                let (mdhd, duration, timescale) = try!(parse_mdhd(content, &h, track));
+                let (mdhd, duration, timescale) = try!(parse_mdhd(&mut b.content, &b.head, track));
                 track.duration = duration;
                 track.timescale = timescale;
                 log!(context, "  {:?}", mdhd);
             }
             b"hdlr" => {
-                let hdlr = try!(read_hdlr(&mut content, &h));
+                let hdlr = try!(read_hdlr(&mut b.content, &b.head));
                 match &hdlr.handler_type.0 {
                     b"vide" => track.track_type = TrackType::Video,
                     b"soun" => track.track_type = TrackType::Audio,
@@ -664,70 +668,72 @@ fn read_mdia<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
                 }
                 log!(context, "  {:?}", hdlr);
             }
-            b"minf" => try!(read_minf(&mut content, &h, context, track)),
+            b"minf" => try!(read_minf(&mut b.content, &b.head, context, track)),
             _ => {
                 // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", h);
-                try!(skip_box_content(&mut content, &h));
+                log!(context, "{:?} (skipped)", b.head);
+                try!(skip_box_content(&mut b.content, &b.head));
             }
         };
-        Ok(())
-    })
+    }
+    Ok(())
 }
 
 fn read_minf<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
-    driver(f, context, |mut content, h, context| {
-        match h.name.as_bytes() {
-            b"stbl" => try!(read_stbl(&mut content, &h, context, track)),
+    let mut x = Input { src: f };
+    while let Some(mut b) = x.next() {
+        match b.head.name.as_bytes() {
+            b"stbl" => try!(read_stbl(&mut b.content, &b.head, context, track)),
             _ => {
                 // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", h);
-                try!(skip_box_content(&mut content, &h));
+                log!(context, "{:?} (skipped)", b.head);
+                try!(skip_box_content(&mut b.content, &b.head));
             }
         };
-        Ok(())
-    })
+    }
+    Ok(())
 }
 
 fn read_stbl<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, track: &mut Track) -> Result<()> {
-    driver(f, context, |mut content, h, context| {
-        match h.name.as_bytes() {
+    let mut x = Input { src: f };
+    while let Some(mut b) = x.next() {
+        match b.head.name.as_bytes() {
             b"stsd" => {
-                let stsd = try!(read_stsd(&mut content, &h, track));
+                let stsd = try!(read_stsd(&mut b.content, &b.head, track));
                 log!(context, "  {:?}", stsd);
             }
             b"stts" => {
-                let stts = try!(read_stts(&mut content, &h));
+                let stts = try!(read_stts(&mut b.content, &b.head));
                 log!(context, "  {:?}", stts);
             }
             b"stsc" => {
-                let stsc = try!(read_stsc(&mut content, &h));
+                let stsc = try!(read_stsc(&mut b.content, &b.head));
                 log!(context, "  {:?}", stsc);
             }
             b"stsz" => {
-                let stsz = try!(read_stsz(&mut content, &h));
+                let stsz = try!(read_stsz(&mut b.content, &b.head));
                 log!(context, "  {:?}", stsz);
             }
             b"stco" => {
-                let stco = try!(read_stco(&mut content, &h));
+                let stco = try!(read_stco(&mut b.content, &b.head));
                 log!(context, "  {:?}", stco);
             }
             b"co64" => {
-                let co64 = try!(read_co64(&mut content, &h));
+                let co64 = try!(read_co64(&mut b.content, &b.head));
                 log!(context, "  {:?}", co64);
             }
             b"stss" => {
-                let stss = try!(read_stss(&mut content, &h));
+                let stss = try!(read_stss(&mut b.content, &b.head));
                 log!(context, "  {:?}", stss);
             }
             _ => {
                 // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", h);
-                try!(skip_box_content(&mut content, &h));
+                log!(context, "{:?} (skipped)", b.head);
+                try!(skip_box_content(&mut b.content, &b.head));
             }
         };
-        Ok(())
-    })
+    }
+    Ok(())
 }
 
 /// Parse an ftyp box.
