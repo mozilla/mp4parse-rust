@@ -5,7 +5,13 @@ use std::fs::File;
 use std::io::BufReader;
 
 fn dump_file(filename: &String) {
-    let file = File::open(filename).unwrap();
+    let file = match File::open(filename) {
+        Ok(file) => file,
+        _ => {
+            println!("ERROR: invalid path '{}'", filename);
+            return;
+        }
+    };
     let mut reader = BufReader::new(file);
     let mut context = mp4parse::MediaContext::new();
     // Turn on debug output.
