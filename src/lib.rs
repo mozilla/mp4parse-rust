@@ -1059,7 +1059,10 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     // specific to the hdlr box.
     let bytes_left = head.size - head.offset - 24;
     if bytes_left > 0 {
-        let _name = try!(read_null_terminated_string(src));
+        // XXX(kinetik): bear_rotate_0.mp4 has a length-prefixed string here?!
+        // '\xcVideoHandler' with no null-termination
+        //let _name = try!(read_null_terminated_string(src));
+        try!(skip(src, bytes_left as usize));
     }
 
     Ok(HandlerBox {
