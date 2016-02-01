@@ -1078,6 +1078,7 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
         b"vp08" => String::from("video/vp8"),
         b"vp09" => String::from("video/vp9"),
         // TODO(kinetik): encv here also.
+        b"encv" => String::from("video/crypto"),
         _ => return Err(Error::Unsupported),
     };
 
@@ -1108,7 +1109,8 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
         match b.head.name.as_bytes() {
             b"avcC" => {
                 if (h.name.as_bytes() != b"avc1" &&
-                    h.name.as_bytes() != b"avc3") ||
+                    h.name.as_bytes() != b"avc3" &&
+                    h.name.as_bytes() != b"encv") ||
                     codec_specific.is_some() {
                         return Err(Error::InvalidData);
                     }
@@ -1159,6 +1161,7 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
         // TODO(kinetik): stagefright doesn't have a MIME mapping for this, revisit.
         b"Opus" => String::from("audio/opus"),
         // TODO(kinetik): enca here also?
+        b"enca" => String::from("audio/crypto"),
         _ => return Err(Error::Unsupported),
     };
 
@@ -1185,10 +1188,11 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"esds" => {
-                if h.name.as_bytes() != b"mp4a" ||
+                if (h.name.as_bytes() != b"mp4a" &&
+                    h.name.as_bytes() != b"enca") ||
                     codec_specific.is_some() {
-                    return Err(Error::InvalidData);
-                }
+                        return Err(Error::InvalidData);
+                    }
                 let (_, _) = try!(read_fullbox_extra(&mut b.content));
                 let esds_size = b.head.size - b.head.offset - 4;
                 if esds_size > BUF_SIZE_LIMIT {
