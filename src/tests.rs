@@ -18,7 +18,7 @@ enum BoxSize {
     Auto,
 }
 
-fn make_box_raw<F>(size: BoxSize, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
+fn make_box<F>(size: BoxSize, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
     where F: Fn(Section) -> Section
 {
     let mut section = Section::new();
@@ -59,16 +59,10 @@ fn make_box_raw<F>(size: BoxSize, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
     Cursor::new(section.get_contents().unwrap())
 }
 
-fn make_box<F>(size: u32, name: &[u8; 4], func: F) -> Cursor<Vec<u8>>
-    where F: Fn(Section) -> Section
-{
-    make_box_raw(BoxSize::Short(size), name, func)
-}
-
 fn make_fullbox<F>(size: BoxSize, name: &[u8; 4], version: u8, func: F) -> Cursor<Vec<u8>>
     where F: Fn(Section) -> Section
 {
-    make_box_raw(size, name, |s| {
+    make_box(size, name, |s| {
         func(s.B8(version)
               .B8(0)
               .B8(0)
@@ -78,7 +72,7 @@ fn make_fullbox<F>(size: BoxSize, name: &[u8; 4], version: u8, func: F) -> Curso
 
 #[test]
 fn read_box_header_short() {
-    let mut stream = make_box_raw(BoxSize::Short(8), b"test", |s| s);
+    let mut stream = make_box(BoxSize::Short(8), b"test", |s| s);
     let parsed = read_box_header(&mut stream).unwrap();
     assert_eq!(parsed.name, FourCC(*b"test"));
     assert_eq!(parsed.size, 8);
@@ -86,7 +80,7 @@ fn read_box_header_short() {
 
 #[test]
 fn read_box_header_long() {
-    let mut stream = make_box_raw(BoxSize::Long(16), b"test", |s| s);
+    let mut stream = make_box(BoxSize::Long(16), b"test", |s| s);
     let parsed = read_box_header(&mut stream).unwrap();
     assert_eq!(parsed.name, FourCC(*b"test"));
     assert_eq!(parsed.size, 16);
@@ -94,7 +88,7 @@ fn read_box_header_long() {
 
 #[test]
 fn read_box_header_short_unknown_size() {
-    let mut stream = make_box_raw(BoxSize::Short(0), b"test", |s| s);
+    let mut stream = make_box(BoxSize::Short(0), b"test", |s| s);
     match read_box_header(&mut stream) {
         Err(Error::Unsupported) => (),
         _ => panic!("unexpected result reading box with unknown size"),
@@ -103,7 +97,7 @@ fn read_box_header_short_unknown_size() {
 
 #[test]
 fn read_box_header_short_invalid_size() {
-    let mut stream = make_box_raw(BoxSize::UncheckedShort(2), b"test", |s| s);
+    let mut stream = make_box(BoxSize::UncheckedShort(2), b"test", |s| s);
     match read_box_header(&mut stream) {
         Err(Error::InvalidData) => (),
         _ => panic!("unexpected result reading box with invalid size"),
@@ -112,7 +106,7 @@ fn read_box_header_short_invalid_size() {
 
 #[test]
 fn read_box_header_long_invalid_size() {
-    let mut stream = make_box_raw(BoxSize::UncheckedLong(2), b"test", |s| s);
+    let mut stream = make_box(BoxSize::UncheckedLong(2), b"test", |s| s);
     match read_box_header(&mut stream) {
         Err(Error::InvalidData) => (),
         _ => panic!("unexpected result reading box with invalid size"),
@@ -121,7 +115,7 @@ fn read_box_header_long_invalid_size() {
 
 #[test]
 fn read_ftyp() {
-    let mut stream = make_box(24, b"ftyp", |s| {
+    let mut stream = make_box(BoxSize::Short(24), b"ftyp", |s| {
         s.append_bytes(b"mp42")
          .B32(0) // minor version
          .append_bytes(b"isom")
@@ -142,7 +136,7 @@ fn read_ftyp() {
 #[should_panic(expected = "expected an error result")]
 fn read_truncated_ftyp() {
     // We declare a 24 byte box, but only write 20 bytes.
-    let mut stream = make_box_raw(BoxSize::UncheckedShort(24), b"ftyp", |s| {
+    let mut stream = make_box(BoxSize::UncheckedShort(24), b"ftyp", |s| {
         s.append_bytes(b"mp42")
             .B32(0) // minor version
             .append_bytes(b"isom")
