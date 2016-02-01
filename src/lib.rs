@@ -1071,7 +1071,6 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
 /// Parse an video description inside an stsd box.
 fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) -> Result<SampleEntry> {
     let h = try!(read_box_header(src));
-    // TODO(kinetik): enforce expected subbox, e.g. avc1 should have avcC not vpcC
     track.mime_type = match h.name.as_bytes() {
         b"avc1" | b"avc3" => String::from("video/avc"),
         b"vp08" => String::from("video/vp8"),
@@ -1106,9 +1105,11 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) ->
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"avcC" => {
-                if codec_specific.is_some() {
-                    return Err(Error::InvalidData);
-                }
+                if (h.name.as_bytes() != b"avc1" &&
+                    h.name.as_bytes() != b"avc3") ||
+                    codec_specific.is_some() {
+                        return Err(Error::InvalidData);
+                    }
                 let avcc_size = h.size - h.offset;
                 if avcc_size > BUF_SIZE_LIMIT {
                     return Err(Error::InvalidData);
@@ -1118,9 +1119,11 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) ->
                 codec_specific = Some(VideoCodecSpecific::AVCConfig(avcc));
             }
             b"vpcC" => {
-                if codec_specific.is_some() {
-                    return Err(Error::InvalidData);
-                }
+                if (h.name.as_bytes() != b"vp08" &&
+                    h.name.as_bytes() != b"vp09") ||
+                    codec_specific.is_some() {
+                        return Err(Error::InvalidData);
+                    }
                 let vpcc = try!(read_vpcc(&mut b.content));
                 codec_specific = Some(VideoCodecSpecific::VPxConfig(vpcc));
             }
@@ -1181,7 +1184,8 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) ->
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"esds" => {
-                if codec_specific.is_some() {
+                if h.name.as_bytes() != b"mp4a" ||
+                    codec_specific.is_some() {
                     return Err(Error::InvalidData);
                 }
                 let (_, _) = try!(read_fullbox_extra(&mut b.content));
@@ -1194,7 +1198,8 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) ->
                 codec_specific = Some(AudioCodecSpecific::ES_Descriptor(esds));
             }
             b"dOps" => {
-                if codec_specific.is_some() {
+                if h.name.as_bytes() != b"Opus" ||
+                    codec_specific.is_some() {
                     return Err(Error::InvalidData);
                 }
                 let dops = try!(read_dops(&mut b.content));
