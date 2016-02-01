@@ -1106,6 +1106,9 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) ->
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"avcC" => {
+                if codec_specific.is_some() {
+                    return Err(Error::InvalidData);
+                }
                 let avcc_size = h.size - h.offset;
                 if avcc_size > BUF_SIZE_LIMIT {
                     return Err(Error::InvalidData);
@@ -1115,6 +1118,9 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) ->
                 codec_specific = Some(VideoCodecSpecific::AVCConfig(avcc));
             }
             b"vpcC" => {
+                if codec_specific.is_some() {
+                    return Err(Error::InvalidData);
+                }
                 let vpcc = try!(read_vpcc(&mut b.content));
                 codec_specific = Some(VideoCodecSpecific::VPxConfig(vpcc));
             }
@@ -1175,19 +1181,23 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) ->
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"esds" => {
+                if codec_specific.is_some() {
+                    return Err(Error::InvalidData);
+                }
                 let (_, _) = try!(read_fullbox_extra(&mut b.content));
-                let esds_size = h.size - h.offset - 4;
+                let esds_size = b.head.size - b.head.offset - 4;
                 if esds_size > BUF_SIZE_LIMIT {
                     return Err(Error::InvalidData);
                 }
                 let esds = try!(read_buf(&mut b.content, esds_size as usize));
-
                 // TODO(kinetik): Parse esds atom?  For now we just stash the data.
                 codec_specific = Some(AudioCodecSpecific::ES_Descriptor(esds));
             }
             b"dOps" => {
+                if codec_specific.is_some() {
+                    return Err(Error::InvalidData);
+                }
                 let dops = try!(read_dops(&mut b.content));
-
                 codec_specific = Some(AudioCodecSpecific::OpusSpecificBox(dops));
             }
             _ => {
