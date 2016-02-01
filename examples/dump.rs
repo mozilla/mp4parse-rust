@@ -13,7 +13,6 @@ fn dump_file(filename: &String) {
     // Read all boxes.
     match mp4parse::read_mp4(&mut reader, &mut context) {
         Ok(_) => {},
-        Err(mp4parse::Error::UnexpectedEOF) => {},
         Err(mp4parse::Error::Io(e)) => {
             println!("I/O ERROR: {:?}", e);
             panic!(e);
