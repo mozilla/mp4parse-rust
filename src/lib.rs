@@ -1072,8 +1072,7 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
 }
 
 /// Parse an video description inside an stsd box.
-fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) -> Result<SampleEntry> {
-    let h = try!(read_box_header(src));
+fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
     track.mime_type = match h.name.as_bytes() {
         b"avc1" | b"avc3" => String::from("video/avc"),
         b"vp08" => String::from("video/vp8"),
@@ -1152,8 +1151,7 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) ->
 }
 
 /// Parse an audio description inside an stsd box.
-fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, track: &mut Track) -> Result<SampleEntry> {
-    let h = try!(read_box_header(src));
+fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
     // TODO(kinetik): enforce expected subbox, e.g. mp4a should have esds not dOps
     track.mime_type = match h.name.as_bytes() {
         // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
@@ -1239,15 +1237,16 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &m
 
     // TODO(kinetik): check if/when more than one desc per track? do we need to support?
     for _ in 0..description_count {
+        let head = try!(read_box_header(src));
         let description = match track.track_type {
-            TrackType::Video => try!(read_video_desc(src, track)),
-            TrackType::Audio => try!(read_audio_desc(src, track)),
+            TrackType::Video => try!(read_video_desc(&mut limit(src, &head), &head, track)),
+            TrackType::Audio => try!(read_audio_desc(&mut limit(src, &head), &head, track)),
             TrackType::Unknown => SampleEntry::Unknown,
         };
         if track.data.is_none() {
             track.data = Some(description.clone());
         } else {
-            return Err(Error::InvalidData);
+            log!(track, "** don't know how to handle multiple descriptions **");
         }
         descriptions.push(description);
     }
