@@ -446,7 +446,6 @@ fn driver<F, T>(f: &mut T, context: &mut MediaContext, mut action: F) -> Result<
                     log!(context, "bad parser state: {} content bytes left", content.limit());
                     return Err(Error::InvalidData);
                 }
-                //log!(context, "read_box context: {:?}", context);
                 log!(context, "{:?}", h);
                 r
             }
