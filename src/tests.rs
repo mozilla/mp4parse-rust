@@ -407,12 +407,7 @@ fn read_opus() {
          .B32(48000 << 16) // Sample rate is always 48 kHz for Opus.
          .append_bytes(&make_dops().into_inner())
     });
-    // Dummy header to pass to read_audio_desc(), which ignores it.
-    let header = BoxHeader {
-        name: FourCC(*b"stsd"),
-        size: u32::max_value() as u64,
-        offset: 0,
-    };
+    let header = read_box_header(&mut stream).unwrap();
     let mut track = super::Track::new(0);
     let r = super::read_audio_desc(&mut stream, &header, &mut track);
     assert!(r.is_ok());
