@@ -185,16 +185,11 @@ pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut mp4parse_state, t
     }
 
     let track = &context.tracks[track_index];
-    let empty_duration = if track.empty_duration.is_some() {
-        media_time_to_ms(track.empty_duration.unwrap(), context.timescale.unwrap())
-    } else {
-        0
-    };
-    info.media_time = if track.media_time.is_some() {
-        track_time_to_ms(track.media_time.unwrap(), track.timescale.unwrap()) as i64 - empty_duration as i64
-    } else {
-        0
-    };
+    info.media_time = track.media_time.map_or(0, |media_time| {
+        track_time_to_ms(media_time, track.timescale.unwrap()) as i64
+    }) - track.empty_duration.map_or(0, |empty_duration| {
+        media_time_to_ms(empty_duration, context.timescale.unwrap()) as i64
+    });
     info.duration = track_time_to_ms(track.duration.unwrap(), track.timescale.unwrap());
     info.track_id = track.track_id.unwrap();
 
