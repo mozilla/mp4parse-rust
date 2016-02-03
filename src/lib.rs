@@ -1053,17 +1053,8 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
     // Skip uninteresting fields.
     try!(skip(src, 12));
 
-    // XXX(kinetik): need to verify if this zero-length string handling
-    // applies to all "null-terminated" strings (in which case
-    // read_null_terminated_string should handle this check) or this is
-    // specific to the hdlr box.
     let bytes_left = head.size - head.offset - 24;
-    if bytes_left > 0 {
-        // XXX(kinetik): bear_rotate_0.mp4 has a length-prefixed string here?!
-        // '\xcVideoHandler' with no null-termination
-        //let _name = try!(read_null_terminated_string(src));
-        try!(skip(src, bytes_left as usize));
-    }
+    let _name = try!(read_null_terminated_string(src, bytes_left as usize));
 
     Ok(HandlerBox {
         header: *head,
@@ -1288,14 +1279,19 @@ fn read_buf<T: ReadBytesExt>(src: &mut T, size: usize) -> Result<Vec<u8>> {
 }
 
 // TODO(kinetik): Find a copy of ISO/IEC 14496-1 to confirm various string encodings.
-fn read_null_terminated_string<T: ReadBytesExt>(src: &mut T) -> Result<String> {
+// XXX(kinetik): definition of "null-terminated" string is fuzzy, we have:
+// - zero or more byte strings, with a single null terminating the string.
+// - zero byte strings with no null terminator (i.e. zero space in the box for the string)
+// - length-prefixed strings with no null terminator (e.g. bear_rotate_0.mp4)
+fn read_null_terminated_string<T: ReadBytesExt>(src: &mut T, mut size: usize) -> Result<String> {
     let mut buf = Vec::new();
-    loop {
+    while size > 0 {
         let c = try!(src.read_u8());
         if c == 0 {
             break;
         }
         buf.push(c);
+        size -= 1;
     }
     Ok(try!(String::from_utf8(buf)))
 }
