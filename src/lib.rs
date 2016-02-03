@@ -1236,7 +1236,10 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &m
         let description = match track.track_type {
             TrackType::Video => try!(read_video_desc(&mut limit(src, &head), &head, track)),
             TrackType::Audio => try!(read_audio_desc(&mut limit(src, &head), &head, track)),
-            TrackType::Unknown => SampleEntry::Unknown,
+            TrackType::Unknown => {
+                try!(skip_box_content(&mut limit(src, &head), &head));
+                SampleEntry::Unknown
+            }
         };
         if track.data.is_none() {
             track.data = Some(description.clone());
