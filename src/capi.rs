@@ -136,8 +136,8 @@ pub unsafe extern "C" fn mp4parse_read(context: *mut mp4parse_state, buffer: *co
     };
     match r {
         Ok(_) => mp4parse_error::MP4PARSE_OK,
-        Err(Error::InvalidData) => mp4parse_error::MP4PARSE_ERROR_INVALID,
-        Err(Error::Unsupported) => mp4parse_error::MP4PARSE_ERROR_UNSUPPORTED,
+        Err(Error::InvalidData(_)) => mp4parse_error::MP4PARSE_ERROR_INVALID,
+        Err(Error::Unsupported(_)) => mp4parse_error::MP4PARSE_ERROR_UNSUPPORTED,
         Err(Error::UnexpectedEOF) => mp4parse_error::MP4PARSE_ERROR_EOF,
         Err(Error::AssertCaught) => mp4parse_error::MP4PARSE_ERROR_ASSERT,
         Err(Error::Io(_)) => mp4parse_error::MP4PARSE_ERROR_IO,

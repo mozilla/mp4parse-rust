@@ -32,9 +32,9 @@ const BUF_SIZE_LIMIT: u64 = 1024 * 1024;
 #[derive(Debug)]
 pub enum Error {
     /// Parse error caused by corrupt or malformed data.
-    InvalidData,
+    InvalidData(&'static str),
     /// Parse error caused by limited parser support rather than invalid data.
-    Unsupported,
+    Unsupported(&'static str),
     /// Reflect `byteorder::Error::UnexpectedEOF` for short data.
     UnexpectedEOF,
     /// Caught panic! or assert! meaning the parser couldn't recover.
@@ -60,7 +60,7 @@ impl From<byteorder::Error> for Error {
 
 impl From<std::string::FromUtf8Error> for Error {
     fn from(_: std::string::FromUtf8Error) -> Error {
-        Error::InvalidData
+        Error::InvalidData("invalid utf8")
     }
 }
 
@@ -408,15 +408,15 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
     let size32 = try!(be_u32(src));
     let name = try!(be_fourcc(src));
     let size = match size32 {
-        0 => return Err(Error::Unsupported),
+        0 => return Err(Error::Unsupported("unknown sized box")),
         1 => {
             let size64 = try!(be_u64(src));
             if size64 < 16 {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidData("malformed wide size"));
             }
             size64
         }
-        2...7 => return Err(Error::InvalidData),
+        2...7 => return Err(Error::InvalidData("malformed size")),
         _ => size32 as u64,
     };
     let offset = match size32 {
@@ -455,7 +455,7 @@ macro_rules! check_parser_state {
     ( $ctx:expr, $src:expr ) => {
         if $src.limit() > 0 {
             log!($ctx, "bad parser state: {} content bytes left", $src.limit());
-            return Err(Error::InvalidData);
+            return Err(Error::InvalidData("unread box content or bad parser sync"));
         }
     }
 }
@@ -488,7 +488,7 @@ pub fn read_mp4<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
 fn parse_mvhd<T: BufRead>(f: &mut T, h: &BoxHeader) -> Result<(MovieHeaderBox, Option<MediaTimeScale>)> {
     let mvhd = try!(read_mvhd(f, &h));
     if mvhd.timescale == 0 {
-        return Err(Error::InvalidData);
+        return Err(Error::InvalidData("zero timescale in mdhd"));
     }
     let timescale = Some(MediaTimeScale(mvhd.timescale as u64));
     Ok((mvhd, timescale))
@@ -555,18 +555,18 @@ fn read_edts<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Trac
                 let mut empty_duration = 0;
                 let mut idx = 0;
                 if elst.edits.len() > 2 {
-                    return Err(Error::Unsupported);
+                    return Err(Error::Unsupported("more than two edits"));
                 }
                 if elst.edits[idx].media_time == -1 {
                     empty_duration = elst.edits[idx].segment_duration;
                     if elst.edits.len() < 2 {
-                        return Err(Error::InvalidData);
+                        return Err(Error::InvalidData("expected additional edit"));
                     }
                     idx += 1;
                 }
                 track.empty_duration = Some(MediaScaledTime(empty_duration));
                 if elst.edits[idx].media_time < 0 {
-                    return Err(Error::InvalidData);
+                    return Err(Error::InvalidData("unexpected negative media time in edit"));
                 }
                 track.media_time = Some(TrackScaledTime(elst.edits[idx].media_time as u64,
                                                         track.id));
@@ -590,7 +590,7 @@ fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track: &mut Track) -> Result
         duration => Some(TrackScaledTime(duration, track.id)),
     };
     if mdhd.timescale == 0 {
-        return Err(Error::InvalidData);
+        return Err(Error::InvalidData("zero timescale in mdhd"));
     }
     let timescale = Some(TrackTimeScale(mdhd.timescale as u64, track.id));
     Ok((mdhd, duration, timescale))
@@ -695,7 +695,7 @@ fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileTypeB
     let minor = try!(be_u32(src));
     let bytes_left = head.size - head.offset - 8;
     if bytes_left % 4 != 0 {
-        return Err(Error::InvalidData);
+        return Err(Error::InvalidData("invalid ftyp size"));
     }
     // Is a brand_count of zero valid?
     let brand_count = bytes_left / 4;
@@ -723,7 +723,7 @@ fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
         0 => {
             try!(skip(src, 8));
         }
-        _ => return Err(Error::InvalidData),
+        _ => return Err(Error::InvalidData("unhandled mvhd version")),
     }
     let timescale = try!(be_u32(src));
     let duration = match version {
@@ -736,7 +736,7 @@ fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
                 d as u64
             }
         }
-        _ => return Err(Error::InvalidData),
+        _ => return Err(Error::InvalidData("unhandled mvhd version")),
     };
     // Skip remaining fields.
     try!(skip(src, 80));
@@ -760,14 +760,14 @@ fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
         0 => {
             try!(skip(src, 8));
         }
-        _ => return Err(Error::InvalidData),
+        _ => return Err(Error::InvalidData("unhandled tkhd version")),
     }
     let track_id = try!(be_u32(src));
     try!(skip(src, 4));
     let duration = match version {
         1 => try!(be_u64(src)),
         0 => try!(be_u32(src)) as u64,
-        _ => return Err(Error::InvalidData),
+        _ => return Err(Error::InvalidData("unhandled tkhd version")),
     };
     // Skip uninteresting fields.
     try!(skip(src, 52));
@@ -788,7 +788,7 @@ fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<EditListB
     let (version, _) = try!(read_fullbox_extra(src));
     let edit_count = try!(be_u32(src));
     if edit_count == 0 {
-        return Err(Error::InvalidData);
+        return Err(Error::InvalidData("invalid edit count"));
     }
     let mut edits = Vec::new();
     for _ in 0..edit_count {
@@ -801,7 +801,7 @@ fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<EditListB
                 // 32 bit segment duration and media times.
                 (try!(be_u32(src)) as u64, try!(be_i32(src)) as i64)
             }
-            _ => return Err(Error::InvalidData),
+            _ => return Err(Error::InvalidData("unhandled elst version")),
         };
         let media_rate_integer = try!(be_i16(src));
         let media_rate_fraction = try!(be_i16(src));
@@ -849,7 +849,7 @@ fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
             };
             (timescale, duration)
         }
-        _ => return Err(Error::InvalidData),
+        _ => return Err(Error::InvalidData("unhandled mdhd version")),
     };
 
     // Skip uninteresting fields.
@@ -972,7 +972,7 @@ fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TimeToSam
 fn read_vpcc<T: ReadBytesExt>(src: &mut T) -> Result<VPxConfigBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     if version != 0 {
-        return Err(Error::Unsupported);
+        return Err(Error::Unsupported("unknown vpcC version"));
     }
 
     let profile = try!(src.read_u8());
@@ -1006,7 +1006,7 @@ fn read_vpcc<T: ReadBytesExt>(src: &mut T) -> Result<VPxConfigBox> {
 fn read_dops<T: ReadBytesExt>(src: &mut T) -> Result<OpusSpecificBox> {
     let version = try!(src.read_u8());
     if version != 0 {
-        return Err(Error::Unsupported);
+        return Err(Error::Unsupported("unknown dOps version"));
     }
 
     let output_channel_count = try!(src.read_u8());
@@ -1070,7 +1070,7 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
         b"vp09" => String::from("video/vp9"),
         // TODO(kinetik): encv here also.
         b"encv" => String::from("video/crypto"),
-        _ => return Err(Error::Unsupported),
+        _ => return Err(Error::Unsupported("unhandled video sample entry type")),
     };
 
     // Skip uninteresting fields.
@@ -1103,11 +1103,11 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
                     h.name.as_bytes() != b"avc3" &&
                     h.name.as_bytes() != b"encv") ||
                     codec_specific.is_some() {
-                        return Err(Error::InvalidData);
+                        return Err(Error::InvalidData("malformed video sample entry"));
                     }
                 let avcc_size = h.size - h.offset;
                 if avcc_size > BUF_SIZE_LIMIT {
-                    return Err(Error::InvalidData);
+                    return Err(Error::InvalidData("avcC box exceeds BUF_SIZE_LIMIT"));
                 }
                 let avcc = try!(read_buf(&mut b.content, avcc_size as usize));
                 // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
@@ -1117,7 +1117,7 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
                 if (h.name.as_bytes() != b"vp08" &&
                     h.name.as_bytes() != b"vp09") ||
                     codec_specific.is_some() {
-                        return Err(Error::InvalidData);
+                        return Err(Error::InvalidData("malformed video sample entry"));
                     }
                 let vpcc = try!(read_vpcc(&mut b.content));
                 codec_specific = Some(VideoCodecSpecific::VPxConfig(vpcc));
@@ -1132,7 +1132,7 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
     }
 
     if codec_specific.is_none() {
-        return Err(Error::InvalidData);
+        return Err(Error::InvalidData("malformed video sample entry"));
     }
 
     Ok(SampleEntry::Video(VideoSampleEntry {
@@ -1153,7 +1153,7 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
         b"Opus" => String::from("audio/opus"),
         // TODO(kinetik): enca here also?
         b"enca" => String::from("audio/crypto"),
-        _ => return Err(Error::Unsupported),
+        _ => return Err(Error::Unsupported("unhandled audio sample entry type")),
     };
 
     // Skip uninteresting fields.
@@ -1182,12 +1182,12 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
                 if (h.name.as_bytes() != b"mp4a" &&
                     h.name.as_bytes() != b"enca") ||
                     codec_specific.is_some() {
-                        return Err(Error::InvalidData);
+                        return Err(Error::InvalidData("malformed audio sample entry"));
                     }
                 let (_, _) = try!(read_fullbox_extra(&mut b.content));
                 let esds_size = b.head.size - b.head.offset - 4;
                 if esds_size > BUF_SIZE_LIMIT {
-                    return Err(Error::InvalidData);
+                    return Err(Error::InvalidData("esds box exceeds BUF_SIZE_LIMIT"));
                 }
                 let esds = try!(read_buf(&mut b.content, esds_size as usize));
                 // TODO(kinetik): Parse esds atom?  For now we just stash the data.
@@ -1196,7 +1196,7 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
             b"dOps" => {
                 if h.name.as_bytes() != b"Opus" ||
                     codec_specific.is_some() {
-                    return Err(Error::InvalidData);
+                    return Err(Error::InvalidData("malformed audio sample entry"));
                 }
                 let dops = try!(read_dops(&mut b.content));
                 codec_specific = Some(AudioCodecSpecific::OpusSpecificBox(dops));
@@ -1211,7 +1211,7 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
     }
 
     if codec_specific.is_none() {
-        return Err(Error::InvalidData);
+        return Err(Error::InvalidData("malformed audio sample entry"));
     }
 
     Ok(SampleEntry::Audio(AudioSampleEntry {
@@ -1276,7 +1276,7 @@ fn read_buf<T: ReadBytesExt>(src: &mut T, size: usize) -> Result<Vec<u8>> {
     let mut buf = vec![0; size];
     let r = try!(src.read(&mut buf));
     if r != size {
-        return Err(Error::InvalidData);
+        return Err(Error::InvalidData("failed buffer read"));
     }
     Ok(buf)
 }

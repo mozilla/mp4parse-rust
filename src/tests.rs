@@ -90,7 +90,7 @@ fn read_box_header_long() {
 fn read_box_header_short_unknown_size() {
     let mut stream = make_box(BoxSize::Short(0), b"test", |s| s);
     match read_box_header(&mut stream) {
-        Err(Error::Unsupported) => (),
+        Err(Error::Unsupported(s)) => assert_eq!(s, "unknown sized box"),
         _ => panic!("unexpected result reading box with unknown size"),
     };
 }
@@ -99,7 +99,7 @@ fn read_box_header_short_unknown_size() {
 fn read_box_header_short_invalid_size() {
     let mut stream = make_box(BoxSize::UncheckedShort(2), b"test", |s| s);
     match read_box_header(&mut stream) {
-        Err(Error::InvalidData) => (),
+        Err(Error::InvalidData(s)) => assert_eq!(s, "malformed size"),
         _ => panic!("unexpected result reading box with invalid size"),
     };
 }
@@ -108,7 +108,7 @@ fn read_box_header_short_invalid_size() {
 fn read_box_header_long_invalid_size() {
     let mut stream = make_box(BoxSize::UncheckedLong(2), b"test", |s| s);
     match read_box_header(&mut stream) {
-        Err(Error::InvalidData) => (),
+        Err(Error::InvalidData(s)) => assert_eq!(s, "malformed wide size"),
         _ => panic!("unexpected result reading box with invalid size"),
     };
 }
