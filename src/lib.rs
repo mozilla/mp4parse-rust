@@ -1093,8 +1093,8 @@ fn read_video_desc<T: ReadBytesExt>(src: &mut T, h: &BoxHeader, track: &mut Trac
     try!(skip(src, 4));
 
     // Skip clap/pasp/etc. for now.
-    let mut x = Input::new(src);
     let mut codec_specific = None;
+    let mut x = Input::new(src);
     while let Some(b) = x.next() {
         let mut b = try!(b);
         match b.head.name.as_bytes() {
@@ -1161,8 +1161,14 @@ fn read_audio_desc<T: ReadBytesExt>(src: &mut T, h: &BoxHeader, track: &mut Trac
 
     let data_reference_index = try!(be_u16(src));
 
+    // XXX(kinetik): This is "reserved" in BMFF, but some old QT MOV variant
+    // uses it, need to work out if we have to support it.  Without checking
+    // here and reading extra fields after samplerate (or bailing with an
+    // error), the parser loses sync completely.
+    let version = try!(be_u16(src));
+
     // Skip uninteresting fields.
-    try!(skip(src, 8));
+    try!(skip(src, 6));
 
     let channelcount = try!(be_u16(src));
     let samplesize = try!(be_u16(src));
@@ -1172,9 +1178,14 @@ fn read_audio_desc<T: ReadBytesExt>(src: &mut T, h: &BoxHeader, track: &mut Trac
 
     let samplerate = try!(be_u32(src));
 
+    match version {
+        0 => (),
+        _ => return Err(Error::Unsupported("unsupported non-isom audio sample entry")),
+    }
+
     // Skip chan/etc. for now.
-    let mut x = Input::new(src);
     let mut codec_specific = None;
+    let mut x = Input::new(src);
     while let Some(b) = x.next() {
         let mut b = try!(b);
         match b.head.name.as_bytes() {
