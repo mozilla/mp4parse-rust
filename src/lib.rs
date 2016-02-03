@@ -10,7 +10,7 @@ extern crate afl;
 
 extern crate byteorder;
 use byteorder::ReadBytesExt;
-use std::io::{Read, BufRead, Take};
+use std::io::{Read, Take};
 use std::cmp;
 use std::fmt;
 
@@ -371,16 +371,16 @@ impl Track {
     }
 }
 
-struct BMFFBox<'a, T: 'a + BufRead> {
+struct BMFFBox<'a, T: 'a + Read> {
     head: BoxHeader,
     content: Take<&'a mut T>,
 }
 
-struct Input<'a, T: 'a + BufRead> {
+struct Input<'a, T: 'a + Read> {
     src: &'a mut T,
 }
 
-impl<'b, 'a, T: 'a + BufRead> Input<'b, T> {
+impl<'b, 'a, T: 'a + Read> Input<'b, T> {
     fn new(src: &'a mut T) -> Input<'a, T> {
         Input { src: src }
     }
@@ -442,12 +442,12 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> Result<(u8, u32)> {
 }
 
 /// Skip over the entire contents of a box.
-fn skip_box_content<T: BufRead>(src: &mut T, header: &BoxHeader) -> Result<usize> {
+fn skip_box_content<T: Read>(src: &mut T, header: &BoxHeader) -> Result<()> {
     skip(src, (header.size - header.offset) as usize)
 }
 
 /// Helper to construct a Take over the contents of a box.
-fn limit<'a, T: BufRead>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
+fn limit<'a, T: Read>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
     f.take(h.size - h.offset)
 }
 
@@ -464,7 +464,7 @@ macro_rules! check_parser_state {
 ///
 /// Metadata is accumulated in the passed-through MediaContext struct,
 /// which can be examined later.
-pub fn read_mp4<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()> {
+pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
@@ -485,7 +485,7 @@ pub fn read_mp4<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()>
     Ok(())
 }
 
-fn parse_mvhd<T: BufRead>(f: &mut T, h: &BoxHeader) -> Result<(MovieHeaderBox, Option<MediaTimeScale>)> {
+fn parse_mvhd<T: Read>(f: &mut T, h: &BoxHeader) -> Result<(MovieHeaderBox, Option<MediaTimeScale>)> {
     let mvhd = try!(read_mvhd(f, &h));
     if mvhd.timescale == 0 {
         return Err(Error::InvalidData("zero timescale in mdhd"));
@@ -494,7 +494,7 @@ fn parse_mvhd<T: BufRead>(f: &mut T, h: &BoxHeader) -> Result<(MovieHeaderBox, O
     Ok((mvhd, timescale))
 }
 
-fn read_moov<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()> {
+fn read_moov<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
@@ -521,7 +521,7 @@ fn read_moov<T: BufRead>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     Ok(())
 }
 
-fn read_trak<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_trak<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
@@ -545,7 +545,7 @@ fn read_trak<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Trac
     Ok(())
 }
 
-fn read_edts<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_edts<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
@@ -583,7 +583,7 @@ fn read_edts<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Trac
     Ok(())
 }
 
-fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track: &mut Track) -> Result<(MediaHeaderBox, Option<TrackScaledTime>, Option<TrackTimeScale>)> {
+fn parse_mdhd<T: Read>(f: &mut T, h: &BoxHeader, track: &mut Track) -> Result<(MediaHeaderBox, Option<TrackScaledTime>, Option<TrackTimeScale>)> {
     let mdhd = try!(read_mdhd(f, h));
     let duration = match mdhd.duration {
         std::u64::MAX => None,
@@ -596,7 +596,7 @@ fn parse_mdhd<T: BufRead>(f: &mut T, h: &BoxHeader, track: &mut Track) -> Result
     Ok((mdhd, duration, timescale))
 }
 
-fn read_mdia<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_mdia<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
@@ -628,7 +628,7 @@ fn read_mdia<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Trac
     Ok(())
 }
 
-fn read_minf<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_minf<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
@@ -645,7 +645,7 @@ fn read_minf<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Trac
     Ok(())
 }
 
-fn read_stbl<T: BufRead>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_stbl<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
@@ -712,7 +712,7 @@ fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileTypeB
 }
 
 /// Parse an mvhd box.
-fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<MovieHeaderBox> {
+fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<MovieHeaderBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     match version {
         // 64 bit creation and modification times.
@@ -748,7 +748,7 @@ fn read_mvhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
 }
 
 /// Parse a tkhd box.
-fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<TrackHeaderBox> {
+fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TrackHeaderBox> {
     let (version, flags) = try!(read_fullbox_extra(src));
     let disabled = flags & 0x1u32 == 0 || flags & 0x2u32 == 0;
     match version {
@@ -820,7 +820,7 @@ fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<EditListB
 }
 
 /// Parse a mdhd box.
-fn read_mdhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<MediaHeaderBox> {
+fn read_mdhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<MediaHeaderBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     let (timescale, duration) = match version {
         1 => {
@@ -1042,7 +1042,7 @@ fn read_dops<T: ReadBytesExt>(src: &mut T) -> Result<OpusSpecificBox> {
 }
 
 /// Parse a hdlr box.
-fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result<HandlerBox> {
+fn read_hdlr<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<HandlerBox> {
     let (_, _) = try!(read_fullbox_extra(src));
 
     // Skip uninteresting fields.
@@ -1063,7 +1063,7 @@ fn read_hdlr<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
 }
 
 /// Parse an video description inside an stsd box.
-fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
+fn read_video_desc<T: ReadBytesExt>(src: &mut T, h: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
     track.mime_type = match h.name.as_bytes() {
         b"avc1" | b"avc3" => String::from("video/avc"),
         b"vp08" => String::from("video/vp8"),
@@ -1144,7 +1144,7 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
 }
 
 /// Parse an audio description inside an stsd box.
-fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
+fn read_audio_desc<T: ReadBytesExt>(src: &mut T, h: &BoxHeader, track: &mut Track) -> Result<SampleEntry> {
     // TODO(kinetik): enforce expected subbox, e.g. mp4a should have esds not dOps
     track.mime_type = match h.name.as_bytes() {
         // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
@@ -1224,7 +1224,7 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, h: &BoxHeader, track:
 }
 
 /// Parse a stsd box.
-fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &mut Track) -> Result<SampleDescriptionBox> {
+fn read_stsd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader, track: &mut Track) -> Result<SampleDescriptionBox> {
     let (_, _) = try!(read_fullbox_extra(src));
 
     let description_count = try!(be_u32(src));
@@ -1256,19 +1256,18 @@ fn read_stsd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, track: &m
 }
 
 /// Skip a number of bytes that we don't care to parse.
-fn skip<T: BufRead>(src: &mut T, bytes: usize) -> Result<usize> {
-    let mut bytes_to_skip = bytes;
-    while bytes_to_skip > 0 {
-        let len = try!(src.fill_buf()).len();
+fn skip<T: Read>(src: &mut T, mut bytes: usize) -> Result<()> {
+    const BUF_SIZE: usize = 64 * 1024;
+    let mut buf = vec![0; BUF_SIZE];
+    while bytes > 0 {
+        let buf_size = cmp::min(bytes, BUF_SIZE);
+        let len = try!(src.take(buf_size as u64).read(&mut buf));
         if len == 0 {
             return Err(Error::UnexpectedEOF);
         }
-        let discard = cmp::min(len, bytes_to_skip);
-        src.consume(discard);
-        bytes_to_skip -= discard;
+        bytes -= len;
     }
-    assert!(bytes_to_skip == 0);
-    Ok(bytes)
+    Ok(())
 }
 
 /// Read size bytes into a Vector or return error.
@@ -1308,7 +1307,7 @@ fn read_pascal_string<T: ReadBytesExt>(src: &mut T) -> Result<String> {
 
 // Weird string encoding with a length prefix and a fixed sized buffer which
 // contains padding if the string doesn't fill the buffer.
-fn read_fixed_length_pascal_string<T: BufRead>(src: &mut T, size: usize) -> Result<String> {
+fn read_fixed_length_pascal_string<T: Read>(src: &mut T, size: usize) -> Result<String> {
     assert!(size > 0);
     let len = cmp::min(try!(src.read_u8()) as usize, size - 1);
     let buf = try!(read_buf(src, len as usize));
