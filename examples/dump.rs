@@ -4,7 +4,7 @@ use std::env;
 use std::fs::File;
 use std::io::BufReader;
 
-fn dump_file(filename: &String) {
+fn dump_file(filename: &String, verbose: bool) {
     let file = match File::open(filename) {
         Ok(file) => file,
         _ => {
@@ -15,25 +15,42 @@ fn dump_file(filename: &String) {
     let mut reader = BufReader::new(file);
     let mut context = mp4parse::MediaContext::new();
     // Turn on debug output.
-    context.trace(true);
+    if verbose {
+        context.trace(true);
+    }
     // Read all boxes.
     match mp4parse::read_mp4(&mut reader, &mut context) {
         Ok(_) => {},
         Err(mp4parse::Error::Io(e)) => {
-            println!("I/O ERROR: {:?}", e);
+            println!("I/O ERROR: {:?} in '{}'", e, filename);
             panic!(e);
         },
         Err(e) => {
-            println!("ERROR: {:?}", e);
+            println!("ERROR: {:?} in '{}'", e, filename);
         },
     }
-    println!("-- result of parsing '{}' --\n{:?}", filename, context);
+    if verbose {
+        println!("-- result of parsing '{}' --\n{:?}", filename, context);
+    }
 }
 
 fn main() {
-    for filename in env::args().skip(1) {
-        println!("-- dump of '{}' --", filename);
-        dump_file(&filename);
-        println!("-- end of '{}' --", filename);
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        return;
+    }
+    let (skip, verbose) = if args[1] == "-v" {
+        (2, true)
+    } else {
+        (1, false)
+    };
+    for filename in args.iter().skip(skip) {
+        if verbose {
+            println!("-- dump of '{}' --", filename);
+        }
+        dump_file(&filename, verbose);
+        if verbose {
+            println!("-- end of '{}' --", filename);
+        }
     }
 }
