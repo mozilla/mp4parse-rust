@@ -2,17 +2,16 @@ extern crate mp4parse;
 
 use std::env;
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{Seek, SeekFrom};
 
 fn dump_file(filename: &String, verbose: bool) {
-    let file = match File::open(filename) {
-        Ok(file) => file,
+    let mut reader = match File::open(filename) {
+        Ok(reader) => reader,
         _ => {
             println!("ERROR: invalid path '{}'", filename);
             return;
         }
     };
-    let mut reader = BufReader::new(file);
     let mut context = mp4parse::MediaContext::new();
     // Turn on debug output.
     if verbose {
@@ -26,7 +25,8 @@ fn dump_file(filename: &String, verbose: bool) {
             panic!(e);
         },
         Err(e) => {
-            println!("ERROR: {:?} in '{}'", e, filename);
+            let offset = reader.seek(SeekFrom::Current(0)).unwrap();
+            println!("ERROR: {:?} in '{}' @ {}", e, filename, offset);
         },
     }
     if verbose {
