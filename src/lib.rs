@@ -370,12 +370,12 @@ struct Input<'a, T: 'a + Read> {
     src: &'a mut T,
 }
 
-impl<'b, 'a, T: 'a + Read> Input<'b, T> {
+impl<'a, T: Read> Input<'a, T> {
     fn new(src: &'a mut T) -> Input<'a, T> {
         Input { src: src }
     }
 
-    fn next(&'a mut self) -> Result<Option<BMFFBoxContent<'a, T>>> {
+    fn next<'b>(&'b mut self) -> Result<Option<BMFFBoxContent<'b, T>>> {
         let r = read_box_header(self.src);
         match r {
             Ok(h) => Ok(Some(BMFFBoxContent {
