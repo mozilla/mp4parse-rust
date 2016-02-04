@@ -361,7 +361,7 @@ impl Track {
     }
 }
 
-struct BMFFBox<'a, T: 'a + Read> {
+struct BMFFBoxContent<'a, T: 'a + Read> {
     head: BoxHeader,
     content: Take<&'a mut T>,
 }
@@ -375,16 +375,37 @@ impl<'b, 'a, T: 'a + Read> Input<'b, T> {
         Input { src: src }
     }
 
-    fn next(&'a mut self) -> Option<Result<BMFFBox<'a, T>>> {
+    fn next(&'a mut self) -> Option<Result<BMFFBoxContent<'a, T>>> {
         let r = read_box_header(self.src);
         match r {
-            Ok(h) => Some(Ok(BMFFBox {
+            Ok(h) => Some(Ok(BMFFBoxContent {
                 head: h,
-                content: limit(self.src, &h),
+                content: self.src.take(h.size - h.offset),
             })),
             Err(Error::UnexpectedEOF) => None,
             Err(e) => Some(Err(e)),
         }
+    }
+}
+
+impl<'a, T: Read> Read for BMFFBoxContent<'a, T> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.content.read(buf)
+    }
+}
+
+trait BMFFBox : Read {
+    fn bytes_left(&self) -> usize;
+    fn get_header(&self) -> &BoxHeader;
+}
+
+impl<'a, T: Read> BMFFBox for BMFFBoxContent<'a, T> {
+    fn bytes_left(&self) -> usize {
+        self.content.limit() as usize
+    }
+
+    fn get_header(&self) -> &BoxHeader {
+        &self.head
     }
 }
 
@@ -432,15 +453,15 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> Result<(u8, u32)> {
 }
 
 /// Skip over the entire contents of a box.
-fn skip_box_content<T: Read>(src: &mut T, header: &BoxHeader) -> Result<()> {
+fn skip_box_content<T: BMFFBox>(src: &mut T) -> Result<()> {
     // Skip the contents of unknown chunks.
-    log!("{:?} (skipped)", header);
-    skip(src, (header.size - header.offset) as usize)
-}
-
-/// Helper to construct a Take over the contents of a box.
-fn limit<'a, T: Read>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
-    f.take(h.size - h.offset)
+    let to_skip = {
+        let header = src.get_header();
+        log!("{:?} (skipped)", header);
+        (header.size - header.offset) as usize
+    };
+    assert!(to_skip == src.bytes_left());
+    skip(src, to_skip)
 }
 
 macro_rules! check_parser_state {
@@ -462,11 +483,11 @@ pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"ftyp" => {
-                let ftyp = try!(read_ftyp(&mut b.content, &b.head));
+                let ftyp = try!(read_ftyp(&mut b));
                 log!("{:?}", ftyp);
             }
-            b"moov" => try!(read_moov(&mut b.content, context)),
-            _ => try!(skip_box_content(&mut b.content, &b.head)),
+            b"moov" => try!(read_moov(&mut b, context)),
+            _ => try!(skip_box_content(&mut b)),
         };
         check_parser_state!(b.content);
     }
@@ -482,7 +503,7 @@ fn parse_mvhd<T: Read>(f: &mut T) -> Result<(MovieHeaderBox, Option<MediaTimeSca
     Ok((mvhd, timescale))
 }
 
-fn read_moov<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
+fn read_moov<T: BMFFBox>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
@@ -497,7 +518,7 @@ fn read_moov<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
                 try!(read_trak(&mut b.content, &mut track));
                 context.tracks.push(track);
             }
-            _ => try!(skip_box_content(&mut b.content, &b.head)),
+            _ => try!(skip_box_content(&mut b)),
         };
         check_parser_state!(b.content);
     }
@@ -517,7 +538,7 @@ fn read_trak<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
             }
             b"edts" => try!(read_edts(&mut b.content, track)),
             b"mdia" => try!(read_mdia(&mut b.content, track)),
-            _ => try!(skip_box_content(&mut b.content, &b.head)),
+            _ => try!(skip_box_content(&mut b)),
         };
         check_parser_state!(b.content);
     }
@@ -551,7 +572,7 @@ fn read_edts<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
                                                         track.id));
                 log!("{:?}", elst);
             }
-            _ => try!(skip_box_content(&mut b.content, &b.head)),
+            _ => try!(skip_box_content(&mut b)),
         };
         check_parser_state!(b.content);
     }
@@ -592,7 +613,7 @@ fn read_mdia<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
                 log!("{:?}", hdlr);
             }
             b"minf" => try!(read_minf(&mut b.content, track)),
-            _ => try!(skip_box_content(&mut b.content, &b.head)),
+            _ => try!(skip_box_content(&mut b)),
         };
         check_parser_state!(b.content);
     }
@@ -605,7 +626,7 @@ fn read_minf<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"stbl" => try!(read_stbl(&mut b.content, track)),
-            _ => try!(skip_box_content(&mut b.content, &b.head)),
+            _ => try!(skip_box_content(&mut b)),
         };
         check_parser_state!(b.content);
     }
@@ -645,7 +666,7 @@ fn read_stbl<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
                 let stss = try!(read_stss(&mut b.content));
                 log!("{:?}", stss);
             }
-            _ => try!(skip_box_content(&mut b.content, &b.head)),
+            _ => try!(skip_box_content(&mut b)),
         };
         check_parser_state!(b.content);
     }
@@ -653,10 +674,10 @@ fn read_stbl<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
 }
 
 /// Parse an ftyp box.
-fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileTypeBox> {
+fn read_ftyp<T: BMFFBox>(src: &mut T) -> Result<FileTypeBox> {
     let major = try!(be_fourcc(src));
     let minor = try!(be_u32(src));
-    let bytes_left = head.size - head.offset - 8;
+    let bytes_left = src.bytes_left();
     if bytes_left % 4 != 0 {
         return Err(Error::InvalidData("invalid ftyp size"));
     }
@@ -1073,7 +1094,7 @@ fn read_video_desc<T: ReadBytesExt>(src: &mut T, h: &BoxHeader, track: &mut Trac
                 let vpcc = try!(read_vpcc(&mut b.content));
                 codec_specific = Some(VideoCodecSpecific::VPxConfig(vpcc));
             }
-            _ => try!(skip_box_content(&mut b.content, &b.head)),
+            _ => try!(skip_box_content(&mut b)),
         }
         check_parser_state!(b.content);
     }
@@ -1159,7 +1180,7 @@ fn read_audio_desc<T: ReadBytesExt>(src: &mut T, h: &BoxHeader, track: &mut Trac
                 let dops = try!(read_dops(&mut b.content));
                 codec_specific = Some(AudioCodecSpecific::OpusSpecificBox(dops));
             }
-            _ => try!(skip_box_content(&mut b.content, &b.head)),
+            _ => try!(skip_box_content(&mut b)),
         }
         check_parser_state!(b.content);
     }
@@ -1185,13 +1206,14 @@ fn read_stsd<T: ReadBytesExt>(src: &mut T, track: &mut Track) -> Result<SampleDe
     let mut descriptions = Vec::new();
 
     // TODO(kinetik): check if/when more than one desc per track? do we need to support?
-    for _ in 0..description_count {
-        let head = try!(read_box_header(src));
+    let mut x = Input::new(src);
+    while let Some(b) = x.next() {
+        let mut b = try!(b);
         let description = match track.track_type {
-            TrackType::Video => try!(read_video_desc(&mut limit(src, &head), &head, track)),
-            TrackType::Audio => try!(read_audio_desc(&mut limit(src, &head), &head, track)),
+            TrackType::Video => try!(read_video_desc(&mut b.content, &b.head, track)),
+            TrackType::Audio => try!(read_audio_desc(&mut b.content, &b.head, track)),
             TrackType::Unknown => {
-                try!(skip_box_content(&mut limit(src, &head), &head));
+                try!(skip_box_content(&mut b));
                 SampleEntry::Unknown
             }
         };
@@ -1201,6 +1223,10 @@ fn read_stsd<T: ReadBytesExt>(src: &mut T, track: &mut Track) -> Result<SampleDe
             log!("** don't know how to handle multiple descriptions **");
         }
         descriptions.push(description);
+        check_parser_state!(b.content);
+        if descriptions.len() == description_count as usize {
+            break;
+        }
     }
 
     Ok(SampleDescriptionBox {

@@ -121,10 +121,11 @@ fn read_ftyp() {
          .append_bytes(b"isom")
          .append_bytes(b"mp42")
     });
-    let header = read_box_header(&mut stream).unwrap();
-    assert_eq!(header.name, FourCC(*b"ftyp"));
-    assert_eq!(header.size, 24);
-    let parsed = super::read_ftyp(&mut stream, &header).unwrap();
+    let mut x = super::Input::new(&mut stream);
+    let mut y = x.next().unwrap().unwrap();
+    assert_eq!(y.head.name, FourCC(*b"ftyp"));
+    assert_eq!(y.head.size, 24);
+    let parsed = super::read_ftyp(&mut y).unwrap();
     assert_eq!(parsed.major_brand, FourCC(*b"mp42"));
     assert_eq!(parsed.minor_version, 0);
     assert_eq!(parsed.compatible_brands.len(), 2);
