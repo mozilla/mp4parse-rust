@@ -15,7 +15,7 @@ fn dump_file(filename: &String, verbose: bool) {
     let mut context = mp4parse::MediaContext::new();
     // Turn on debug output.
     if verbose {
-        context.trace(true);
+        mp4parse::set_debug_mode(true);
     }
     // Read all boxes.
     match mp4parse::read_mp4(&mut reader, &mut context) {

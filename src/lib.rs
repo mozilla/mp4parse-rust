@@ -25,6 +25,25 @@ mod tests;
 // Arbitrary buffer size limit used for raw read_bufs on a box.
 const BUF_SIZE_LIMIT: u64 = 1024 * 1024;
 
+static DEBUG_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::ATOMIC_BOOL_INIT;
+
+pub fn set_debug_mode(mode: bool) {
+    DEBUG_MODE.store(mode, std::sync::atomic::Ordering::SeqCst);
+}
+
+#[inline(always)]
+fn get_debug_mode() -> bool {
+    DEBUG_MODE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+macro_rules! log {
+    ($($args:tt)*) => (
+        if get_debug_mode() {
+            println!( $( $args )* );
+        }
+    )
+}
+
 /// Describes parser failures.
 ///
 /// This enum wraps athe standard `io::Error` type, unified with
@@ -277,8 +296,6 @@ pub struct MediaContext {
     timescale: Option<MediaTimeScale>,
     /// Tracks found in the file.
     tracks: Vec<Track>,
-    /// Print boxes and other info as parsing proceeds. For debugging.
-    trace: bool,
 }
 
 impl MediaContext {
@@ -286,19 +303,6 @@ impl MediaContext {
         MediaContext {
             timescale: None,
             tracks: Vec::new(),
-            trace: false,
-        }
-    }
-
-    pub fn trace(&mut self, on: bool) {
-        self.trace = on;
-    }
-}
-
-macro_rules! log {
-    ( $ctx:expr, $( $args:tt )* ) => {
-        if $ctx.trace {
-            println!( $( $args )* );
         }
     }
 }
@@ -338,7 +342,6 @@ struct Track {
     mime_type: String,
     data: Option<SampleEntry>,
     tkhd: Option<TrackHeaderBox>, // TODO(kinetik): find a nicer way to export this.
-    trace: bool,
 }
 
 impl Track {
@@ -354,7 +357,6 @@ impl Track {
             mime_type: String::new(),
             data: None,
             tkhd: None,
-            trace: false,
         }
     }
 }
@@ -431,6 +433,8 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> Result<(u8, u32)> {
 
 /// Skip over the entire contents of a box.
 fn skip_box_content<T: Read>(src: &mut T, header: &BoxHeader) -> Result<()> {
+    // Skip the contents of unknown chunks.
+    log!("{:?} (skipped)", header);
     skip(src, (header.size - header.offset) as usize)
 }
 
@@ -440,9 +444,9 @@ fn limit<'a, T: Read>(f: &'a mut T, h: &BoxHeader) -> Take<&'a mut T> {
 }
 
 macro_rules! check_parser_state {
-    ( $ctx:expr, $src:expr ) => {
+    ( $src:expr ) => {
         if $src.limit() > 0 {
-            log!($ctx, "bad parser state: {} content bytes left", $src.limit());
+            log!("bad parser state: {} content bytes left", $src.limit());
             return Err(Error::InvalidData("unread box content or bad parser sync"));
         }
     }
@@ -459,16 +463,12 @@ pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
         match b.head.name.as_bytes() {
             b"ftyp" => {
                 let ftyp = try!(read_ftyp(&mut b.content, &b.head));
-                log!(context, "{:?}", ftyp);
+                log!("{:?}", ftyp);
             }
             b"moov" => try!(read_moov(&mut b.content, context)),
-            _ => {
-                // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", b.head);
-                try!(skip_box_content(&mut b.content, &b.head));
-            }
+            _ => try!(skip_box_content(&mut b.content, &b.head)),
         };
-        check_parser_state!(context, b.content);
+        check_parser_state!(b.content);
     }
     Ok(())
 }
@@ -490,26 +490,21 @@ fn read_moov<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
             b"mvhd" => {
                 let (mvhd, timescale) = try!(parse_mvhd(&mut b.content));
                 context.timescale = timescale;
-                log!(context, "  {:?}", mvhd);
+                log!("{:?}", mvhd);
             }
             b"trak" => {
                 let mut track = Track::new(context.tracks.len());
-                track.trace = context.trace;
-                try!(read_trak(&mut b.content, context, &mut track));
+                try!(read_trak(&mut b.content, &mut track));
                 context.tracks.push(track);
             }
-            _ => {
-                // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", b.head);
-                try!(skip_box_content(&mut b.content, &b.head));
-            }
+            _ => try!(skip_box_content(&mut b.content, &b.head)),
         };
-        check_parser_state!(context, b.content);
+        check_parser_state!(b.content);
     }
     Ok(())
 }
 
-fn read_trak<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_trak<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
@@ -518,22 +513,18 @@ fn read_trak<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) 
                 let tkhd = try!(read_tkhd(&mut b.content));
                 track.track_id = Some(tkhd.track_id);
                 track.tkhd = Some(tkhd.clone());
-                log!(context, "  {:?}", tkhd);
+                log!("{:?}", tkhd);
             }
-            b"edts" => try!(read_edts(&mut b.content, context, track)),
-            b"mdia" => try!(read_mdia(&mut b.content, context, track)),
-            _ => {
-                // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", b.head);
-                try!(skip_box_content(&mut b.content, &b.head));
-            }
+            b"edts" => try!(read_edts(&mut b.content, track)),
+            b"mdia" => try!(read_mdia(&mut b.content, track)),
+            _ => try!(skip_box_content(&mut b.content, &b.head)),
         };
-        check_parser_state!(context, b.content);
+        check_parser_state!(b.content);
     }
     Ok(())
 }
 
-fn read_edts<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_edts<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
@@ -558,15 +549,11 @@ fn read_edts<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) 
                 }
                 track.media_time = Some(TrackScaledTime(elst.edits[idx].media_time as u64,
                                                         track.id));
-                log!(context, "  {:?}", elst);
+                log!("{:?}", elst);
             }
-            _ => {
-                // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", b.head);
-                try!(skip_box_content(&mut b.content, &b.head));
-            }
+            _ => try!(skip_box_content(&mut b.content, &b.head)),
         };
-        check_parser_state!(context, b.content);
+        check_parser_state!(b.content);
     }
     Ok(())
 }
@@ -584,7 +571,7 @@ fn parse_mdhd<T: Read>(f: &mut T, track: &mut Track) -> Result<(MediaHeaderBox, 
     Ok((mdhd, duration, timescale))
 }
 
-fn read_mdia<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_mdia<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
@@ -593,7 +580,7 @@ fn read_mdia<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) 
                 let (mdhd, duration, timescale) = try!(parse_mdhd(&mut b.content, track));
                 track.duration = duration;
                 track.timescale = timescale;
-                log!(context, "  {:?}", mdhd);
+                log!("{:?}", mdhd);
             }
             b"hdlr" => {
                 let hdlr = try!(read_hdlr(&mut b.content, &b.head));
@@ -602,77 +589,65 @@ fn read_mdia<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) 
                     b"soun" => track.track_type = TrackType::Audio,
                     _ => (),
                 }
-                log!(context, "  {:?}", hdlr);
+                log!("{:?}", hdlr);
             }
-            b"minf" => try!(read_minf(&mut b.content, context, track)),
-            _ => {
-                // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", b.head);
-                try!(skip_box_content(&mut b.content, &b.head));
-            }
+            b"minf" => try!(read_minf(&mut b.content, track)),
+            _ => try!(skip_box_content(&mut b.content, &b.head)),
         };
-        check_parser_state!(context, b.content);
+        check_parser_state!(b.content);
     }
     Ok(())
 }
 
-fn read_minf<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_minf<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
         match b.head.name.as_bytes() {
-            b"stbl" => try!(read_stbl(&mut b.content, context, track)),
-            _ => {
-                // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", b.head);
-                try!(skip_box_content(&mut b.content, &b.head));
-            }
+            b"stbl" => try!(read_stbl(&mut b.content, track)),
+            _ => try!(skip_box_content(&mut b.content, &b.head)),
         };
-        check_parser_state!(context, b.content);
+        check_parser_state!(b.content);
     }
     Ok(())
 }
 
-fn read_stbl<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) -> Result<()> {
+fn read_stbl<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
     while let Some(b) = x.next() {
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"stsd" => {
                 let stsd = try!(read_stsd(&mut b.content, track));
-                log!(context, "  {:?}", stsd);
+                log!("{:?}", stsd);
             }
             b"stts" => {
                 let stts = try!(read_stts(&mut b.content));
-                log!(context, "  {:?}", stts);
+                log!("{:?}", stts);
             }
             b"stsc" => {
                 let stsc = try!(read_stsc(&mut b.content));
-                log!(context, "  {:?}", stsc);
+                log!("{:?}", stsc);
             }
             b"stsz" => {
                 let stsz = try!(read_stsz(&mut b.content));
-                log!(context, "  {:?}", stsz);
+                log!("{:?}", stsz);
             }
             b"stco" => {
                 let stco = try!(read_stco(&mut b.content));
-                log!(context, "  {:?}", stco);
+                log!("{:?}", stco);
             }
             b"co64" => {
                 let co64 = try!(read_co64(&mut b.content));
-                log!(context, "  {:?}", co64);
+                log!("{:?}", co64);
             }
             b"stss" => {
                 let stss = try!(read_stss(&mut b.content));
-                log!(context, "  {:?}", stss);
+                log!("{:?}", stss);
             }
-            _ => {
-                // Skip the contents of unknown chunks.
-                log!(context, "{:?} (skipped)", b.head);
-                try!(skip_box_content(&mut b.content, &b.head));
-            }
+            _ => try!(skip_box_content(&mut b.content, &b.head)),
         };
-        check_parser_state!(context, b.content);
+        check_parser_state!(b.content);
     }
     Ok(())
 }
@@ -1098,13 +1073,9 @@ fn read_video_desc<T: ReadBytesExt>(src: &mut T, h: &BoxHeader, track: &mut Trac
                 let vpcc = try!(read_vpcc(&mut b.content));
                 codec_specific = Some(VideoCodecSpecific::VPxConfig(vpcc));
             }
-            _ => {
-                // Skip the contents of unknown chunks.
-                log!(track, "{:?} (skipped)", b.head);
-                try!(skip_box_content(&mut b.content, &b.head));
-            }
+            _ => try!(skip_box_content(&mut b.content, &b.head)),
         }
-        check_parser_state!(track, b.content);
+        check_parser_state!(b.content);
     }
 
     if codec_specific.is_none() {
@@ -1188,13 +1159,9 @@ fn read_audio_desc<T: ReadBytesExt>(src: &mut T, h: &BoxHeader, track: &mut Trac
                 let dops = try!(read_dops(&mut b.content));
                 codec_specific = Some(AudioCodecSpecific::OpusSpecificBox(dops));
             }
-            _ => {
-                // Skip the contents of unknown chunks.
-                log!(track, "{:?} (skipped)", b.head);
-                try!(skip_box_content(&mut b.content, &b.head));
-            }
+            _ => try!(skip_box_content(&mut b.content, &b.head)),
         }
-        check_parser_state!(track, b.content);
+        check_parser_state!(b.content);
     }
 
     if codec_specific.is_none() {
@@ -1231,7 +1198,7 @@ fn read_stsd<T: ReadBytesExt>(src: &mut T, track: &mut Track) -> Result<SampleDe
         if track.data.is_none() {
             track.data = Some(description.clone());
         } else {
-            log!(track, "** don't know how to handle multiple descriptions **");
+            log!("** don't know how to handle multiple descriptions **");
         }
         descriptions.push(description);
     }
