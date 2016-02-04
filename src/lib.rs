@@ -103,7 +103,6 @@ pub struct BoxHeader {
 /// File type box 'ftyp'.
 #[derive(Debug)]
 struct FileTypeBox {
-    header: BoxHeader,
     major_brand: FourCC,
     minor_version: u32,
     compatible_brands: Vec<FourCC>,
@@ -112,7 +111,6 @@ struct FileTypeBox {
 /// Movie header box 'mvhd'.
 #[derive(Debug)]
 struct MovieHeaderBox {
-    header: BoxHeader,
     timescale: u32,
     duration: u64,
 }
@@ -120,7 +118,6 @@ struct MovieHeaderBox {
 /// Track header box 'tkhd'
 #[derive(Debug, Clone)]
 struct TrackHeaderBox {
-    header: BoxHeader,
     track_id: u32,
     disabled: bool,
     duration: u64,
@@ -131,7 +128,6 @@ struct TrackHeaderBox {
 /// Edit list box 'elst'
 #[derive(Debug)]
 struct EditListBox {
-    header: BoxHeader,
     edits: Vec<Edit>,
 }
 
@@ -146,7 +142,6 @@ struct Edit {
 /// Media header box 'mdhd'
 #[derive(Debug)]
 struct MediaHeaderBox {
-    header: BoxHeader,
     timescale: u32,
     duration: u64,
 }
@@ -154,21 +149,18 @@ struct MediaHeaderBox {
 // Chunk offset box 'stco' or 'co64'
 #[derive(Debug)]
 struct ChunkOffsetBox {
-    header: BoxHeader,
     offsets: Vec<u64>,
 }
 
 // Sync sample box 'stss'
 #[derive(Debug)]
 struct SyncSampleBox {
-    header: BoxHeader,
     samples: Vec<u32>,
 }
 
 // Sample to chunk box 'stsc'
 #[derive(Debug)]
 struct SampleToChunkBox {
-    header: BoxHeader,
     samples: Vec<SampleToChunk>,
 }
 
@@ -182,7 +174,6 @@ struct SampleToChunk {
 // Sample size box 'stsz'
 #[derive(Debug)]
 struct SampleSizeBox {
-    header: BoxHeader,
     sample_size: u32,
     sample_sizes: Vec<u32>,
 }
@@ -190,7 +181,6 @@ struct SampleSizeBox {
 // Time to sample box 'stts'
 #[derive(Debug)]
 struct TimeToSampleBox {
-    header: BoxHeader,
     samples: Vec<Sample>,
 }
 
@@ -203,14 +193,12 @@ struct Sample {
 // Handler reference box 'hdlr'
 #[derive(Debug)]
 struct HandlerBox {
-    header: BoxHeader,
     handler_type: FourCC,
 }
 
 // Sample description box 'stsd'
 #[derive(Debug)]
 struct SampleDescriptionBox {
-    header: BoxHeader,
     descriptions: Vec<SampleEntry>,
 }
 
@@ -485,8 +473,8 @@ pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     Ok(())
 }
 
-fn parse_mvhd<T: Read>(f: &mut T, h: &BoxHeader) -> Result<(MovieHeaderBox, Option<MediaTimeScale>)> {
-    let mvhd = try!(read_mvhd(f, &h));
+fn parse_mvhd<T: Read>(f: &mut T) -> Result<(MovieHeaderBox, Option<MediaTimeScale>)> {
+    let mvhd = try!(read_mvhd(f));
     if mvhd.timescale == 0 {
         return Err(Error::InvalidData("zero timescale in mdhd"));
     }
@@ -500,7 +488,7 @@ fn read_moov<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"mvhd" => {
-                let (mvhd, timescale) = try!(parse_mvhd(&mut b.content, &b.head));
+                let (mvhd, timescale) = try!(parse_mvhd(&mut b.content));
                 context.timescale = timescale;
                 log!(context, "  {:?}", mvhd);
             }
@@ -527,7 +515,7 @@ fn read_trak<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) 
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"tkhd" => {
-                let tkhd = try!(read_tkhd(&mut b.content, &b.head));
+                let tkhd = try!(read_tkhd(&mut b.content));
                 track.track_id = Some(tkhd.track_id);
                 track.tkhd = Some(tkhd.clone());
                 log!(context, "  {:?}", tkhd);
@@ -551,7 +539,7 @@ fn read_edts<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) 
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"elst" => {
-                let elst = try!(read_elst(&mut b.content, &b.head));
+                let elst = try!(read_elst(&mut b.content));
                 let mut empty_duration = 0;
                 let mut idx = 0;
                 if elst.edits.len() > 2 {
@@ -583,8 +571,8 @@ fn read_edts<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) 
     Ok(())
 }
 
-fn parse_mdhd<T: Read>(f: &mut T, h: &BoxHeader, track: &mut Track) -> Result<(MediaHeaderBox, Option<TrackScaledTime>, Option<TrackTimeScale>)> {
-    let mdhd = try!(read_mdhd(f, h));
+fn parse_mdhd<T: Read>(f: &mut T, track: &mut Track) -> Result<(MediaHeaderBox, Option<TrackScaledTime>, Option<TrackTimeScale>)> {
+    let mdhd = try!(read_mdhd(f));
     let duration = match mdhd.duration {
         std::u64::MAX => None,
         duration => Some(TrackScaledTime(duration, track.id)),
@@ -602,7 +590,7 @@ fn read_mdia<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) 
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"mdhd" => {
-                let (mdhd, duration, timescale) = try!(parse_mdhd(&mut b.content, &b.head, track));
+                let (mdhd, duration, timescale) = try!(parse_mdhd(&mut b.content, track));
                 track.duration = duration;
                 track.timescale = timescale;
                 log!(context, "  {:?}", mdhd);
@@ -651,31 +639,31 @@ fn read_stbl<T: Read>(f: &mut T, context: &mut MediaContext, track: &mut Track) 
         let mut b = try!(b);
         match b.head.name.as_bytes() {
             b"stsd" => {
-                let stsd = try!(read_stsd(&mut b.content, &b.head, track));
+                let stsd = try!(read_stsd(&mut b.content, track));
                 log!(context, "  {:?}", stsd);
             }
             b"stts" => {
-                let stts = try!(read_stts(&mut b.content, &b.head));
+                let stts = try!(read_stts(&mut b.content));
                 log!(context, "  {:?}", stts);
             }
             b"stsc" => {
-                let stsc = try!(read_stsc(&mut b.content, &b.head));
+                let stsc = try!(read_stsc(&mut b.content));
                 log!(context, "  {:?}", stsc);
             }
             b"stsz" => {
-                let stsz = try!(read_stsz(&mut b.content, &b.head));
+                let stsz = try!(read_stsz(&mut b.content));
                 log!(context, "  {:?}", stsz);
             }
             b"stco" => {
-                let stco = try!(read_stco(&mut b.content, &b.head));
+                let stco = try!(read_stco(&mut b.content));
                 log!(context, "  {:?}", stco);
             }
             b"co64" => {
-                let co64 = try!(read_co64(&mut b.content, &b.head));
+                let co64 = try!(read_co64(&mut b.content));
                 log!(context, "  {:?}", co64);
             }
             b"stss" => {
-                let stss = try!(read_stss(&mut b.content, &b.head));
+                let stss = try!(read_stss(&mut b.content));
                 log!(context, "  {:?}", stss);
             }
             _ => {
@@ -704,7 +692,6 @@ fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileTypeB
         brands.push(try!(be_fourcc(src)));
     }
     Ok(FileTypeBox {
-        header: *head,
         major_brand: major,
         minor_version: minor,
         compatible_brands: brands,
@@ -712,7 +699,7 @@ fn read_ftyp<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<FileTypeB
 }
 
 /// Parse an mvhd box.
-fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<MovieHeaderBox> {
+fn read_mvhd<T: ReadBytesExt>(src: &mut T) -> Result<MovieHeaderBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     match version {
         // 64 bit creation and modification times.
@@ -741,14 +728,13 @@ fn read_mvhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<MovieHead
     // Skip remaining fields.
     try!(skip(src, 80));
     Ok(MovieHeaderBox {
-        header: *head,
         timescale: timescale,
         duration: duration,
     })
 }
 
 /// Parse a tkhd box.
-fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TrackHeaderBox> {
+fn read_tkhd<T: ReadBytesExt>(src: &mut T) -> Result<TrackHeaderBox> {
     let (version, flags) = try!(read_fullbox_extra(src));
     let disabled = flags & 0x1u32 == 0 || flags & 0x2u32 == 0;
     match version {
@@ -774,7 +760,6 @@ fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TrackHead
     let width = try!(be_u32(src));
     let height = try!(be_u32(src));
     Ok(TrackHeaderBox {
-        header: *head,
         track_id: track_id,
         disabled: disabled,
         duration: duration,
@@ -784,7 +769,7 @@ fn read_tkhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TrackHead
 }
 
 /// Parse a elst box.
-fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<EditListBox> {
+fn read_elst<T: ReadBytesExt>(src: &mut T) -> Result<EditListBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     let edit_count = try!(be_u32(src));
     if edit_count == 0 {
@@ -814,13 +799,12 @@ fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<EditListB
     }
 
     Ok(EditListBox {
-        header: *head,
         edits: edits,
     })
 }
 
 /// Parse a mdhd box.
-fn read_mdhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<MediaHeaderBox> {
+fn read_mdhd<T: ReadBytesExt>(src: &mut T) -> Result<MediaHeaderBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     let (timescale, duration) = match version {
         1 => {
@@ -856,14 +840,13 @@ fn read_mdhd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<MediaHead
     try!(skip(src, 4));
 
     Ok(MediaHeaderBox {
-        header: *head,
         timescale: timescale,
         duration: duration,
     })
 }
 
 /// Parse a stco box.
-fn read_stco<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<ChunkOffsetBox> {
+fn read_stco<T: ReadBytesExt>(src: &mut T) -> Result<ChunkOffsetBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let offset_count = try!(be_u32(src));
     let mut offsets = Vec::new();
@@ -872,13 +855,12 @@ fn read_stco<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<ChunkOffs
     }
 
     Ok(ChunkOffsetBox {
-        header: *head,
         offsets: offsets,
     })
 }
 
 /// Parse a stco box.
-fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<ChunkOffsetBox> {
+fn read_co64<T: ReadBytesExt>(src: &mut T) -> Result<ChunkOffsetBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let offset_count = try!(be_u32(src));
     let mut offsets = Vec::new();
@@ -887,13 +869,12 @@ fn read_co64<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<ChunkOffs
     }
 
     Ok(ChunkOffsetBox {
-        header: *head,
         offsets: offsets,
     })
 }
 
 /// Parse a stss box.
-fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SyncSampleBox> {
+fn read_stss<T: ReadBytesExt>(src: &mut T) -> Result<SyncSampleBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let sample_count = try!(be_u32(src));
     let mut samples = Vec::new();
@@ -902,13 +883,12 @@ fn read_stss<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SyncSampl
     }
 
     Ok(SyncSampleBox {
-        header: *head,
         samples: samples,
     })
 }
 
 /// Parse a stsc box.
-fn read_stsc<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SampleToChunkBox> {
+fn read_stsc<T: ReadBytesExt>(src: &mut T) -> Result<SampleToChunkBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let sample_count = try!(be_u32(src));
     let mut samples = Vec::new();
@@ -924,13 +904,12 @@ fn read_stsc<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SampleToC
     }
 
     Ok(SampleToChunkBox {
-        header: *head,
         samples: samples,
     })
 }
 
 /// Parse a stsz box.
-fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SampleSizeBox> {
+fn read_stsz<T: ReadBytesExt>(src: &mut T) -> Result<SampleSizeBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let sample_size = try!(be_u32(src));
     let sample_count = try!(be_u32(src));
@@ -942,14 +921,13 @@ fn read_stsz<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<SampleSiz
     }
 
     Ok(SampleSizeBox {
-        header: *head,
         sample_size: sample_size,
         sample_sizes: sample_sizes,
     })
 }
 
 /// Parse a stts box.
-fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TimeToSampleBox> {
+fn read_stts<T: ReadBytesExt>(src: &mut T) -> Result<TimeToSampleBox> {
     let (_, _) = try!(read_fullbox_extra(src));
     let sample_count = try!(be_u32(src));
     let mut samples = Vec::new();
@@ -963,7 +941,6 @@ fn read_stts<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<TimeToSam
     }
 
     Ok(TimeToSampleBox {
-        header: *head,
         samples: samples,
     })
 }
@@ -1057,7 +1034,6 @@ fn read_hdlr<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<HandlerBo
     let _name = try!(read_null_terminated_string(src, bytes_left as usize));
 
     Ok(HandlerBox {
-        header: *head,
         handler_type: handler_type,
     })
 }
@@ -1235,7 +1211,7 @@ fn read_audio_desc<T: ReadBytesExt>(src: &mut T, h: &BoxHeader, track: &mut Trac
 }
 
 /// Parse a stsd box.
-fn read_stsd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader, track: &mut Track) -> Result<SampleDescriptionBox> {
+fn read_stsd<T: ReadBytesExt>(src: &mut T, track: &mut Track) -> Result<SampleDescriptionBox> {
     let (_, _) = try!(read_fullbox_extra(src));
 
     let description_count = try!(be_u32(src));
@@ -1261,7 +1237,6 @@ fn read_stsd<T: ReadBytesExt>(src: &mut T, head: &BoxHeader, track: &mut Track) 
     }
 
     Ok(SampleDescriptionBox {
-        header: *head,
         descriptions: descriptions,
     })
 }
