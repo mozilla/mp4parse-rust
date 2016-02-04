@@ -375,15 +375,15 @@ impl<'b, 'a, T: 'a + Read> Input<'b, T> {
         Input { src: src }
     }
 
-    fn next(&'a mut self) -> Option<Result<BMFFBoxContent<'a, T>>> {
+    fn next(&'a mut self) -> Result<Option<BMFFBoxContent<'a, T>>> {
         let r = read_box_header(self.src);
         match r {
-            Ok(h) => Some(Ok(BMFFBoxContent {
+            Ok(h) => Ok(Some(BMFFBoxContent {
                 head: h,
                 content: self.src.take(h.size - h.offset),
             })),
-            Err(Error::UnexpectedEOF) => None,
-            Err(e) => Some(Err(e)),
+            Err(Error::UnexpectedEOF) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 }
@@ -479,8 +479,7 @@ macro_rules! check_parser_state {
 /// which can be examined later.
 pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     let mut x = Input::new(f);
-    while let Some(b) = x.next() {
-        let mut b = try!(b);
+    while let Some(mut b) = try!(x.next()) {
         match b.head.name.as_bytes() {
             b"ftyp" => {
                 let ftyp = try!(read_ftyp(&mut b));
@@ -505,8 +504,7 @@ fn parse_mvhd<T: Read>(f: &mut T) -> Result<(MovieHeaderBox, Option<MediaTimeSca
 
 fn read_moov<T: BMFFBox>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     let mut x = Input::new(f);
-    while let Some(b) = x.next() {
-        let mut b = try!(b);
+    while let Some(mut b) = try!(x.next()) {
         match b.head.name.as_bytes() {
             b"mvhd" => {
                 let (mvhd, timescale) = try!(parse_mvhd(&mut b.content));
@@ -527,8 +525,7 @@ fn read_moov<T: BMFFBox>(f: &mut T, context: &mut MediaContext) -> Result<()> {
 
 fn read_trak<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
-    while let Some(b) = x.next() {
-        let mut b = try!(b);
+    while let Some(mut b) = try!(x.next()) {
         match b.head.name.as_bytes() {
             b"tkhd" => {
                 let tkhd = try!(read_tkhd(&mut b.content));
@@ -547,8 +544,7 @@ fn read_trak<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
 
 fn read_edts<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
-    while let Some(b) = x.next() {
-        let mut b = try!(b);
+    while let Some(mut b) = try!(x.next()) {
         match b.head.name.as_bytes() {
             b"elst" => {
                 let elst = try!(read_elst(&mut b.content));
@@ -594,8 +590,7 @@ fn parse_mdhd<T: Read>(f: &mut T, track: &mut Track) -> Result<(MediaHeaderBox, 
 
 fn read_mdia<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
-    while let Some(b) = x.next() {
-        let mut b = try!(b);
+    while let Some(mut b) = try!(x.next()) {
         match b.head.name.as_bytes() {
             b"mdhd" => {
                 let (mdhd, duration, timescale) = try!(parse_mdhd(&mut b.content, track));
@@ -622,8 +617,7 @@ fn read_mdia<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
 
 fn read_minf<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
-    while let Some(b) = x.next() {
-        let mut b = try!(b);
+    while let Some(mut b) = try!(x.next()) {
         match b.head.name.as_bytes() {
             b"stbl" => try!(read_stbl(&mut b.content, track)),
             _ => try!(skip_box_content(&mut b)),
@@ -635,8 +629,7 @@ fn read_minf<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
 
 fn read_stbl<T: Read>(f: &mut T, track: &mut Track) -> Result<()> {
     let mut x = Input::new(f);
-    while let Some(b) = x.next() {
-        let mut b = try!(b);
+    while let Some(mut b) = try!(x.next()) {
         match b.head.name.as_bytes() {
             b"stsd" => {
                 let stsd = try!(read_stsd(&mut b.content, track));
@@ -1067,8 +1060,7 @@ fn read_video_desc<T: ReadBytesExt>(src: &mut T, h: &BoxHeader, track: &mut Trac
     // Skip clap/pasp/etc. for now.
     let mut codec_specific = None;
     let mut x = Input::new(src);
-    while let Some(b) = x.next() {
-        let mut b = try!(b);
+    while let Some(mut b) = try!(x.next()) {
         match b.head.name.as_bytes() {
             b"avcC" => {
                 if (h.name.as_bytes() != b"avc1" &&
@@ -1154,8 +1146,7 @@ fn read_audio_desc<T: ReadBytesExt>(src: &mut T, h: &BoxHeader, track: &mut Trac
     // Skip chan/etc. for now.
     let mut codec_specific = None;
     let mut x = Input::new(src);
-    while let Some(b) = x.next() {
-        let mut b = try!(b);
+    while let Some(mut b) = try!(x.next()) {
         match b.head.name.as_bytes() {
             b"esds" => {
                 if (h.name.as_bytes() != b"mp4a" &&
@@ -1207,8 +1198,7 @@ fn read_stsd<T: ReadBytesExt>(src: &mut T, track: &mut Track) -> Result<SampleDe
 
     // TODO(kinetik): check if/when more than one desc per track? do we need to support?
     let mut x = Input::new(src);
-    while let Some(b) = x.next() {
-        let mut b = try!(b);
+    while let Some(mut b) = try!(x.next()) {
         let description = match track.track_type {
             TrackType::Video => try!(read_video_desc(&mut b.content, &b.head, track)),
             TrackType::Audio => try!(read_audio_desc(&mut b.content, &b.head, track)),
