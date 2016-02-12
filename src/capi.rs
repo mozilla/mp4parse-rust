@@ -8,7 +8,7 @@
 //! extern crate mp4parse;
 //!
 //! // Minimal valid mp4 containing no tracks.
-//! let data = b"\0\0\0\x10ftypmp42\0\0\0\0";
+//! let data = b"\0\0\0\x08moov";
 //!
 //! let context = mp4parse::mp4parse_new();
 //! unsafe {
@@ -144,6 +144,7 @@ pub unsafe extern "C" fn mp4parse_read(context: *mut mp4parse_state, buffer: *co
     };
     match r {
         Ok(_) => MP4PARSE_OK,
+        Err(Error::NoMoov) => MP4PARSE_ERROR_INVALID,
         Err(Error::InvalidData(_)) => MP4PARSE_ERROR_INVALID,
         Err(Error::Unsupported(_)) => MP4PARSE_ERROR_UNSUPPORTED,
         Err(Error::UnexpectedEOF) => MP4PARSE_ERROR_EOF,

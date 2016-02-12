@@ -60,6 +60,8 @@ pub enum Error {
     AssertCaught,
     /// Propagate underlying errors from `std::io`.
     Io(std::io::Error),
+    /// read_mp4 terminated without detecting a moov atom.
+    NoMoov,
 }
 
 impl From<std::io::Error> for Error {
@@ -478,19 +480,40 @@ macro_rules! check_parser_state {
 /// Metadata is accumulated in the passed-through MediaContext struct,
 /// which can be examined later.
 pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
+    let mut found_ftyp = false;
+    let mut found_moov = false;
     let mut x = Input::new(f);
     while let Some(mut b) = try!(x.next()) {
         match b.head.name.as_bytes() {
             b"ftyp" => {
                 let ftyp = try!(read_ftyp(&mut b));
+                found_ftyp = true;
                 log!("{:?}", ftyp);
             }
-            b"moov" => try!(read_moov(&mut b, context)),
+            b"moov" => {
+                try!(read_moov(&mut b, context));
+                found_moov = true;
+            }
             _ => try!(skip_box_content(&mut b)),
         };
         check_parser_state!(b.content);
+        if found_moov {
+            log!("found moov {}, could stop pure 'moov' parser now", if found_ftyp {
+                "and ftyp"
+            } else {
+                "but no ftyp"
+            });
+        }
     }
-    Ok(())
+
+    // XXX(kinetik): This isn't perfect, as a "moov" with no contents is
+    // treated as okay but we haven't found anything useful.  Needs more
+    // thought for clearer behaviour here.
+    if found_moov {
+        Ok(())
+    } else {
+        Err(Error::NoMoov)
+    }
 }
 
 fn parse_mvhd<T: BMFFBox>(f: &mut T) -> Result<(MovieHeaderBox, Option<MediaTimeScale>)> {
