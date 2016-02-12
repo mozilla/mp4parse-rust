@@ -149,6 +149,33 @@ fn read_truncated_ftyp() {
     }
 }
 
+#[should_panic]
+#[test]
+fn read_ftyp_case() {
+    // Brands in BMFF are represented as a u32, so it would seem clear that
+    // 0x6d703432 ("mp42") is not equal to 0x4d503432 ("MP42"), but some
+    // demuxers treat these as case-insensitive strings, e.g. street.mp4's
+    // major brand is "MP42".  I haven't seen case-insensitive
+    // compatible_brands (which we also test here), but it doesn't seem
+    // unlikely given the major_brand behaviour.
+    let mut stream = make_box(BoxSize::Auto, b"ftyp", |s| {
+        s.append_bytes(b"MP42")
+         .B32(0) // minor version
+         .append_bytes(b"ISOM")
+         .append_bytes(b"MP42")
+    });
+    let mut x = super::Input::new(&mut stream);
+    let mut stream = x.next().unwrap().unwrap();
+    assert_eq!(stream.head.name, FourCC(*b"ftyp"));
+    assert_eq!(stream.head.size, 24);
+    let parsed = super::read_ftyp(&mut stream).unwrap();
+    assert_eq!(parsed.major_brand, FourCC(*b"mp42"));
+    assert_eq!(parsed.minor_version, 0);
+    assert_eq!(parsed.compatible_brands.len(), 2);
+    assert_eq!(parsed.compatible_brands[0], FourCC(*b"isom"));
+    assert_eq!(parsed.compatible_brands[1], FourCC(*b"mp42"));
+}
+
 #[test]
 fn read_elst_v0() {
     let mut stream = make_fullbox(BoxSize::Short(28), b"elst", 0, |s| {
