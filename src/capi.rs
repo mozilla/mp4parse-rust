@@ -34,6 +34,14 @@ use media_time_to_ms;
 use track_time_to_ms;
 use SampleEntry;
 
+// rusty-cheddar's C enum generation doesn't namespace enum members by
+// prefixing them, so we're forced to do it in our member names until
+// https://github.com/Sean1708/rusty-cheddar/pull/35 is fixed.  Importing
+// the members into the module namespace avoids doubling up on the
+// namespacing on the Rust side.
+use mp4parse_error::*;
+use mp4parse_track_type::*;
+
 #[repr(C)]
 #[derive(PartialEq,Debug)]
 pub enum mp4parse_error {
@@ -113,7 +121,7 @@ pub unsafe extern "C" fn mp4parse_free(context: *mut mp4parse_state) {
 pub unsafe extern "C" fn mp4parse_read(context: *mut mp4parse_state, buffer: *const u8, size: usize) -> mp4parse_error {
     // Validate arguments from C.
     if context.is_null() || buffer.is_null() || size < 8 {
-        return mp4parse_error::MP4PARSE_ERROR_BADARG;
+        return MP4PARSE_ERROR_BADARG;
     }
 
     let mut context: &mut MediaContext = &mut (*context).0;
@@ -135,12 +143,12 @@ pub unsafe extern "C" fn mp4parse_read(context: *mut mp4parse_state, buffer: *co
         read_mp4(&mut c, &mut context)
     };
     match r {
-        Ok(_) => mp4parse_error::MP4PARSE_OK,
-        Err(Error::InvalidData(_)) => mp4parse_error::MP4PARSE_ERROR_INVALID,
-        Err(Error::Unsupported(_)) => mp4parse_error::MP4PARSE_ERROR_UNSUPPORTED,
-        Err(Error::UnexpectedEOF) => mp4parse_error::MP4PARSE_ERROR_EOF,
-        Err(Error::AssertCaught) => mp4parse_error::MP4PARSE_ERROR_ASSERT,
-        Err(Error::Io(_)) => mp4parse_error::MP4PARSE_ERROR_IO,
+        Ok(_) => MP4PARSE_OK,
+        Err(Error::InvalidData(_)) => MP4PARSE_ERROR_INVALID,
+        Err(Error::Unsupported(_)) => MP4PARSE_ERROR_UNSUPPORTED,
+        Err(Error::UnexpectedEOF) => MP4PARSE_ERROR_EOF,
+        Err(Error::AssertCaught) => MP4PARSE_ERROR_ASSERT,
+        Err(Error::Io(_)) => MP4PARSE_ERROR_IO,
     }
 }
 
@@ -159,7 +167,7 @@ pub unsafe extern "C" fn mp4parse_get_track_count(context: *const mp4parse_state
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut mp4parse_state, track: u32, info: *mut mp4parse_track_info) -> mp4parse_error {
     if context.is_null() || info.is_null() {
-        return mp4parse_error::MP4PARSE_ERROR_BADARG;
+        return MP4PARSE_ERROR_BADARG;
     }
 
     let context: &mut MediaContext = &mut (*context).0;
@@ -167,13 +175,13 @@ pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut mp4parse_state, t
     let info: &mut mp4parse_track_info = &mut *info;
 
     if track_index >= context.tracks.len() {
-        return mp4parse_error::MP4PARSE_ERROR_BADARG;
+        return MP4PARSE_ERROR_BADARG;
     }
 
     info.track_type = match context.tracks[track_index].track_type {
-        TrackType::Video => mp4parse_track_type::MP4PARSE_TRACK_TYPE_VIDEO,
-        TrackType::Audio => mp4parse_track_type::MP4PARSE_TRACK_TYPE_AUDIO,
-        TrackType::Unknown => return mp4parse_error::MP4PARSE_ERROR_UNSUPPORTED,
+        TrackType::Video => MP4PARSE_TRACK_TYPE_VIDEO,
+        TrackType::Audio => MP4PARSE_TRACK_TYPE_AUDIO,
+        TrackType::Unknown => return MP4PARSE_ERROR_UNSUPPORTED,
     };
 
     // Maybe context & track should just have a single simple is_valid() instead?
@@ -181,7 +189,7 @@ pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut mp4parse_state, t
        context.tracks[track_index].timescale.is_none() ||
        context.tracks[track_index].duration.is_none() ||
        context.tracks[track_index].track_id.is_none() {
-        return mp4parse_error::MP4PARSE_ERROR_INVALID;
+        return MP4PARSE_ERROR_INVALID;
     }
 
     let track = &context.tracks[track_index];
@@ -193,84 +201,84 @@ pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut mp4parse_state, t
     info.duration = track_time_to_ms(track.duration.unwrap(), track.timescale.unwrap());
     info.track_id = track.track_id.unwrap();
 
-    mp4parse_error::MP4PARSE_OK
+    MP4PARSE_OK
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_get_track_audio_info(context: *mut mp4parse_state, track: u32, info: *mut mp4parse_track_audio_info) -> mp4parse_error {
     if context.is_null() || info.is_null() {
-        return mp4parse_error::MP4PARSE_ERROR_BADARG;
+        return MP4PARSE_ERROR_BADARG;
     }
 
     let context: &mut MediaContext = &mut (*context).0;
 
     if track as usize >= context.tracks.len() {
-        return mp4parse_error::MP4PARSE_ERROR_BADARG;
+        return MP4PARSE_ERROR_BADARG;
     }
 
     let track = &context.tracks[track as usize];
 
     match track.track_type {
         TrackType::Audio => {}
-        _ => return mp4parse_error::MP4PARSE_ERROR_INVALID,
+        _ => return MP4PARSE_ERROR_INVALID,
     };
 
     let audio = match track.data {
         Some(ref data) => data,
-        None => return mp4parse_error::MP4PARSE_ERROR_INVALID,
+        None => return MP4PARSE_ERROR_INVALID,
     };
 
     let audio = match *audio {
         SampleEntry::Audio(ref x) => x,
-        _ => return mp4parse_error::MP4PARSE_ERROR_INVALID,
+        _ => return MP4PARSE_ERROR_INVALID,
     };
 
     (*info).channels = audio.channelcount;
     (*info).bit_depth = audio.samplesize;
     (*info).sample_rate = audio.samplerate >> 16; // 16.16 fixed point
 
-    mp4parse_error::MP4PARSE_OK
+    MP4PARSE_OK
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_get_track_video_info(context: *mut mp4parse_state, track: u32, info: *mut mp4parse_track_video_info) -> mp4parse_error {
     if context.is_null() || info.is_null() {
-        return mp4parse_error::MP4PARSE_ERROR_BADARG;
+        return MP4PARSE_ERROR_BADARG;
     }
 
     let context: &mut MediaContext = &mut (*context).0;
 
     if track as usize >= context.tracks.len() {
-        return mp4parse_error::MP4PARSE_ERROR_BADARG;
+        return MP4PARSE_ERROR_BADARG;
     }
 
     let track = &context.tracks[track as usize];
 
     match track.track_type {
         TrackType::Video => {}
-        _ => return mp4parse_error::MP4PARSE_ERROR_INVALID,
+        _ => return MP4PARSE_ERROR_INVALID,
     };
 
     let video = match track.data {
         Some(ref data) => data,
-        None => return mp4parse_error::MP4PARSE_ERROR_INVALID,
+        None => return MP4PARSE_ERROR_INVALID,
     };
 
     let video = match *video {
         SampleEntry::Video(ref x) => x,
-        _ => return mp4parse_error::MP4PARSE_ERROR_INVALID,
+        _ => return MP4PARSE_ERROR_INVALID,
     };
 
     if let Some(ref tkhd) = track.tkhd {
         (*info).display_width = tkhd.width >> 16; // 16.16 fixed point
         (*info).display_height = tkhd.height >> 16; // 16.16 fixed point
     } else {
-        return mp4parse_error::MP4PARSE_ERROR_INVALID;
+        return MP4PARSE_ERROR_INVALID;
     }
     (*info).image_width = video.width;
     (*info).image_height = video.height;
 
-    mp4parse_error::MP4PARSE_OK
+    MP4PARSE_OK
 }
 
 #[test]
@@ -301,16 +309,16 @@ fn arg_validation() {
     let buffer = vec![0u8; 8];
 
     unsafe {
-        assert_eq!(mp4parse_error::MP4PARSE_ERROR_BADARG,
+        assert_eq!(MP4PARSE_ERROR_BADARG,
                    mp4parse_read(null_context, null_buffer, 0));
-        assert_eq!(mp4parse_error::MP4PARSE_ERROR_BADARG,
+        assert_eq!(MP4PARSE_ERROR_BADARG,
                    mp4parse_read(context, null_buffer, 0));
     }
 
     for size in 0..buffer.len() {
         println!("testing buffer length {}", size);
         unsafe {
-            assert_eq!(mp4parse_error::MP4PARSE_ERROR_BADARG,
+            assert_eq!(MP4PARSE_ERROR_BADARG,
                        mp4parse_read(context, buffer.as_ptr(), size));
         }
     }
