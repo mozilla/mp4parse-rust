@@ -149,7 +149,6 @@ fn read_truncated_ftyp() {
     }
 }
 
-#[should_panic]
 #[test]
 fn read_ftyp_case() {
     // Brands in BMFF are represented as a u32, so it would seem clear that
@@ -169,11 +168,11 @@ fn read_ftyp_case() {
     assert_eq!(stream.head.name, FourCC(*b"ftyp"));
     assert_eq!(stream.head.size, 24);
     let parsed = super::read_ftyp(&mut stream).unwrap();
-    assert_eq!(parsed.major_brand, FourCC(*b"mp42"));
+    assert!(parsed.major_brand.case_insensitive_compare(&FourCC(*b"mp42")));
     assert_eq!(parsed.minor_version, 0);
     assert_eq!(parsed.compatible_brands.len(), 2);
-    assert_eq!(parsed.compatible_brands[0], FourCC(*b"isom"));
-    assert_eq!(parsed.compatible_brands[1], FourCC(*b"mp42"));
+    assert!(parsed.compatible_brands[0].case_insensitive_compare(&FourCC(*b"isom")));
+    assert!(parsed.compatible_brands[1].case_insensitive_compare(&FourCC(*b"mp42")));
 }
 
 #[test]

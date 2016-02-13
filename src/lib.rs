@@ -96,6 +96,12 @@ impl FourCC {
     fn as_bytes(&self) -> &[u8; 4] {
         &self.0
     }
+
+    #[cfg(test)]
+    fn case_insensitive_compare(&self, other: &FourCC) -> bool {
+        String::from_utf8_lossy(&self.0).to_lowercase() ==
+            String::from_utf8_lossy(&other.0).to_lowercase()
+    }
 }
 
 impl fmt::Debug for FourCC {
