@@ -1224,8 +1224,24 @@ fn read_stsd<T: BMFFBox>(src: &mut T, track: &mut Track) -> Result<SampleDescrip
     let mut x = Input::new(src);
     while let Some(mut b) = try!(x.next()) {
         let description = match track.track_type {
-            TrackType::Video => try!(read_video_desc(&mut b, track)),
-            TrackType::Audio => try!(read_audio_desc(&mut b, track)),
+            TrackType::Video => match read_video_desc(&mut b, track) {
+                Ok(desc) => desc,
+                Err(Error::Unsupported(_)) => {
+                    let to_skip = b.bytes_left();
+                    try!(skip(&mut b, to_skip));
+                    SampleEntry::Unknown
+                }
+                Err(e) => return Err(e),
+            },
+            TrackType::Audio => match read_audio_desc(&mut b, track) {
+                Ok(desc) => desc,
+                Err(Error::Unsupported(_)) => {
+                    let to_skip = b.bytes_left();
+                    try!(skip(&mut b, to_skip));
+                    SampleEntry::Unknown
+                }
+                Err(e) => return Err(e),
+            },
             TrackType::Unknown => {
                 try!(skip_box_content(&mut b));
                 SampleEntry::Unknown
