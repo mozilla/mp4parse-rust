@@ -60,7 +60,7 @@ pub enum Error {
     AssertCaught,
     /// Propagate underlying errors from `std::io`.
     Io(std::io::Error),
-    /// read_mp4 terminated without detecting a moov atom.
+    /// read_mp4 terminated without detecting a moov box.
     NoMoov,
 }
 
@@ -427,6 +427,7 @@ pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
     let size32 = try!(be_u32(src));
     let name = try!(be_fourcc(src));
     let size = match size32 {
+        // valid only for top-level box and indicates it's the last box in the file.  usually mdat.
         0 => return Err(Error::Unsupported("unknown sized box")),
         1 => {
             let size64 = try!(be_u64(src));
@@ -490,6 +491,21 @@ pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     let mut found_moov = false;
     let mut iter = BoxIter::new(f);
     while let Some(mut b) = try!(iter.next()) {
+        // box ordering: ftyp before any variable length box (inc. moov),
+        // but may not be first box in file if file signatures etc. present
+        // fragmented mp4 order: ftyp, moov, pairs of moof/mdat (1-multiple), mfra
+
+        // "special": uuid, wide (= 8 bytes)
+        // isom: moov, mdat, free, skip, udta, ftyp, moof, mfra
+        // iso2: pdin, meta
+        // iso3: meco
+        // iso5: styp, sidx, ssix, prft
+        // unknown, maybe: id32
+
+        // qt: pnot
+
+        // possibly allow anything where all printable and/or all lowercase printable
+        // "four printable characters from the ISO 8859-1 character set"
         match b.head.name.as_bytes() {
             b"ftyp" => {
                 let ftyp = try!(read_ftyp(&mut b));
@@ -1104,7 +1120,7 @@ fn read_video_desc<T: BMFFBox>(src: &mut T, track: &mut Track) -> Result<SampleE
                     return Err(Error::InvalidData("avcC box exceeds BUF_SIZE_LIMIT"));
                 }
                 let avcc = try!(read_buf(&mut b.content, avcc_size as usize));
-                // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
+                // TODO(kinetik): Parse avcC box?  For now we just stash the data.
                 codec_specific = Some(VideoCodecSpecific::AVCConfig(avcc));
             }
             b"vpcC" => {
@@ -1190,7 +1206,7 @@ fn read_audio_desc<T: BMFFBox>(src: &mut T, track: &mut Track) -> Result<SampleE
                     return Err(Error::InvalidData("esds box exceeds BUF_SIZE_LIMIT"));
                 }
                 let esds = try!(read_buf(&mut b.content, esds_size as usize));
-                // TODO(kinetik): Parse esds atom?  For now we just stash the data.
+                // TODO(kinetik): Parse esds box?  For now we just stash the data.
                 codec_specific = Some(AudioCodecSpecific::ES_Descriptor(esds));
             }
             b"dOps" => {
