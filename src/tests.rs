@@ -10,6 +10,8 @@ use super::*;
 extern crate test_assembler;
 use self::test_assembler::*;
 
+use boxes::BoxType;
+
 enum BoxSize {
     Short(u32),
     Long(u64),
@@ -74,7 +76,7 @@ fn make_fullbox<F>(size: BoxSize, name: &[u8; 4], version: u8, func: F) -> Curso
 fn read_box_header_short() {
     let mut stream = make_box(BoxSize::Short(8), b"test", |s| s);
     let header = read_box_header(&mut stream).unwrap();
-    assert_eq!(header.name, FourCC(*b"test"));
+    assert_eq!(header.name, BoxType::UnknownBox(0x74657374)); // "test"
     assert_eq!(header.size, 8);
 }
 
@@ -82,7 +84,7 @@ fn read_box_header_short() {
 fn read_box_header_long() {
     let mut stream = make_box(BoxSize::Long(16), b"test", |s| s);
     let header = read_box_header(&mut stream).unwrap();
-    assert_eq!(header.name, FourCC(*b"test"));
+    assert_eq!(header.name, BoxType::UnknownBox(0x74657374)); // "test"
     assert_eq!(header.size, 16);
 }
 
@@ -123,14 +125,14 @@ fn read_ftyp() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"ftyp"));
+    assert_eq!(stream.head.name, BoxType::FileTypeBox);
     assert_eq!(stream.head.size, 24);
     let parsed = super::read_ftyp(&mut stream).unwrap();
-    assert_eq!(parsed.major_brand, FourCC(*b"mp42"));
+    assert_eq!(parsed.major_brand, 0x6d703432); // mp42
     assert_eq!(parsed.minor_version, 0);
     assert_eq!(parsed.compatible_brands.len(), 2);
-    assert_eq!(parsed.compatible_brands[0], FourCC(*b"isom"));
-    assert_eq!(parsed.compatible_brands[1], FourCC(*b"mp42"));
+    assert_eq!(parsed.compatible_brands[0], 0x69736f6d); // isom
+    assert_eq!(parsed.compatible_brands[1], 0x6d703432); // mp42
 }
 
 #[test]
@@ -165,14 +167,14 @@ fn read_ftyp_case() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"ftyp"));
+    assert_eq!(stream.head.name, BoxType::FileTypeBox);
     assert_eq!(stream.head.size, 24);
     let parsed = super::read_ftyp(&mut stream).unwrap();
-    assert!(parsed.major_brand.case_insensitive_compare(&FourCC(*b"mp42")));
+    assert_eq!(parsed.major_brand, 0x4d503432);
     assert_eq!(parsed.minor_version, 0);
     assert_eq!(parsed.compatible_brands.len(), 2);
-    assert!(parsed.compatible_brands[0].case_insensitive_compare(&FourCC(*b"isom")));
-    assert!(parsed.compatible_brands[1].case_insensitive_compare(&FourCC(*b"mp42")));
+    assert_eq!(parsed.compatible_brands[0], 0x49534f4d); // ISOM
+    assert_eq!(parsed.compatible_brands[1], 0x4d503432); // MP42
 }
 
 #[test]
@@ -187,7 +189,7 @@ fn read_elst_v0() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"elst"));
+    assert_eq!(stream.head.name, BoxType::EditListBox);
     assert_eq!(stream.head.size, 28);
     let parsed = super::read_elst(&mut stream).unwrap();
     assert_eq!(parsed.edits.len(), 1);
@@ -214,7 +216,7 @@ fn read_elst_v1() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"elst"));
+    assert_eq!(stream.head.name, BoxType::EditListBox);
     assert_eq!(stream.head.size, 56);
     let parsed = super::read_elst(&mut stream).unwrap();
     assert_eq!(parsed.edits.len(), 2);
@@ -235,7 +237,7 @@ fn read_mdhd_v0() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"mdhd"));
+    assert_eq!(stream.head.name, BoxType::MediaHeaderBox);
     assert_eq!(stream.head.size, 32);
     let parsed = super::read_mdhd(&mut stream).unwrap();
     assert_eq!(parsed.timescale, 1234);
@@ -253,7 +255,7 @@ fn read_mdhd_v1() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"mdhd"));
+    assert_eq!(stream.head.name, BoxType::MediaHeaderBox);
     assert_eq!(stream.head.size, 44);
     let parsed = super::read_mdhd(&mut stream).unwrap();
     assert_eq!(parsed.timescale, 1234);
@@ -271,7 +273,7 @@ fn read_mdhd_unknown_duration() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"mdhd"));
+    assert_eq!(stream.head.name, BoxType::MediaHeaderBox);
     assert_eq!(stream.head.size, 32);
     let parsed = super::read_mdhd(&mut stream).unwrap();
     assert_eq!(parsed.timescale, 1234);
@@ -289,7 +291,7 @@ fn read_mdhd_invalid_timescale() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"mdhd"));
+    assert_eq!(stream.head.name, BoxType::MediaHeaderBox);
     assert_eq!(stream.head.size, 44);
     let r = super::parse_mdhd(&mut stream, &mut super::Track::new(0));
     assert_eq!(r.is_err(), true);
@@ -306,7 +308,7 @@ fn read_mvhd_v0() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"mvhd"));
+    assert_eq!(stream.head.name, BoxType::MovieHeaderBox);
     assert_eq!(stream.head.size, 108);
     let parsed = super::read_mvhd(&mut stream).unwrap();
     assert_eq!(parsed.timescale, 1234);
@@ -324,7 +326,7 @@ fn read_mvhd_v1() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"mvhd"));
+    assert_eq!(stream.head.name, BoxType::MovieHeaderBox);
     assert_eq!(stream.head.size, 120);
     let parsed = super::read_mvhd(&mut stream).unwrap();
     assert_eq!(parsed.timescale, 1234);
@@ -342,7 +344,7 @@ fn read_mvhd_invalid_timescale() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"mvhd"));
+    assert_eq!(stream.head.name, BoxType::MovieHeaderBox);
     assert_eq!(stream.head.size, 120);
     let r = super::parse_mvhd(&mut stream);
     assert_eq!(r.is_err(), true);
@@ -359,7 +361,7 @@ fn read_mvhd_unknown_duration() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"mvhd"));
+    assert_eq!(stream.head.name, BoxType::MovieHeaderBox);
     assert_eq!(stream.head.size, 108);
     let parsed = super::read_mvhd(&mut stream).unwrap();
     assert_eq!(parsed.timescale, 1234);
@@ -379,7 +381,7 @@ fn read_vpcc() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"vpcC"));
+    assert_eq!(stream.head.name, BoxType::VPCodecConfigurationBox);
     let r = super::read_vpcc(&mut stream);
     assert!(r.is_ok());
 }
@@ -397,10 +399,10 @@ fn read_hdlr() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"hdlr"));
+    assert_eq!(stream.head.name, BoxType::HandlerBox);
     assert_eq!(stream.head.size, 45);
     let parsed = super::read_hdlr(&mut stream).unwrap();
-    assert_eq!(parsed.handler_type, FourCC(*b"vide"));
+    assert_eq!(parsed.handler_type, 0x76696465); // vide
 }
 
 #[test]
@@ -415,10 +417,10 @@ fn read_hdlr_short_name() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"hdlr"));
+    assert_eq!(stream.head.name, BoxType::HandlerBox);
     assert_eq!(stream.head.size, 33);
     let parsed = super::read_hdlr(&mut stream).unwrap();
-    assert_eq!(parsed.handler_type, FourCC(*b"vide"));
+    assert_eq!(parsed.handler_type, 0x76696465); // vide
 }
 
 #[test]
@@ -432,10 +434,10 @@ fn read_hdlr_zero_length_name() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"hdlr"));
+    assert_eq!(stream.head.name, BoxType::HandlerBox);
     assert_eq!(stream.head.size, 32);
     let parsed = super::read_hdlr(&mut stream).unwrap();
-    assert_eq!(parsed.handler_type, FourCC(*b"vide"));
+    assert_eq!(parsed.handler_type, 0x76696465); // vide
 }
 
 #[test]
@@ -475,7 +477,7 @@ fn read_dops() {
     let mut stream = make_dops();
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next().unwrap().unwrap();
-    assert_eq!(stream.head.name, FourCC(*b"dOps"));
+    assert_eq!(stream.head.name, BoxType::OpusSpecificBox);
     let r = super::read_dops(&mut stream);
     assert!(r.is_ok());
 }
