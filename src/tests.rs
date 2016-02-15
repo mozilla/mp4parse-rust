@@ -344,7 +344,7 @@ fn read_vpcc() {
 
 #[test]
 fn read_hdlr() {
-    let mut stream = make_fullbox(BoxSize::Short(45), b"mvhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(45), b"hdlr", 0, |s| {
         s.B32(0)
          .append_bytes(b"vide")
          .B32(0)
@@ -355,14 +355,14 @@ fn read_hdlr() {
     });
     let header = read_box_header(&mut stream).unwrap();
     let parsed = super::read_hdlr(&mut stream, &header).unwrap();
-    assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
+    assert_eq!(parsed.header.name, FourCC(*b"hdlr"));
     assert_eq!(parsed.header.size, 45);
     assert_eq!(parsed.handler_type, FourCC(*b"vide"));
 }
 
 #[test]
 fn read_hdlr_short_name() {
-    let mut stream = make_fullbox(BoxSize::Short(33), b"mvhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(33), b"hdlr", 0, |s| {
         s.B32(0)
          .append_bytes(b"vide")
          .B32(0)
@@ -372,14 +372,14 @@ fn read_hdlr_short_name() {
     });
     let header = read_box_header(&mut stream).unwrap();
     let parsed = super::read_hdlr(&mut stream, &header).unwrap();
-    assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
+    assert_eq!(parsed.header.name, FourCC(*b"hdlr"));
     assert_eq!(parsed.header.size, 33);
     assert_eq!(parsed.handler_type, FourCC(*b"vide"));
 }
 
 #[test]
 fn read_hdlr_zero_length_name() {
-    let mut stream = make_fullbox(BoxSize::Short(32), b"mvhd", 0, |s| {
+    let mut stream = make_fullbox(BoxSize::Short(32), b"hdlr", 0, |s| {
         s.B32(0)
          .append_bytes(b"vide")
          .B32(0)
@@ -388,7 +388,7 @@ fn read_hdlr_zero_length_name() {
     });
     let header = read_box_header(&mut stream).unwrap();
     let parsed = super::read_hdlr(&mut stream, &header).unwrap();
-    assert_eq!(parsed.header.name, FourCC(*b"mvhd"));
+    assert_eq!(parsed.header.name, FourCC(*b"hdlr"));
     assert_eq!(parsed.header.size, 32);
     assert_eq!(parsed.handler_type, FourCC(*b"vide"));
 }
