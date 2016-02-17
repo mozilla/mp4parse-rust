@@ -21,9 +21,15 @@ build = "build.rs"
 
 [dependencies]
 byteorder = "0.4.2"
+afl = { version = "0.1.1", optional = true }
+afl-plugin = { version = "0.1.1", optional = true }
+abort_on_panic = { version = "1.0.0", optional = true }
 
 [dev-dependencies]
 test-assembler = "0.1.1"
 
 [build-dependencies]
 rusty-cheddar = "0.3.1"
+
+[features]
+fuzz = ["afl", "afl-plugin", "abort_on_panic"]
