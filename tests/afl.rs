@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-/// These all caused crashes at some point during development.
+/// These all caused panics at some point during development.
 
 extern crate mp4parse;
 

@@ -19,6 +19,9 @@ pub use capi::*;
 #[cfg(test)]
 mod tests;
 
+// Arbitrary buffer size limit used for raw read_bufs on a box.
+const BUF_SIZE_LIMIT: u64 = 1024 * 1024;
+
 /// Describes parser failures.
 ///
 /// This enum wraps athe standard `io::Error` type, unified with
@@ -1101,8 +1104,12 @@ fn read_video_desc<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader, tra
     let h = try!(read_box_header(src));
     let codec_specific = match h.name.as_bytes() {
         b"avcC" => {
+            let avcc_size = h.size - h.offset;
+            if avcc_size > BUF_SIZE_LIMIT {
+                return Err(Error::InvalidData);
+            }
+            let avcc = try!(read_buf(src, avcc_size as usize));
             // TODO(kinetik): Parse avcC atom?  For now we just stash the data.
-            let avcc = try!(read_buf(src, (h.size - h.offset) as usize));
             VideoCodecSpecific::AVCConfig(avcc)
         }
         b"vpcC" => {
@@ -1153,7 +1160,11 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, _: &BoxHeader, track:
     let codec_specific = match h.name.as_bytes() {
         b"esds" => {
             let (_, _) = try!(read_fullbox_extra(src));
-            let esds = try!(read_buf(src, (h.size - h.offset - 4) as usize));
+            let esds_size = h.size - h.offset - 4;
+            if esds_size > BUF_SIZE_LIMIT {
+                return Err(Error::InvalidData);
+            }
+            let esds = try!(read_buf(src, esds_size as usize));
 
             // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
             track.mime_type = String::from("audio/mp4a-latm");

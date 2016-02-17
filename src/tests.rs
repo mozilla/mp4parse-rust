@@ -438,3 +438,62 @@ fn read_dops() {
     let r = super::read_dops(&mut stream);
     assert!(r.is_ok());
 }
+
+#[test]
+fn avcc_limit() {
+    let mut stream = make_box(BoxSize::Auto, b"avc1", |s| {
+        s.append_repeated(0, 6)
+         .B16(1)
+         .append_repeated(0, 16)
+         .B16(320)
+         .B16(240)
+         .append_repeated(0, 14)
+         .append_repeated(0, 32)
+         .append_repeated(0, 4)
+         .B32(0xffffffff)
+         .append_bytes(b"avcC")
+         .append_repeated(0, 100)
+    });
+    // Dummy header to pass to read_video_desc(), which ignores it.
+    let header = BoxHeader {
+        name: FourCC(*b"stsd"),
+        size: u32::max_value() as u64,
+        offset: 0,
+    };
+    let mut track = super::Track::new(0);
+    match super::read_video_desc(&mut stream, &header, &mut track) {
+        Err(Error::InvalidData) => (),
+        Ok(_) => assert!(false, "expected an error result"),
+        _ => assert!(false, "expected a different error result"),
+    }
+}
+
+#[test]
+fn esds_limit() {
+        let mut stream = make_box(BoxSize::Auto, b"mp4a", |s| {
+        s.append_repeated(0, 6)
+         .B16(1)
+         .B32(0)
+         .B32(0)
+         .B16(2)
+         .B16(16)
+         .B16(0)
+         .B16(0)
+         .B32(48000 << 16)
+         .B32(0xffffffff)
+         .append_bytes(b"esds")
+         .append_repeated(0, 100)
+    });
+    // Dummy header to pass to read_audio_desc(), which ignores it.
+    let header = BoxHeader {
+        name: FourCC(*b"stsd"),
+        size: u32::max_value() as u64,
+        offset: 0,
+    };
+    let mut track = super::Track::new(0);
+    match super::read_audio_desc(&mut stream, &header, &mut track) {
+        Err(Error::InvalidData) => (),
+        Ok(_) => assert!(false, "expected an error result"),
+        _ => assert!(false, "expected a different error result"),
+    }
+}
