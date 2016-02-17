@@ -793,6 +793,9 @@ fn read_tkhd<T: ReadBytesExt + BufRead>(src: &mut T, head: &BoxHeader) -> Result
 fn read_elst<T: ReadBytesExt>(src: &mut T, head: &BoxHeader) -> Result<EditListBox> {
     let (version, _) = try!(read_fullbox_extra(src));
     let edit_count = try!(be_u32(src));
+    if edit_count == 0 {
+        return Err(Error::InvalidData);
+    }
     let mut edits = Vec::new();
     for _ in 0..edit_count {
         let (segment_duration, media_time) = match version {

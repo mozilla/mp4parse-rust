@@ -497,3 +497,18 @@ fn esds_limit() {
         _ => assert!(false, "expected a different error result"),
     }
 }
+
+#[test]
+fn read_elst_zero_entries() {
+    let mut stream = make_fullbox(BoxSize::Auto, b"elst", 0, |s| {
+        s.B32(0)
+         .B16(12)
+         .B16(34)
+    });
+    let header = read_box_header(&mut stream).unwrap();
+    match super::read_elst(&mut stream, &header) {
+        Err(Error::InvalidData) => (),
+        Ok(_) => assert!(false, "expected an error result"),
+        _ => assert!(false, "expected a different error result"),
+    }
+}
