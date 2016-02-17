@@ -497,15 +497,11 @@ fn avcc_limit() {
          .append_bytes(b"avcC")
          .append_repeated(0, 100)
     });
-    // Dummy header to pass to read_video_desc(), which ignores it.
-    let header = BoxHeader {
-        name: FourCC(*b"stsd"),
-        size: u32::max_value() as u64,
-        offset: 0,
-    };
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next().unwrap().unwrap();
     let mut track = super::Track::new(0);
-    match super::read_video_desc(&mut stream, &header, &mut track) {
-        Err(Error::InvalidData) => (),
+    match super::read_video_desc(&mut stream, &mut track) {
+        Err(Error::InvalidData(s)) => assert_eq!(s, "avcC box exceeds BUF_SIZE_LIMIT"),
         Ok(_) => assert!(false, "expected an error result"),
         _ => assert!(false, "expected a different error result"),
     }
@@ -513,7 +509,7 @@ fn avcc_limit() {
 
 #[test]
 fn esds_limit() {
-        let mut stream = make_box(BoxSize::Auto, b"mp4a", |s| {
+    let mut stream = make_box(BoxSize::Auto, b"mp4a", |s| {
         s.append_repeated(0, 6)
          .B16(1)
          .B32(0)
@@ -527,15 +523,11 @@ fn esds_limit() {
          .append_bytes(b"esds")
          .append_repeated(0, 100)
     });
-    // Dummy header to pass to read_audio_desc(), which ignores it.
-    let header = BoxHeader {
-        name: FourCC(*b"stsd"),
-        size: u32::max_value() as u64,
-        offset: 0,
-    };
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next().unwrap().unwrap();
     let mut track = super::Track::new(0);
-    match super::read_audio_desc(&mut stream, &header, &mut track) {
-        Err(Error::InvalidData) => (),
+    match super::read_audio_desc(&mut stream, &mut track) {
+        Err(Error::InvalidData(s)) => assert_eq!(s, "esds box exceeds BUF_SIZE_LIMIT"),
         Ok(_) => assert!(false, "expected an error result"),
         _ => assert!(false, "expected a different error result"),
     }
@@ -557,19 +549,14 @@ fn esds_limit_2() {
          .append_bytes(b"esds")
          .append_repeated(0, 4)
     });
-    // Dummy header to pass to read_audio_desc(), which ignores it.
-    let header = BoxHeader {
-        name: FourCC(*b"stsd"),
-        size: u32::max_value() as u64,
-        offset: 0,
-    };
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next().unwrap().unwrap();
     let mut track = super::Track::new(0);
-    match super::read_audio_desc(&mut stream, &header, &mut track) {
-        Err(Error::InvalidData) => (),
+    match super::read_audio_desc(&mut stream, &mut track) {
+        Err(Error::UnexpectedEOF) => (),
         Ok(_) => assert!(false, "expected an error result"),
         _ => assert!(false, "expected a different error result"),
     }
-
 }
 
 #[test]
@@ -579,9 +566,10 @@ fn read_elst_zero_entries() {
          .B16(12)
          .B16(34)
     });
-    let header = read_box_header(&mut stream).unwrap();
-    match super::read_elst(&mut stream, &header) {
-        Err(Error::InvalidData) => (),
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next().unwrap().unwrap();
+    match super::read_elst(&mut stream) {
+        Err(Error::InvalidData(s)) => assert_eq!(s, "invalid edit count"),
         Ok(_) => assert!(false, "expected an error result"),
         _ => assert!(false, "expected a different error result"),
     }
@@ -605,11 +593,11 @@ fn read_edts_bogus() {
     let mut stream = make_box(BoxSize::Auto, b"edts", |s| {
         s.append_bytes(&make_elst().into_inner())
     });
-    let header = read_box_header(&mut stream).unwrap();
-    let mut context = super::MediaContext::new();
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next().unwrap().unwrap();
     let mut track = super::Track::new(0);
-    match super::read_edts(&mut stream, &header, &mut context, &mut track) {
-        Err(Error::InvalidData) => (),
+    match super::read_edts(&mut stream, &mut track) {
+        Err(Error::InvalidData(s)) => assert_eq!(s, "expected additional edit"),
         Ok(_) => assert!(false, "expected an error result"),
         _ => assert!(false, "expected a different error result"),
     }
