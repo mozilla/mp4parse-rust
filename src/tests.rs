@@ -512,3 +512,43 @@ fn read_elst_zero_entries() {
         _ => assert!(false, "expected a different error result"),
     }
 }
+
+fn make_elst() -> Cursor<Vec<u8>> {
+    make_fullbox(BoxSize::Auto, b"elst", 1, |s| {
+        s.B32(1)
+        // first entry
+         .B64(1234) // duration
+         .B64(0xffffffffffffffff) // time
+         .B16(12) // rate integer
+         .B16(34) // rate fraction
+    })
+}
+
+#[test]
+fn read_edts_bogus() {
+    // First edit list entry has a media_time of -1, so we expect a second
+    // edit list entry to be present to provide a valid media_time.
+    let mut stream = make_box(BoxSize::Auto, b"edts", |s| {
+        s.append_bytes(&make_elst().into_inner())
+    });
+    let header = read_box_header(&mut stream).unwrap();
+    let mut context = super::MediaContext::new();
+    let mut track = super::Track::new(0);
+    match super::read_edts(&mut stream, &header, &mut context, &mut track) {
+        Err(Error::InvalidData) => (),
+        Ok(_) => assert!(false, "expected an error result"),
+        _ => assert!(false, "expected a different error result"),
+    }
+}
+
+#[test]
+fn invalid_pascal_string() {
+    // String claims to be 32 bytes long (we provide 33 bytes to account for
+    // the 1 byte length prefix).
+    let pstr = "\x20xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+    let mut stream = Cursor::new(pstr);
+    // Reader wants to limit the total read length to 32 bytes, so any
+    // returned string must be no longer than 31 bytes.
+    let s = super::read_fixed_length_pascal_string(&mut stream, 32).unwrap();
+    assert_eq!(s.len(), 31);
+}

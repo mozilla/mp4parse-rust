@@ -577,7 +577,10 @@ fn read_edts<T: BufRead>(f: &mut T, _: &BoxHeader, context: &mut MediaContext, t
                     return Err(Error::Unsupported);
                 }
                 if elst.edits[idx].media_time == -1 {
-                    empty_duration = elst.edits[0].segment_duration;
+                    empty_duration = elst.edits[idx].segment_duration;
+                    if elst.edits.len() < 2 {
+                        return Err(Error::InvalidData);
+                    }
                     idx += 1;
                 }
                 track.empty_duration = Some(MediaScaledTime(empty_duration));
@@ -1260,6 +1263,7 @@ fn read_null_terminated_string<T: ReadBytesExt>(src: &mut T) -> Result<String> {
     Ok(try!(String::from_utf8(buf)))
 }
 
+#[allow(dead_code)]
 fn read_pascal_string<T: ReadBytesExt>(src: &mut T) -> Result<String> {
     let len = try!(src.read_u8());
     let buf = try!(read_buf(src, len as usize));
@@ -1269,9 +1273,11 @@ fn read_pascal_string<T: ReadBytesExt>(src: &mut T) -> Result<String> {
 // Weird string encoding with a length prefix and a fixed sized buffer which
 // contains padding if the string doesn't fill the buffer.
 fn read_fixed_length_pascal_string<T: BufRead>(src: &mut T, size: usize) -> Result<String> {
-    let s = try!(read_pascal_string(src));
-    try!(skip(src, size - 1 - s.len()));
-    Ok(s)
+    assert!(size > 0);
+    let len = cmp::min(try!(src.read_u8()) as usize, size - 1);
+    let buf = try!(read_buf(src, len as usize));
+    try!(skip(src, size - 1 - buf.len()));
+    Ok(try!(String::from_utf8(buf)))
 }
 
 fn media_time_to_ms(time: MediaScaledTime, scale: MediaTimeScale) -> u64 {
