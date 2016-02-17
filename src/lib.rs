@@ -1170,7 +1170,16 @@ fn read_audio_desc<T: ReadBytesExt + BufRead>(src: &mut T, _: &BoxHeader, track:
     let codec_specific = match h.name.as_bytes() {
         b"esds" => {
             let (_, _) = try!(read_fullbox_extra(src));
-            let esds_size = h.size - h.offset - 4;
+            // We expect it's valid to subtract 4 bytes from the remaining
+            // box size if read_fullbox_extra succeeded, but we haven't
+            // performed a limit() on the esds subbox, so it's possible for
+            // read_fullbox_extra to steal bytes from a parent/sibling and
+            // the following calculation to underflow.
+            let esds_size = if h.size - h.offset >= 4 {
+                h.size - h.offset - 4
+            } else {
+                return Err(Error::InvalidData);
+            };
             if esds_size > BUF_SIZE_LIMIT {
                 return Err(Error::InvalidData);
             }

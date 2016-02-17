@@ -499,6 +499,37 @@ fn esds_limit() {
 }
 
 #[test]
+fn esds_limit_2() {
+        let mut stream = make_box(BoxSize::Auto, b"mp4a", |s| {
+        s.append_repeated(0, 6)
+         .B16(1)
+         .B32(0)
+         .B32(0)
+         .B16(2)
+         .B16(16)
+         .B16(0)
+         .B16(0)
+         .B32(48000 << 16)
+         .B32(8)
+         .append_bytes(b"esds")
+         .append_repeated(0, 4)
+    });
+    // Dummy header to pass to read_audio_desc(), which ignores it.
+    let header = BoxHeader {
+        name: FourCC(*b"stsd"),
+        size: u32::max_value() as u64,
+        offset: 0,
+    };
+    let mut track = super::Track::new(0);
+    match super::read_audio_desc(&mut stream, &header, &mut track) {
+        Err(Error::InvalidData) => (),
+        Ok(_) => assert!(false, "expected an error result"),
+        _ => assert!(false, "expected a different error result"),
+    }
+
+}
+
+#[test]
 fn read_elst_zero_entries() {
     let mut stream = make_fullbox(BoxSize::Auto, b"elst", 0, |s| {
         s.B32(0)
