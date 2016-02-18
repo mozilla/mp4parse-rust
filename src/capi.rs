@@ -269,7 +269,7 @@ pub unsafe extern "C" fn mp4parse_get_track_video_info(context: *mut mp4parse_st
         return mp4parse_error::MP4PARSE_ERROR_INVALID;
     }
     (*info).image_width = video.width;
-    (*info).image_width = video.height;
+    (*info).image_height = video.height;
 
     mp4parse_error::MP4PARSE_OK
 }
