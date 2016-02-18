@@ -54,18 +54,18 @@ pub enum mp4parse_track_type {
 
 #[repr(C)]
 pub struct mp4parse_track_info {
-    track_type: mp4parse_track_type,
-    track_id: u32,
-    duration: u64,
-    media_time: i64, // wants to be u64? understand how elst adjustment works
+    pub track_type: mp4parse_track_type,
+    pub track_id: u32,
+    pub duration: u64,
+    pub media_time: i64, // wants to be u64? understand how elst adjustment works
     // TODO(kinetik): include crypto guff
 }
 
 #[repr(C)]
 pub struct mp4parse_track_audio_info {
-    channels: u16,
-    bit_depth: u16,
-    sample_rate: u32,
+    pub channels: u16,
+    pub bit_depth: u16,
+    pub sample_rate: u32,
     // TODO(kinetik):
     // int32_t profile;
     // int32_t extended_profile; // check types
@@ -75,10 +75,10 @@ pub struct mp4parse_track_audio_info {
 
 #[repr(C)]
 pub struct mp4parse_track_video_info {
-    display_width: u32,
-    display_height: u32,
-    image_width: u16,
-    image_height: u16,
+    pub display_width: u32,
+    pub display_height: u32,
+    pub image_width: u16,
+    pub image_height: u16,
     // TODO(kinetik):
     // extra_data
     // codec_specific_config
