@@ -122,14 +122,19 @@ pub unsafe extern "C" fn mp4parse_read(context: *mut mp4parse_state, buffer: *co
     let b = std::slice::from_raw_parts(buffer, size);
     let mut c = Cursor::new(b);
 
-    // Parse in a subthread to catch any panics.
-    let task = std::thread::spawn(move || read_mp4(&mut c, &mut context));
-    // The task's JoinHandle will return an error result if the
-    // thread panicked, and will wrap the closure's return'd
-    // result in an Ok(..) otherwise, meaning we could see
-    // Ok(Err(Error::..)) here. So map thread failures back
-    // to an mp4parse::Error before converting to a C return value.
-    match task.join().unwrap_or(Err(Error::AssertCaught)) {
+    let r = if cfg!(not(feature = "fuzz")) {
+        // Parse in a subthread to catch any panics.
+        let task = std::thread::spawn(move || read_mp4(&mut c, &mut context));
+        // The task's JoinHandle will return an error result if the thread
+        // panicked, and will wrap the closure's return'd result in an
+        // Ok(..) otherwise, meaning we could see Ok(Err(Error::..))
+        // here. So map thread failures back to an
+        // mp4parse::Error::AssertCaught.
+        task.join().unwrap_or(Err(Error::AssertCaught))
+    } else {
+        read_mp4(&mut c, &mut context)
+    };
+    match r {
         Ok(_) => mp4parse_error::MP4PARSE_OK,
         Err(Error::InvalidData) => mp4parse_error::MP4PARSE_ERROR_INVALID,
         Err(Error::Unsupported) => mp4parse_error::MP4PARSE_ERROR_UNSUPPORTED,
