@@ -75,7 +75,7 @@ fn make_fullbox<F>(size: BoxSize, name: &[u8; 4], version: u8, func: F) -> Curso
 #[test]
 fn read_box_header_short() {
     let mut stream = make_box(BoxSize::Short(8), b"test", |s| s);
-    let header = read_box_header(&mut stream).unwrap();
+    let header = super::read_box_header(&mut stream).unwrap();
     assert_eq!(header.name, BoxType::UnknownBox(0x74657374)); // "test"
     assert_eq!(header.size, 8);
 }
@@ -83,7 +83,7 @@ fn read_box_header_short() {
 #[test]
 fn read_box_header_long() {
     let mut stream = make_box(BoxSize::Long(16), b"test", |s| s);
-    let header = read_box_header(&mut stream).unwrap();
+    let header = super::read_box_header(&mut stream).unwrap();
     assert_eq!(header.name, BoxType::UnknownBox(0x74657374)); // "test"
     assert_eq!(header.size, 16);
 }
@@ -91,7 +91,7 @@ fn read_box_header_long() {
 #[test]
 fn read_box_header_short_unknown_size() {
     let mut stream = make_box(BoxSize::Short(0), b"test", |s| s);
-    match read_box_header(&mut stream) {
+    match super::read_box_header(&mut stream) {
         Err(Error::Unsupported(s)) => assert_eq!(s, "unknown sized box"),
         _ => panic!("unexpected result reading box with unknown size"),
     };
@@ -100,7 +100,7 @@ fn read_box_header_short_unknown_size() {
 #[test]
 fn read_box_header_short_invalid_size() {
     let mut stream = make_box(BoxSize::UncheckedShort(2), b"test", |s| s);
-    match read_box_header(&mut stream) {
+    match super::read_box_header(&mut stream) {
         Err(Error::InvalidData(s)) => assert_eq!(s, "malformed size"),
         _ => panic!("unexpected result reading box with invalid size"),
     };
@@ -109,7 +109,7 @@ fn read_box_header_short_invalid_size() {
 #[test]
 fn read_box_header_long_invalid_size() {
     let mut stream = make_box(BoxSize::UncheckedLong(2), b"test", |s| s);
-    match read_box_header(&mut stream) {
+    match super::read_box_header(&mut stream) {
         Err(Error::InvalidData(s)) => assert_eq!(s, "malformed wide size"),
         _ => panic!("unexpected result reading box with invalid size"),
     };

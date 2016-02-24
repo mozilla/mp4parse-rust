@@ -97,13 +97,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// four-byte box type which identifies the type of the box. Together these
 /// are enough to interpret the contents of that section of the file.
 #[derive(Debug, Clone, Copy)]
-pub struct BoxHeader {
+struct BoxHeader {
     /// Box type.
-    pub name: BoxType,
+    name: BoxType,
     /// Size of the box in bytes.
-    pub size: u64,
+    size: u64,
     /// Offset to the start of the contained data (or header size).
-    pub offset: u64,
+    offset: u64,
 }
 
 /// File type box 'ftyp'.
@@ -402,7 +402,7 @@ impl<'a, T: Read> BMFFBox for BMFFBoxContent<'a, T> {
 /// and its length. Used internally for dispatching to specific
 /// parsers for the internal content, or to get the length to
 /// skip unknown or uninteresting boxes.
-pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
+fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
     let size32 = try!(be_u32(src));
     let name = BoxType::from(try!(be_u32(src)));
     let size = match size32 {
