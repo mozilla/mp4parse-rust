@@ -3,59 +3,190 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+#undef NDEBUG
 #include <cassert>
 #include <cinttypes>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <vector>
 
 #include "mp4parse.h"
 
-void test_parser()
+intptr_t abort_read(uint8_t *buffer, uintptr_t size, void *userdata)
 {
-  mp4parse_parser *parser = mp4parse_new();
-  assert(parser != nullptr);
-  mp4parse_free(parser);
+  // This shouldn't be called when allocating a parser.
+  abort();
 }
 
-void test_arg_validation(mp4parse_parser *parser)
+intptr_t error_read(uint8_t *buffer, uintptr_t size, void *userdata)
 {
-  int32_t rv;
+  return -1;
+}
 
-  rv = mp4parse_read(nullptr, nullptr, 0);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+intptr_t io_read(uint8_t *buffer, uintptr_t size, void *userdata)
+{
+  FILE *f = reinterpret_cast<FILE *>(userdata);
 
-  rv = mp4parse_read(parser, nullptr, 0);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+  size_t r = fread(buffer, 1, size, f);
+  if (r == 0 && feof(f))
+    return 0;
+  if (r == 0 && ferror(f))
+    return -1;
+  return r;
+}
 
-  size_t len = 4097;
-  rv = mp4parse_read(parser, nullptr, len);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+void test_new_parser()
+{
+  int dummy_value = 42;
+  mp4parse_io io = { abort_read, &dummy_value };
+  mp4parse_parser *parser = mp4parse_new(&io);
+  assert(parser != nullptr);
+  mp4parse_free(parser);
+  assert(dummy_value == 42);
+}
 
-  std::vector<uint8_t> buf;
-  rv = mp4parse_read(parser, buf.data(), buf.size());
-  assert(rv == MP4PARSE_ERROR_BADARG);
-
-  buf.resize(len);
-  rv = mp4parse_read(parser, buf.data(), buf.size());
-  if (parser) {
-    // This fails with UNSUPPORTED because buf contains zeroes, so the first
-    // box read is zero (unknown) length, which the parser doesn't currently
-    // support.
-    assert(rv == MP4PARSE_ERROR_UNSUPPORTED);
-  } else {
-    assert(rv == MP4PARSE_ERROR_BADARG);
-  }
+template<typename T>
+void assert_zero(T *t) {
+  T zero;
+  memset(&zero, 0, sizeof(zero));
+  assert(memcmp(t, &zero, sizeof(zero)) == 0);
 }
 
 void test_arg_validation()
 {
-  test_arg_validation(nullptr);
+  mp4parse_parser *parser = mp4parse_new(nullptr);
+  assert(parser == nullptr);
 
-  mp4parse_parser *parser = mp4parse_new();
+  mp4parse_io io = { nullptr, nullptr };
+  parser = mp4parse_new(&io);
+  assert(parser == nullptr);
+
+  io = { abort_read, nullptr };
+  parser = mp4parse_new(&io);
+  assert(parser == nullptr);
+
+  int dummy_value = 42;
+  io = { nullptr, &dummy_value };
+  parser = mp4parse_new(&io);
+  assert(parser == nullptr);
+
+  int32_t rv = mp4parse_read(nullptr);
+  assert(rv == MP4PARSE_ERROR_BADARG);
+
+  mp4parse_track_info info;
+  memset(&info, 0, sizeof(info));
+  rv = mp4parse_get_track_info(nullptr, 0, &info);
+  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert_zero(&info);
+
+  mp4parse_track_video_info video;
+  memset(&video, 0, sizeof(video));
+  rv = mp4parse_get_track_video_info(nullptr, 0, &video);
+  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert_zero(&video);
+
+  mp4parse_track_audio_info audio;
+  memset(&audio, 0, sizeof(audio));
+  rv = mp4parse_get_track_audio_info(nullptr, 0, &audio);
+  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert_zero(&audio);
+
+  assert(dummy_value == 42);
+}
+
+void test_arg_validation_with_parser()
+{
+  int dummy_value = 42;
+  mp4parse_io io = { error_read, &dummy_value };
+  mp4parse_parser *parser = mp4parse_new(&io);
   assert(parser != nullptr);
-  test_arg_validation(parser);
+
+  int32_t rv = mp4parse_read(parser);
+  assert(rv == MP4PARSE_ERROR_IO);
+
+  uint32_t tracks = mp4parse_get_track_count(parser);
+  assert(tracks == 0);
+
+  rv = mp4parse_get_track_info(parser, 0, nullptr);
+  assert(rv == MP4PARSE_ERROR_BADARG);
+
+  rv = mp4parse_get_track_video_info(parser, 0, nullptr);
+  assert(rv == MP4PARSE_ERROR_BADARG);
+
+  rv = mp4parse_get_track_audio_info(parser, 0, nullptr);
+  assert(rv == MP4PARSE_ERROR_BADARG);
+
   mp4parse_free(parser);
+  assert(dummy_value == 42);
+}
+
+void test_arg_validation_with_data()
+{
+  FILE* f = fopen("media/small.mp4", "rb");
+  assert(f != nullptr);
+  mp4parse_io io = { io_read, f };
+  mp4parse_parser *parser = mp4parse_new(&io);
+  assert(parser != nullptr);
+
+  int32_t rv = mp4parse_read(parser);
+  assert(rv == MP4PARSE_OK);
+
+  uint32_t tracks = mp4parse_get_track_count(parser);
+  assert(tracks == 2);
+
+  mp4parse_track_info info;
+  memset(&info, 0, sizeof(info));
+  rv = mp4parse_get_track_info(parser, 0, &info);
+  assert(rv == MP4PARSE_OK);
+  assert(info.track_type == MP4PARSE_TRACK_TYPE_VIDEO);
+  assert(info.track_id == 1);
+  assert(info.duration == 9843344);
+  assert(info.media_time == -95000);
+
+  memset(&info, 0, sizeof(info));
+  rv = mp4parse_get_track_info(parser, 1, &info);
+  assert(rv == MP4PARSE_OK);
+  assert(info.track_type == MP4PARSE_TRACK_TYPE_AUDIO);
+  assert(info.track_id == 2);
+  assert(info.duration == 10031020);
+  assert(info.media_time == 0);
+
+  mp4parse_track_video_info video;
+  memset(&video, 0, sizeof(video));
+  rv = mp4parse_get_track_video_info(parser, 0, &video);
+  assert(rv == MP4PARSE_OK);
+  assert(video.display_width == 400);
+  assert(video.display_height == 300);
+  assert(video.image_width == 400);
+  assert(video.image_height == 300);
+
+  mp4parse_track_audio_info audio;
+  memset(&audio, 0, sizeof(audio));
+  rv = mp4parse_get_track_audio_info(parser, 1, &audio);
+  assert(rv == MP4PARSE_OK);
+  assert(audio.channels == 2);
+  assert(audio.bit_depth == 16);
+  assert(audio.sample_rate == 22050);
+
+  // Test with an invalid track number.
+  memset(&info, 0, sizeof(info));
+  memset(&video, 0, sizeof(video));
+  memset(&audio, 0, sizeof(audio));
+
+  rv = mp4parse_get_track_info(parser, 3, &info);
+  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert_zero(&info);
+  rv = mp4parse_get_track_video_info(parser, 3, &video);
+  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert_zero(&video);
+  rv = mp4parse_get_track_audio_info(parser, 3, &audio);
+  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert_zero(&audio);
+
+  mp4parse_free(parser);
+  fclose(f);
 }
 
 const char * tracktype2str(mp4parse_track_type type)
@@ -86,18 +217,15 @@ int32_t read_file(const char* filename)
   FILE* f = fopen(filename, "rb");
   assert(f != nullptr);
 
-  size_t len = 4096*16;
-  std::vector<uint8_t> buf(len);
-  size_t read = fread(buf.data(), sizeof(decltype(buf)::value_type), buf.size(), f);
-  buf.resize(read);
-  fclose(f);
-
-  mp4parse_parser *parser = mp4parse_new();
+  mp4parse_io io = { io_read, f };
+  mp4parse_parser *parser = mp4parse_new(&io);
   assert(parser != nullptr);
 
-  fprintf(stderr, "Parsing %lu byte buffer.\n", (unsigned long)read);
-  mp4parse_error rv = mp4parse_read(parser, buf.data(), buf.size());
+  fprintf(stderr, "Parsing file '%s'.\n", filename);
+  mp4parse_error rv = mp4parse_read(parser);
   if (rv != MP4PARSE_OK) {
+    mp4parse_free(parser);
+    fclose(f);
     fprintf(stderr, "Parsing failed: %s\n", errorstring(rv));
     return rv;
   }
@@ -113,14 +241,17 @@ int32_t read_file(const char* filename)
   }
 
   mp4parse_free(parser);
+  fclose(f);
 
   return MP4PARSE_OK;
 }
 
 int main(int argc, char* argv[])
 {
-  test_parser();
+  test_new_parser();
   test_arg_validation();
+  test_arg_validation_with_parser();
+  test_arg_validation_with_data();
 
   for (auto i = 1; i < argc; ++i) {
     read_file(argv[i]);

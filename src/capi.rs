@@ -6,13 +6,23 @@
 //!
 //! ```rust
 //! extern crate mp4parse;
+//! extern crate libc;
+//! use std::io::Read;
 //!
-//! // Minimal valid mp4 containing no tracks.
-//! let data = b"\0\0\0\x08moov";
+//! extern fn buf_read(buf: *mut u8, size: usize, userdata: *mut libc::c_void) -> isize {
+//!    let mut input: &mut std::fs::File = unsafe { &mut *(userdata as *mut _) };
+//!    let mut buf = unsafe { std::slice::from_raw_parts_mut(buf, size) };
+//!    match input.read(&mut buf) {
+//!        Ok(n) => n as isize,
+//!        Err(_) => -1,
+//!    }
+//! }
 //!
-//! let parser = mp4parse::mp4parse_new();
+//! let mut file = std::fs::File::open("media/small.mp4").unwrap();
+//! let io = mp4parse::mp4parse_io { read: buf_read, userdata: &mut file as *mut _ as *mut libc::c_void };
 //! unsafe {
-//!     let rv = mp4parse::mp4parse_read(parser, data.as_ptr(), data.len());
+//!     let parser = mp4parse::mp4parse_new(&io);
+//!     let rv = mp4parse::mp4parse_read(parser);
 //!     assert_eq!(rv, mp4parse::mp4parse_error::MP4PARSE_OK);
 //!     mp4parse::mp4parse_free(parser);
 //! }
@@ -22,8 +32,15 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+// Sadly, this is *only* needed for libc::c_void.  I'd use
+// std::os::raw::c_void instead, but rusty-cheddar doesn't have support for
+// converting that in to a C type.  Once
+// https://github.com/Sean1708/rusty-cheddar/pull/36 is merged, we can drop
+// the libc crate requirement.
+extern crate libc;
+
 use std;
-use std::io::Cursor;
+use std::io::Read;
 
 // Symbols we need from our rust api.
 use MediaContext;
@@ -43,7 +60,7 @@ use mp4parse_error::*;
 use mp4parse_track_type::*;
 
 #[repr(C)]
-#[derive(PartialEq,Debug)]
+#[derive(PartialEq, Debug)]
 pub enum mp4parse_error {
     MP4PARSE_OK = 0,
     MP4PARSE_ERROR_BADARG = 1,
@@ -55,6 +72,7 @@ pub enum mp4parse_error {
 }
 
 #[repr(C)]
+#[derive(PartialEq, Debug)]
 pub enum mp4parse_track_type {
     MP4PARSE_TRACK_TYPE_VIDEO = 0,
     MP4PARSE_TRACK_TYPE_AUDIO = 1,
@@ -92,47 +110,98 @@ pub struct mp4parse_track_video_info {
     // codec_specific_config
 }
 
+// Even though mp4parse_parser is opaque to C, rusty-cheddar won't let us
+// use more than one member, so we introduce *another* wrapper.
+struct Wrap {
+    context: MediaContext,
+    io: mp4parse_io,
+}
+
 #[repr(C)]
 #[allow(non_camel_case_types)]
-pub struct mp4parse_parser(MediaContext);
+pub struct mp4parse_parser(Wrap);
+
+impl mp4parse_parser {
+    fn context(&self) -> &MediaContext {
+        &self.0.context
+    }
+
+    fn context_mut(&mut self) -> &mut MediaContext {
+        &mut self.0.context
+    }
+
+    fn io_mut(&mut self) -> &mut mp4parse_io {
+        &mut self.0.io
+    }
+}
+
+#[repr(C)]
+#[derive(Clone)]
+pub struct mp4parse_io {
+    pub read: extern fn(buffer: *mut u8, size: usize, userdata: *mut libc::c_void) -> isize,
+    pub userdata: *mut libc::c_void,
+}
+
+// Required for the panic-catching thread in mp4parse_read because raw
+// pointers don't impl Send by default.  This is *only* safe because we wait
+// on the panic-catching thread to complete before returning from
+// mp4parse_read and there's no concurrent access.
+unsafe impl Send for mp4parse_io {}
+
+impl Read for mp4parse_io {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if buf.len() > isize::max_value() as usize {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "rv overflow in mp4parse_io Read impl"));
+        }
+        let rv = (self.read)(buf.as_mut_ptr(), buf.len(), self.userdata);
+        if rv >= 0 {
+            Ok(rv as usize)
+        } else {
+            Err(std::io::Error::new(std::io::ErrorKind::Other, "I/O error in mp4parse_io Read impl"))
+        }
+    }
+}
 
 // C API wrapper functions.
 
-/// Allocate an opaque rust-side parser.
+/// Allocate an `mp4parse_parser*` to read from the supplied `mp4parse_io`.
 #[no_mangle]
-pub extern fn mp4parse_new() -> *mut mp4parse_parser {
-    let parser = Box::new(mp4parse_parser(MediaContext::new()));
+pub unsafe extern fn mp4parse_new(io: *const mp4parse_io) -> *mut mp4parse_parser {
+    if io.is_null() || (*io).userdata.is_null() {
+        return std::ptr::null_mut();
+    }
+    // is_null() isn't available on a fn type because it can't be null (in
+    // Rust) by definition.  But since this value is coming from the C API,
+    // it *could* be null.  Ideally, we'd wrap it in an Option to represent
+    // reality, but this causes rusty-cheddar to emit the wrong type.
+    if ((*io).read as *mut libc::c_void).is_null() {
+        return std::ptr::null_mut();
+    }
+    let parser = Box::new(mp4parse_parser(Wrap { context: MediaContext::new(), io: (*io).clone() }));
     Box::into_raw(parser)
 }
 
-/// Free a rust-side parser.
+/// Free an `mp4parse_parser*` allocated by `mp4parse_new()`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_free(parser: *mut mp4parse_parser) {
     assert!(!parser.is_null());
     let _ = Box::from_raw(parser);
 }
 
-/// Feed a buffer through `read_mp4()` with the given rust-side
-/// parser, returning success or an error code.
-///
-/// This is safe to call with NULL arguments but will crash
-/// if given invalid pointers, as is usual for C.
+/// Run the `mp4parse_parser*` allocated by `mp4parse_new()` until EOF or error.
 #[no_mangle]
-pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser, buffer: *const u8, size: usize) -> mp4parse_error {
+pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_error {
     // Validate arguments from C.
-    if parser.is_null() || buffer.is_null() || size < 8 {
+    if parser.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
 
-    let mut context: &mut MediaContext = &mut (*parser).0;
-
-    // Wrap the buffer we've been give in a slice.
-    let b = std::slice::from_raw_parts(buffer, size);
-    let mut c = Cursor::new(b);
+    let mut context = (*parser).context_mut();
+    let mut io = (*parser).io_mut();
 
     let r = if cfg!(not(feature = "fuzz")) {
         // Parse in a subthread to catch any panics.
-        let task = std::thread::spawn(move || read_mp4(&mut c, &mut context));
+        let task = std::thread::spawn(move || read_mp4(io, context));
         // The task's JoinHandle will return an error result if the thread
         // panicked, and will wrap the closure's return'd result in an
         // Ok(..) otherwise, meaning we could see Ok(Err(Error::..))
@@ -140,7 +209,7 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser, buffer: *const 
         // mp4parse::Error::AssertCaught.
         task.join().unwrap_or(Err(Error::AssertCaught))
     } else {
-        read_mp4(&mut c, &mut context)
+        read_mp4(io, context)
     };
     match r {
         Ok(_) => MP4PARSE_OK,
@@ -153,25 +222,26 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser, buffer: *const 
     }
 }
 
-/// Return the number of tracks parsed by previous `read_mp4()` calls.
+/// Return the number of tracks parsed by previous `mp4parse_read()` call.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_count(parser: *const mp4parse_parser) -> u32 {
     // Validate argument from C.
     assert!(!parser.is_null());
-    let context: &MediaContext = &(*parser).0;
+    let context = (*parser).context();
 
     // Make sure the track count fits in a u32.
     assert!(context.tracks.len() < u32::max_value() as usize);
     context.tracks.len() as u32
 }
 
+/// Fill the supplied `mp4parse_track_info` with metadata for `track`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track: u32, info: *mut mp4parse_track_info) -> mp4parse_error {
     if parser.is_null() || info.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
 
-    let context: &mut MediaContext = &mut (*parser).0;
+    let context = (*parser).context_mut();
     let track_index: usize = track as usize;
     let info: &mut mp4parse_track_info = &mut *info;
 
@@ -205,13 +275,14 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
     MP4PARSE_OK
 }
 
+/// Fill the supplied `mp4parse_track_audio_info` with metadata for `track`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser, track: u32, info: *mut mp4parse_track_audio_info) -> mp4parse_error {
     if parser.is_null() || info.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
 
-    let context: &mut MediaContext = &mut (*parser).0;
+    let context = (*parser).context_mut();
 
     if track as usize >= context.tracks.len() {
         return MP4PARSE_ERROR_BADARG;
@@ -241,13 +312,14 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
     MP4PARSE_OK
 }
 
+/// Fill the supplied `mp4parse_track_video_info` with metadata for `track`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser, track: u32, info: *mut mp4parse_track_video_info) -> mp4parse_error {
     if parser.is_null() || info.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
 
-    let context: &mut MediaContext = &mut (*parser).0;
+    let context = (*parser).context_mut();
 
     if track as usize >= context.tracks.len() {
         return MP4PARSE_ERROR_BADARG;
@@ -282,11 +354,35 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
     MP4PARSE_OK
 }
 
+#[cfg(test)]
+extern fn panic_read(_: *mut u8, _: usize, _: *mut libc::c_void) -> isize {
+    panic!("panic_read shouldn't be called in these tests");
+}
+
+#[cfg(test)]
+extern fn error_read(_: *mut u8, _: usize, _: *mut libc::c_void) -> isize {
+    -1
+}
+
+#[cfg(test)]
+extern fn valid_read(buf: *mut u8, size: usize, userdata: *mut libc::c_void) -> isize {
+    let mut input: &mut std::fs::File = unsafe { &mut *(userdata as *mut _) };
+
+    let mut buf = unsafe { std::slice::from_raw_parts_mut(buf, size) };
+    match input.read(&mut buf) {
+        Ok(n) => n as isize,
+        Err(_) => -1,
+    }
+}
+
 #[test]
 fn new_parser() {
-    let parser = mp4parse_new();
-    assert!(!parser.is_null());
+    let mut dummy_value: u32 = 42;
+    let io = mp4parse_io { read: panic_read,
+                           userdata: &mut dummy_value as *mut _ as *mut libc::c_void };
     unsafe {
+        let parser = mp4parse_new(&io);
+        assert!(!parser.is_null());
         mp4parse_free(parser);
     }
 }
@@ -300,31 +396,159 @@ fn free_null_parser() {
 }
 
 #[test]
+#[should_panic(expected = "assertion failed")]
+fn get_track_count_null_parser() {
+    unsafe {
+        mp4parse_get_track_count(std::ptr::null());
+    }
+}
+
+#[test]
 fn arg_validation() {
-    let null_buffer = std::ptr::null();
-    let null_parser = std::ptr::null_mut();
-
-    let parser = mp4parse_new();
-    assert!(!parser.is_null());
-
-    let buffer = vec![0u8; 8];
-
     unsafe {
-        assert_eq!(MP4PARSE_ERROR_BADARG,
-                   mp4parse_read(null_parser, null_buffer, 0));
-        assert_eq!(MP4PARSE_ERROR_BADARG,
-                   mp4parse_read(parser, null_buffer, 0));
-    }
+        // Passing a null mp4parse_io is an error.
+        let parser = mp4parse_new(std::ptr::null());
+        assert!(parser.is_null());
 
-    for size in 0..buffer.len() {
-        println!("testing buffer length {}", size);
-        unsafe {
-            assert_eq!(MP4PARSE_ERROR_BADARG,
-                       mp4parse_read(parser, buffer.as_ptr(), size));
-        }
-    }
+        let null_mut: *mut libc::c_void  = std::ptr::null_mut();
 
+        // Passing an mp4parse_io with null members is an error.
+        let io = mp4parse_io { read: std::mem::transmute(null_mut),
+                               userdata: null_mut };
+        let parser = mp4parse_new(&io);
+        assert!(parser.is_null());
+
+        let io = mp4parse_io { read: panic_read,
+                               userdata: null_mut };
+        let parser = mp4parse_new(&io);
+        assert!(parser.is_null());
+
+        let mut dummy_value = 42;
+        let io = mp4parse_io { read: std::mem::transmute(null_mut),
+                               userdata: &mut dummy_value as *mut _ as *mut libc::c_void };
+        let parser = mp4parse_new(&io);
+        assert!(parser.is_null());
+
+        // Passing a null mp4parse_parser is an error.
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_read(std::ptr::null_mut()));
+
+        let mut dummy_info = mp4parse_track_info { track_type: MP4PARSE_TRACK_TYPE_VIDEO,
+                                                   track_id: 0,
+                                                   duration: 0,
+                                                   media_time: 0 };
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_info(std::ptr::null_mut(), 0, &mut dummy_info));
+
+        let mut dummy_video = mp4parse_track_video_info { display_width: 0,
+                                                          display_height: 0,
+                                                          image_width: 0,
+                                                          image_height: 0 };
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(std::ptr::null_mut(), 0, &mut dummy_video));
+
+        let mut dummy_audio = mp4parse_track_audio_info { channels: 0,
+                                                          bit_depth: 0,
+                                                          sample_rate: 0 };
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_audio_info(std::ptr::null_mut(), 0, &mut dummy_audio));
+    }
+}
+
+#[test]
+fn arg_validation_with_parser() {
     unsafe {
+        let mut dummy_value = 42;
+        let io = mp4parse_io { read: error_read,
+                               userdata: &mut dummy_value as *mut _ as *mut libc::c_void };
+        let parser = mp4parse_new(&io);
+        assert!(!parser.is_null());
+
+        // Our mp4parse_io read should simply fail with an error.
+        assert_eq!(MP4PARSE_ERROR_IO, mp4parse_read(parser));
+
+        assert_eq!(0, mp4parse_get_track_count(parser));
+
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_info(parser, 0, std::ptr::null_mut()));
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(parser, 0, std::ptr::null_mut()));
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_audio_info(parser, 0, std::ptr::null_mut()));
+
+        mp4parse_free(parser);
+    }
+}
+
+#[test]
+fn arg_validation_with_data() {
+    unsafe {
+        let mut file = std::fs::File::open("media/small.mp4").unwrap();
+        let io = mp4parse_io { read: valid_read,
+                               userdata: &mut file as *mut _ as *mut libc::c_void };
+        let parser = mp4parse_new(&io);
+        assert!(!parser.is_null());
+
+        assert_eq!(MP4PARSE_OK, mp4parse_read(parser));
+
+        assert_eq!(2, mp4parse_get_track_count(parser));
+
+        let mut info = mp4parse_track_info { track_type: MP4PARSE_TRACK_TYPE_VIDEO,
+                                             track_id: 0,
+                                             duration: 0,
+                                             media_time: 0 };
+        assert_eq!(MP4PARSE_OK, mp4parse_get_track_info(parser, 0, &mut info));
+        assert_eq!(info.track_type, MP4PARSE_TRACK_TYPE_VIDEO);
+        assert_eq!(info.track_id, 1);
+        assert_eq!(info.duration, 9843344);
+        assert_eq!(info.media_time, -95000);
+
+        assert_eq!(MP4PARSE_OK, mp4parse_get_track_info(parser, 1, &mut info));
+        assert_eq!(info.track_type, MP4PARSE_TRACK_TYPE_AUDIO);
+        assert_eq!(info.track_id, 2);
+        assert_eq!(info.duration, 10031020);
+        assert_eq!(info.media_time, 0);
+
+        let mut video = mp4parse_track_video_info { display_width: 0,
+                                                    display_height: 0,
+                                                    image_width: 0,
+                                                    image_height: 0 };
+        assert_eq!(MP4PARSE_OK, mp4parse_get_track_video_info(parser, 0, &mut video));
+        assert_eq!(video.display_width, 400);
+        assert_eq!(video.display_height, 300);
+        assert_eq!(video.image_width, 400);
+        assert_eq!(video.image_height, 300);
+
+        let mut audio = mp4parse_track_audio_info { channels: 0,
+                                                    bit_depth: 0,
+                                                    sample_rate: 0 };
+        assert_eq!(MP4PARSE_OK, mp4parse_get_track_audio_info(parser, 1, &mut audio));
+        assert_eq!(audio.channels, 2);
+        assert_eq!(audio.bit_depth, 16);
+        assert_eq!(audio.sample_rate, 22050);
+
+        // Test with an invalid track number.
+        let mut info = mp4parse_track_info { track_type: MP4PARSE_TRACK_TYPE_VIDEO,
+                                             track_id: 0,
+                                             duration: 0,
+                                             media_time: 0 };
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_info(parser, 3, &mut info));
+        assert_eq!(info.track_type, MP4PARSE_TRACK_TYPE_VIDEO);
+        assert_eq!(info.track_id, 0);
+        assert_eq!(info.duration, 0);
+        assert_eq!(info.media_time, 0);
+
+        let mut video = mp4parse_track_video_info { display_width: 0,
+                                                    display_height: 0,
+                                                    image_width: 0,
+                                                    image_height: 0 };
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(parser, 3, &mut video));
+        assert_eq!(video.display_width, 0);
+        assert_eq!(video.display_height, 0);
+        assert_eq!(video.image_width, 0);
+        assert_eq!(video.image_height, 0);
+
+        let mut audio = mp4parse_track_audio_info { channels: 0,
+                                                    bit_depth: 0,
+                                                    sample_rate: 0 };
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_audio_info(parser, 3, &mut audio));
+        assert_eq!(audio.channels, 0);
+        assert_eq!(audio.bit_depth, 0);
+        assert_eq!(audio.sample_rate, 0);
+
         mp4parse_free(parser);
     }
 }
