@@ -100,14 +100,14 @@ pub struct mp4parse_state(MediaContext);
 
 /// Allocate an opaque rust-side parser context.
 #[no_mangle]
-pub extern "C" fn mp4parse_new() -> *mut mp4parse_state {
+pub extern fn mp4parse_new() -> *mut mp4parse_state {
     let context = Box::new(mp4parse_state(MediaContext::new()));
     Box::into_raw(context)
 }
 
 /// Free a rust-side parser context.
 #[no_mangle]
-pub unsafe extern "C" fn mp4parse_free(context: *mut mp4parse_state) {
+pub unsafe extern fn mp4parse_free(context: *mut mp4parse_state) {
     assert!(!context.is_null());
     let _ = Box::from_raw(context);
 }
@@ -118,7 +118,7 @@ pub unsafe extern "C" fn mp4parse_free(context: *mut mp4parse_state) {
 /// This is safe to call with NULL arguments but will crash
 /// if given invalid pointers, as is usual for C.
 #[no_mangle]
-pub unsafe extern "C" fn mp4parse_read(context: *mut mp4parse_state, buffer: *const u8, size: usize) -> mp4parse_error {
+pub unsafe extern fn mp4parse_read(context: *mut mp4parse_state, buffer: *const u8, size: usize) -> mp4parse_error {
     // Validate arguments from C.
     if context.is_null() || buffer.is_null() || size < 8 {
         return MP4PARSE_ERROR_BADARG;
@@ -155,7 +155,7 @@ pub unsafe extern "C" fn mp4parse_read(context: *mut mp4parse_state, buffer: *co
 
 /// Return the number of tracks parsed by previous `read_mp4()` calls.
 #[no_mangle]
-pub unsafe extern "C" fn mp4parse_get_track_count(context: *const mp4parse_state) -> u32 {
+pub unsafe extern fn mp4parse_get_track_count(context: *const mp4parse_state) -> u32 {
     // Validate argument from C.
     assert!(!context.is_null());
     let context: &MediaContext = &(*context).0;
@@ -166,7 +166,7 @@ pub unsafe extern "C" fn mp4parse_get_track_count(context: *const mp4parse_state
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut mp4parse_state, track: u32, info: *mut mp4parse_track_info) -> mp4parse_error {
+pub unsafe extern fn mp4parse_get_track_info(context: *mut mp4parse_state, track: u32, info: *mut mp4parse_track_info) -> mp4parse_error {
     if context.is_null() || info.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
@@ -206,7 +206,7 @@ pub unsafe extern "C" fn mp4parse_get_track_info(context: *mut mp4parse_state, t
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mp4parse_get_track_audio_info(context: *mut mp4parse_state, track: u32, info: *mut mp4parse_track_audio_info) -> mp4parse_error {
+pub unsafe extern fn mp4parse_get_track_audio_info(context: *mut mp4parse_state, track: u32, info: *mut mp4parse_track_audio_info) -> mp4parse_error {
     if context.is_null() || info.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
@@ -242,7 +242,7 @@ pub unsafe extern "C" fn mp4parse_get_track_audio_info(context: *mut mp4parse_st
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn mp4parse_get_track_video_info(context: *mut mp4parse_state, track: u32, info: *mut mp4parse_track_video_info) -> mp4parse_error {
+pub unsafe extern fn mp4parse_get_track_video_info(context: *mut mp4parse_state, track: u32, info: *mut mp4parse_track_video_info) -> mp4parse_error {
     if context.is_null() || info.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
