@@ -10,11 +10,11 @@
 //! // Minimal valid mp4 containing no tracks.
 //! let data = b"\0\0\0\x08moov";
 //!
-//! let context = mp4parse::mp4parse_new();
+//! let parser = mp4parse::mp4parse_new();
 //! unsafe {
-//!     let rv = mp4parse::mp4parse_read(context, data.as_ptr(), data.len());
+//!     let rv = mp4parse::mp4parse_read(parser, data.as_ptr(), data.len());
 //!     assert_eq!(rv, mp4parse::mp4parse_error::MP4PARSE_OK);
-//!     mp4parse::mp4parse_free(context);
+//!     mp4parse::mp4parse_free(parser);
 //! }
 //! ```
 
@@ -94,37 +94,37 @@ pub struct mp4parse_track_video_info {
 
 #[repr(C)]
 #[allow(non_camel_case_types)]
-pub struct mp4parse_state(MediaContext);
+pub struct mp4parse_parser(MediaContext);
 
 // C API wrapper functions.
 
-/// Allocate an opaque rust-side parser context.
+/// Allocate an opaque rust-side parser.
 #[no_mangle]
-pub extern fn mp4parse_new() -> *mut mp4parse_state {
-    let context = Box::new(mp4parse_state(MediaContext::new()));
-    Box::into_raw(context)
+pub extern fn mp4parse_new() -> *mut mp4parse_parser {
+    let parser = Box::new(mp4parse_parser(MediaContext::new()));
+    Box::into_raw(parser)
 }
 
-/// Free a rust-side parser context.
+/// Free a rust-side parser.
 #[no_mangle]
-pub unsafe extern fn mp4parse_free(context: *mut mp4parse_state) {
-    assert!(!context.is_null());
-    let _ = Box::from_raw(context);
+pub unsafe extern fn mp4parse_free(parser: *mut mp4parse_parser) {
+    assert!(!parser.is_null());
+    let _ = Box::from_raw(parser);
 }
 
 /// Feed a buffer through `read_mp4()` with the given rust-side
-/// parser context, returning success or an error code.
+/// parser, returning success or an error code.
 ///
 /// This is safe to call with NULL arguments but will crash
 /// if given invalid pointers, as is usual for C.
 #[no_mangle]
-pub unsafe extern fn mp4parse_read(context: *mut mp4parse_state, buffer: *const u8, size: usize) -> mp4parse_error {
+pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser, buffer: *const u8, size: usize) -> mp4parse_error {
     // Validate arguments from C.
-    if context.is_null() || buffer.is_null() || size < 8 {
+    if parser.is_null() || buffer.is_null() || size < 8 {
         return MP4PARSE_ERROR_BADARG;
     }
 
-    let mut context: &mut MediaContext = &mut (*context).0;
+    let mut context: &mut MediaContext = &mut (*parser).0;
 
     // Wrap the buffer we've been give in a slice.
     let b = std::slice::from_raw_parts(buffer, size);
@@ -155,10 +155,10 @@ pub unsafe extern fn mp4parse_read(context: *mut mp4parse_state, buffer: *const 
 
 /// Return the number of tracks parsed by previous `read_mp4()` calls.
 #[no_mangle]
-pub unsafe extern fn mp4parse_get_track_count(context: *const mp4parse_state) -> u32 {
+pub unsafe extern fn mp4parse_get_track_count(parser: *const mp4parse_parser) -> u32 {
     // Validate argument from C.
-    assert!(!context.is_null());
-    let context: &MediaContext = &(*context).0;
+    assert!(!parser.is_null());
+    let context: &MediaContext = &(*parser).0;
 
     // Make sure the track count fits in a u32.
     assert!(context.tracks.len() < u32::max_value() as usize);
@@ -166,12 +166,12 @@ pub unsafe extern fn mp4parse_get_track_count(context: *const mp4parse_state) ->
 }
 
 #[no_mangle]
-pub unsafe extern fn mp4parse_get_track_info(context: *mut mp4parse_state, track: u32, info: *mut mp4parse_track_info) -> mp4parse_error {
-    if context.is_null() || info.is_null() {
+pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track: u32, info: *mut mp4parse_track_info) -> mp4parse_error {
+    if parser.is_null() || info.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
 
-    let context: &mut MediaContext = &mut (*context).0;
+    let context: &mut MediaContext = &mut (*parser).0;
     let track_index: usize = track as usize;
     let info: &mut mp4parse_track_info = &mut *info;
 
@@ -206,12 +206,12 @@ pub unsafe extern fn mp4parse_get_track_info(context: *mut mp4parse_state, track
 }
 
 #[no_mangle]
-pub unsafe extern fn mp4parse_get_track_audio_info(context: *mut mp4parse_state, track: u32, info: *mut mp4parse_track_audio_info) -> mp4parse_error {
-    if context.is_null() || info.is_null() {
+pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser, track: u32, info: *mut mp4parse_track_audio_info) -> mp4parse_error {
+    if parser.is_null() || info.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
 
-    let context: &mut MediaContext = &mut (*context).0;
+    let context: &mut MediaContext = &mut (*parser).0;
 
     if track as usize >= context.tracks.len() {
         return MP4PARSE_ERROR_BADARG;
@@ -242,12 +242,12 @@ pub unsafe extern fn mp4parse_get_track_audio_info(context: *mut mp4parse_state,
 }
 
 #[no_mangle]
-pub unsafe extern fn mp4parse_get_track_video_info(context: *mut mp4parse_state, track: u32, info: *mut mp4parse_track_video_info) -> mp4parse_error {
-    if context.is_null() || info.is_null() {
+pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser, track: u32, info: *mut mp4parse_track_video_info) -> mp4parse_error {
+    if parser.is_null() || info.is_null() {
         return MP4PARSE_ERROR_BADARG;
     }
 
-    let context: &mut MediaContext = &mut (*context).0;
+    let context: &mut MediaContext = &mut (*parser).0;
 
     if track as usize >= context.tracks.len() {
         return MP4PARSE_ERROR_BADARG;
@@ -283,17 +283,17 @@ pub unsafe extern fn mp4parse_get_track_video_info(context: *mut mp4parse_state,
 }
 
 #[test]
-fn new_context() {
-    let context = mp4parse_new();
-    assert!(!context.is_null());
+fn new_parser() {
+    let parser = mp4parse_new();
+    assert!(!parser.is_null());
     unsafe {
-        mp4parse_free(context);
+        mp4parse_free(parser);
     }
 }
 
 #[test]
 #[should_panic(expected = "assertion failed")]
-fn free_null_context() {
+fn free_null_parser() {
     unsafe {
         mp4parse_free(std::ptr::null_mut());
     }
@@ -302,29 +302,29 @@ fn free_null_context() {
 #[test]
 fn arg_validation() {
     let null_buffer = std::ptr::null();
-    let null_context = std::ptr::null_mut();
+    let null_parser = std::ptr::null_mut();
 
-    let context = mp4parse_new();
-    assert!(!context.is_null());
+    let parser = mp4parse_new();
+    assert!(!parser.is_null());
 
     let buffer = vec![0u8; 8];
 
     unsafe {
         assert_eq!(MP4PARSE_ERROR_BADARG,
-                   mp4parse_read(null_context, null_buffer, 0));
+                   mp4parse_read(null_parser, null_buffer, 0));
         assert_eq!(MP4PARSE_ERROR_BADARG,
-                   mp4parse_read(context, null_buffer, 0));
+                   mp4parse_read(parser, null_buffer, 0));
     }
 
     for size in 0..buffer.len() {
         println!("testing buffer length {}", size);
         unsafe {
             assert_eq!(MP4PARSE_ERROR_BADARG,
-                       mp4parse_read(context, buffer.as_ptr(), size));
+                       mp4parse_read(parser, buffer.as_ptr(), size));
         }
     }
 
     unsafe {
-        mp4parse_free(context);
+        mp4parse_free(parser);
     }
 }

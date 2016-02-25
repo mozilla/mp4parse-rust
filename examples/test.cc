@@ -11,34 +11,34 @@
 
 #include "mp4parse.h"
 
-void test_context()
+void test_parser()
 {
-  mp4parse_state *context = mp4parse_new();
-  assert(context != nullptr);
-  mp4parse_free(context);
+  mp4parse_parser *parser = mp4parse_new();
+  assert(parser != nullptr);
+  mp4parse_free(parser);
 }
 
-void test_arg_validation(mp4parse_state *context)
+void test_arg_validation(mp4parse_parser *parser)
 {
   int32_t rv;
 
   rv = mp4parse_read(nullptr, nullptr, 0);
   assert(rv == MP4PARSE_ERROR_BADARG);
 
-  rv = mp4parse_read(context, nullptr, 0);
+  rv = mp4parse_read(parser, nullptr, 0);
   assert(rv == MP4PARSE_ERROR_BADARG);
 
   size_t len = 4097;
-  rv = mp4parse_read(context, nullptr, len);
+  rv = mp4parse_read(parser, nullptr, len);
   assert(rv == MP4PARSE_ERROR_BADARG);
 
   std::vector<uint8_t> buf;
-  rv = mp4parse_read(context, buf.data(), buf.size());
+  rv = mp4parse_read(parser, buf.data(), buf.size());
   assert(rv == MP4PARSE_ERROR_BADARG);
 
   buf.resize(len);
-  rv = mp4parse_read(context, buf.data(), buf.size());
-  if (context) {
+  rv = mp4parse_read(parser, buf.data(), buf.size());
+  if (parser) {
     // This fails with UNSUPPORTED because buf contains zeroes, so the first
     // box read is zero (unknown) length, which the parser doesn't currently
     // support.
@@ -52,10 +52,10 @@ void test_arg_validation()
 {
   test_arg_validation(nullptr);
 
-  mp4parse_state *context = mp4parse_new();
-  assert(context != nullptr);
-  test_arg_validation(context);
-  mp4parse_free(context);
+  mp4parse_parser *parser = mp4parse_new();
+  assert(parser != nullptr);
+  test_arg_validation(parser);
+  mp4parse_free(parser);
 }
 
 const char * tracktype2str(mp4parse_track_type type)
@@ -92,34 +92,34 @@ int32_t read_file(const char* filename)
   buf.resize(read);
   fclose(f);
 
-  mp4parse_state *context = mp4parse_new();
-  assert(context != nullptr);
+  mp4parse_parser *parser = mp4parse_new();
+  assert(parser != nullptr);
 
   fprintf(stderr, "Parsing %lu byte buffer.\n", (unsigned long)read);
-  mp4parse_error rv = mp4parse_read(context, buf.data(), buf.size());
+  mp4parse_error rv = mp4parse_read(parser, buf.data(), buf.size());
   if (rv != MP4PARSE_OK) {
     fprintf(stderr, "Parsing failed: %s\n", errorstring(rv));
     return rv;
   }
-  uint32_t tracks = mp4parse_get_track_count(context);
+  uint32_t tracks = mp4parse_get_track_count(parser);
   fprintf(stderr, "%u tracks returned to C code.\n", tracks);
 
   for (uint32_t i = 0; i < tracks; ++i) {
     mp4parse_track_info track_info;
-    int32_t rv2 = mp4parse_get_track_info(context, i, &track_info);
+    int32_t rv2 = mp4parse_get_track_info(parser, i, &track_info);
     assert(rv2 == MP4PARSE_OK);
     fprintf(stderr, "Track %d: type=%s duration=%" PRId64 " media_time=%" PRId64 " track_id=%d\n",
             i, tracktype2str(track_info.track_type), track_info.duration, track_info.media_time, track_info.track_id);
   }
 
-  mp4parse_free(context);
+  mp4parse_free(parser);
 
   return MP4PARSE_OK;
 }
 
 int main(int argc, char* argv[])
 {
-  test_context();
+  test_parser();
   test_arg_validation();
 
   for (auto i = 1; i < argc; ++i) {
