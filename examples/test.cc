@@ -69,10 +69,8 @@ const char * tracktype2str(uint32_t type)
 
 const char * errorstring(int32_t error)
 {
-  if (error >= MP4PARSE_OK) {
-    return "Ok";
-  }
   switch (error) {
+    case MP4PARSE_OK: return "Ok";
     case MP4PARSE_ERROR_BADARG: return "Invalid argument";
     case MP4PARSE_ERROR_INVALID: return "Invalid data";
     case MP4PARSE_ERROR_UNSUPPORTED: return "Feature unsupported";
