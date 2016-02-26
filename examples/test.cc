@@ -58,7 +58,7 @@ void test_arg_validation()
   mp4parse_free(context);
 }
 
-const char * tracktype2str(uint32_t type)
+const char * tracktype2str(mp4parse_track_type type)
 {
   switch (type) {
     case MP4PARSE_TRACK_TYPE_VIDEO: return "video";
@@ -67,7 +67,7 @@ const char * tracktype2str(uint32_t type)
   return "unknown";
 }
 
-const char * errorstring(int32_t error)
+const char * errorstring(mp4parse_error error)
 {
   switch (error) {
     case MP4PARSE_OK: return "Ok";
@@ -75,6 +75,7 @@ const char * errorstring(int32_t error)
     case MP4PARSE_ERROR_INVALID: return "Invalid data";
     case MP4PARSE_ERROR_UNSUPPORTED: return "Feature unsupported";
     case MP4PARSE_ERROR_EOF: return "Unexpected end-of-file";
+    case MP4PARSE_ERROR_ASSERT: return "Caught assert or panic";
     case MP4PARSE_ERROR_IO: return "I/O error";
   }
   return "Unknown error";
@@ -95,7 +96,7 @@ int32_t read_file(const char* filename)
   assert(context != nullptr);
 
   fprintf(stderr, "Parsing %lu byte buffer.\n", (unsigned long)read);
-  int32_t rv = mp4parse_read(context, buf.data(), buf.size());
+  mp4parse_error rv = mp4parse_read(context, buf.data(), buf.size());
   if (rv != MP4PARSE_OK) {
     fprintf(stderr, "Parsing failed: %s\n", errorstring(rv));
     return rv;
