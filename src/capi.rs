@@ -207,14 +207,13 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_err
         // Ok(..) otherwise, meaning we could see Ok(Err(Error::..))
         // here. So map thread failures back to an
         // mp4parse::Error::AssertCaught.
-        task.join().unwrap_or(Err(Error::AssertCaught))
+        task.join().unwrap_or_else(|_| Err(Error::AssertCaught))
     } else {
         read_mp4(io, context)
     };
     match r {
         Ok(_) => MP4PARSE_OK,
-        Err(Error::NoMoov) => MP4PARSE_ERROR_INVALID,
-        Err(Error::InvalidData(_)) => MP4PARSE_ERROR_INVALID,
+        Err(Error::NoMoov) | Err(Error::InvalidData(_)) => MP4PARSE_ERROR_INVALID,
         Err(Error::Unsupported(_)) => MP4PARSE_ERROR_UNSUPPORTED,
         Err(Error::UnexpectedEOF) => MP4PARSE_ERROR_EOF,
         Err(Error::AssertCaught) => MP4PARSE_ERROR_ASSERT,
