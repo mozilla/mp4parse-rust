@@ -1223,28 +1223,21 @@ fn read_stsd<T: BMFFBox>(src: &mut T, track: &mut Track) -> Result<SampleDescrip
     let mut iter = BoxIter::new(src);
     while let Some(mut b) = try!(iter.next()) {
         let description = match track.track_type {
-            TrackType::Video => match read_video_desc(&mut b, track) {
-                Ok(desc) => desc,
-                Err(Error::Unsupported(_)) => {
-                    let to_skip = b.bytes_left();
-                    try!(skip(&mut b, to_skip));
-                    SampleEntry::Unknown
-                }
-                Err(e) => return Err(e),
-            },
-            TrackType::Audio => match read_audio_desc(&mut b, track) {
-                Ok(desc) => desc,
-                Err(Error::Unsupported(_)) => {
-                    let to_skip = b.bytes_left();
-                    try!(skip(&mut b, to_skip));
-                    SampleEntry::Unknown
-                }
-                Err(e) => return Err(e),
-            },
-            TrackType::Unknown => {
-                try!(skip_box_content(&mut b));
+            TrackType::Video => read_video_desc(&mut b, track),
+            TrackType::Audio => read_audio_desc(&mut b, track),
+            TrackType::Unknown => Err(Error::Unsupported("unknown track type")),
+        };
+        let description = match description {
+            Ok(desc) => desc,
+            Err(Error::Unsupported(_)) => {
+                // read_{audio,video}_desc may have returned Unsupported
+                // after partially reading the box content, so we can't
+                // simply use skip_box_content here.
+                let to_skip = b.bytes_left();
+                try!(skip(&mut b, to_skip));
                 SampleEntry::Unknown
             }
+            Err(e) => return Err(e),
         };
         if track.data.is_none() {
             track.data = Some(description.clone());
