@@ -1039,7 +1039,7 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>) -> Result<HandlerBox> {
     try!(skip(src, 12));
 
     let bytes_left = src.bytes_left();
-    let _name = try!(read_null_terminated_string(src, bytes_left as usize));
+    let _name = try!(read_null_terminated_string(src, bytes_left));
 
     Ok(HandlerBox {
         handler_type: handler_type,
@@ -1306,7 +1306,7 @@ fn read_pascal_string<T: ReadBytesExt>(src: &mut T) -> Result<String> {
 fn read_fixed_length_pascal_string<T: Read>(src: &mut T, size: usize) -> Result<String> {
     assert!(size > 0);
     let len = cmp::min(try!(src.read_u8()) as usize, size - 1);
-    let buf = try!(read_buf(src, len as usize));
+    let buf = try!(read_buf(src, len));
     try!(skip(src, size - 1 - buf.len()));
     Ok(try!(String::from_utf8(buf)))
 }
