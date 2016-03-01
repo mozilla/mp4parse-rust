@@ -398,7 +398,7 @@ fn free_null_parser() {
 #[should_panic(expected = "assertion failed")]
 fn get_track_count_null_parser() {
     unsafe {
-        mp4parse_get_track_count(std::ptr::null());
+        let _ = mp4parse_get_track_count(std::ptr::null());
     }
 }
 
