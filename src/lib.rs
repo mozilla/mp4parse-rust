@@ -358,11 +358,11 @@ struct BoxIter<'a, T: 'a + Read> {
 }
 
 impl<'a, T: Read> BoxIter<'a, T> {
-    fn new(src: &'a mut T) -> BoxIter<'a, T> {
+    fn new(src: &mut T) -> BoxIter<T> {
         BoxIter { src: src }
     }
 
-    fn next<'b>(&'b mut self) -> Result<Option<BMFFBox<'b, T>>> {
+    fn next(&mut self) -> Result<Option<BMFFBox<T>>> {
         let r = read_box_header(self.src);
         match r {
             Ok(h) => Ok(Some(BMFFBox {
