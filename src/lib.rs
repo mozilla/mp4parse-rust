@@ -48,7 +48,7 @@ macro_rules! log {
 
 /// Describes parser failures.
 ///
-/// This enum wraps athe standard `io::Error` type, unified with
+/// This enum wraps the standard `io::Error` type, unified with
 /// our own parser error states and those of crates we use.
 #[derive(Debug)]
 pub enum Error {

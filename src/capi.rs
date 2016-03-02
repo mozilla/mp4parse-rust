@@ -151,7 +151,7 @@ unsafe impl Send for mp4parse_io {}
 impl Read for mp4parse_io {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if buf.len() > isize::max_value() as usize {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, "rv overflow in mp4parse_io Read impl"));
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "buf length overflow in mp4parse_io Read impl"));
         }
         let rv = (self.read)(buf.as_mut_ptr(), buf.len(), self.userdata);
         if rv >= 0 {
@@ -173,7 +173,8 @@ pub unsafe extern fn mp4parse_new(io: *const mp4parse_io) -> *mut mp4parse_parse
     // is_null() isn't available on a fn type because it can't be null (in
     // Rust) by definition.  But since this value is coming from the C API,
     // it *could* be null.  Ideally, we'd wrap it in an Option to represent
-    // reality, but this causes rusty-cheddar to emit the wrong type.
+    // reality, but this causes rusty-cheddar to emit the wrong type
+    // (https://github.com/Sean1708/rusty-cheddar/issues/30).
     if ((*io).read as *mut libc::c_void).is_null() {
         return std::ptr::null_mut();
     }
