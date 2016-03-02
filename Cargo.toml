@@ -29,7 +29,7 @@ abort_on_panic = { version = "1.0.0", optional = true }
 test-assembler = "0.1.1"
 
 [build-dependencies]
-rusty-cheddar = "0.3.1"
+rusty-cheddar = "0.3.2"
 
 [features]
 fuzz = ["afl", "afl-plugin", "abort_on_panic"]
