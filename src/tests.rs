@@ -124,7 +124,7 @@ fn read_ftyp() {
          .append_bytes(b"mp42")
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::FileTypeBox);
     assert_eq!(stream.head.size, 24);
     let parsed = super::read_ftyp(&mut stream).unwrap();
@@ -166,7 +166,7 @@ fn read_ftyp_case() {
          .append_bytes(b"MP42")
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::FileTypeBox);
     assert_eq!(stream.head.size, 24);
     let parsed = super::read_ftyp(&mut stream).unwrap();
@@ -188,7 +188,7 @@ fn read_elst_v0() {
          .B16(34) // rate fraction
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::EditListBox);
     assert_eq!(stream.head.size, 28);
     let parsed = super::read_elst(&mut stream).unwrap();
@@ -215,7 +215,7 @@ fn read_elst_v1() {
          .B16(34) // rate fraction
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::EditListBox);
     assert_eq!(stream.head.size, 56);
     let parsed = super::read_elst(&mut stream).unwrap();
@@ -236,7 +236,7 @@ fn read_mdhd_v0() {
          .B32(0)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::MediaHeaderBox);
     assert_eq!(stream.head.size, 32);
     let parsed = super::read_mdhd(&mut stream).unwrap();
@@ -254,7 +254,7 @@ fn read_mdhd_v1() {
          .B32(0)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::MediaHeaderBox);
     assert_eq!(stream.head.size, 44);
     let parsed = super::read_mdhd(&mut stream).unwrap();
@@ -272,7 +272,7 @@ fn read_mdhd_unknown_duration() {
          .B32(0)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::MediaHeaderBox);
     assert_eq!(stream.head.size, 32);
     let parsed = super::read_mdhd(&mut stream).unwrap();
@@ -290,7 +290,7 @@ fn read_mdhd_invalid_timescale() {
          .B32(0)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::MediaHeaderBox);
     assert_eq!(stream.head.size, 44);
     let r = super::parse_mdhd(&mut stream, &mut super::Track::new(0));
@@ -307,7 +307,7 @@ fn read_mvhd_v0() {
          .append_repeated(0, 80)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::MovieHeaderBox);
     assert_eq!(stream.head.size, 108);
     let parsed = super::read_mvhd(&mut stream).unwrap();
@@ -325,7 +325,7 @@ fn read_mvhd_v1() {
          .append_repeated(0, 80)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::MovieHeaderBox);
     assert_eq!(stream.head.size, 120);
     let parsed = super::read_mvhd(&mut stream).unwrap();
@@ -343,7 +343,7 @@ fn read_mvhd_invalid_timescale() {
          .append_repeated(0, 80)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::MovieHeaderBox);
     assert_eq!(stream.head.size, 120);
     let r = super::parse_mvhd(&mut stream);
@@ -360,7 +360,7 @@ fn read_mvhd_unknown_duration() {
          .append_repeated(0, 80)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::MovieHeaderBox);
     assert_eq!(stream.head.size, 108);
     let parsed = super::read_mvhd(&mut stream).unwrap();
@@ -380,7 +380,7 @@ fn read_vpcc() {
          .append_repeated(42, data_length as usize)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::VPCodecConfigurationBox);
     let r = super::read_vpcc(&mut stream);
     assert!(r.is_ok());
@@ -398,7 +398,7 @@ fn read_hdlr() {
          .B8(0) // null-terminate string
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::HandlerBox);
     assert_eq!(stream.head.size, 45);
     let parsed = super::read_hdlr(&mut stream).unwrap();
@@ -416,7 +416,7 @@ fn read_hdlr_short_name() {
          .B8(0) // null-terminate string
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::HandlerBox);
     assert_eq!(stream.head.size, 33);
     let parsed = super::read_hdlr(&mut stream).unwrap();
@@ -433,7 +433,7 @@ fn read_hdlr_zero_length_name() {
          .B32(0)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::HandlerBox);
     assert_eq!(stream.head.size, 32);
     let parsed = super::read_hdlr(&mut stream).unwrap();
@@ -455,7 +455,7 @@ fn read_opus() {
          .append_bytes(&make_dops().into_inner())
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     let mut track = super::Track::new(0);
     let r = super::read_audio_desc(&mut stream, &mut track);
     assert!(r.is_ok());
@@ -476,7 +476,7 @@ fn make_dops() -> Cursor<Vec<u8>> {
 fn read_dops() {
     let mut stream = make_dops();
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::OpusSpecificBox);
     let r = super::read_dops(&mut stream);
     assert!(r.is_ok());
@@ -498,7 +498,7 @@ fn avcc_limit() {
          .append_repeated(0, 100)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     let mut track = super::Track::new(0);
     match super::read_video_desc(&mut stream, &mut track) {
         Err(Error::InvalidData(s)) => assert_eq!(s, "avcC box exceeds BUF_SIZE_LIMIT"),
@@ -524,7 +524,7 @@ fn esds_limit() {
          .append_repeated(0, 100)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     let mut track = super::Track::new(0);
     match super::read_audio_desc(&mut stream, &mut track) {
         Err(Error::InvalidData(s)) => assert_eq!(s, "esds box exceeds BUF_SIZE_LIMIT"),
@@ -535,7 +535,7 @@ fn esds_limit() {
 
 #[test]
 fn esds_limit_2() {
-        let mut stream = make_box(BoxSize::Auto, b"mp4a", |s| {
+    let mut stream = make_box(BoxSize::Auto, b"mp4a", |s| {
         s.append_repeated(0, 6)
          .B16(1)
          .B32(0)
@@ -550,7 +550,7 @@ fn esds_limit_2() {
          .append_repeated(0, 4)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     let mut track = super::Track::new(0);
     match super::read_audio_desc(&mut stream, &mut track) {
         Err(Error::UnexpectedEOF) => (),
@@ -567,7 +567,7 @@ fn read_elst_zero_entries() {
          .B16(34)
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     match super::read_elst(&mut stream) {
         Err(Error::InvalidData(s)) => assert_eq!(s, "invalid edit count"),
         Ok(_) => assert!(false, "expected an error result"),
@@ -594,7 +594,7 @@ fn read_edts_bogus() {
         s.append_bytes(&make_elst().into_inner())
     });
     let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next().unwrap().unwrap();
+    let mut stream = iter.next_box().unwrap().unwrap();
     let mut track = super::Track::new(0);
     match super::read_edts(&mut stream, &mut track) {
         Err(Error::InvalidData(s)) => assert_eq!(s, "expected additional edit"),
