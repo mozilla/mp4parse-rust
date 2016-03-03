@@ -1,5 +1,4 @@
 extern crate mp4parse;
-extern crate libc;
 
 use mp4parse::*;
 
@@ -9,7 +8,7 @@ extern crate abort_on_panic;
 
 use std::io::Read;
 
-extern fn vec_read(buf: *mut u8, size: usize, userdata: *mut libc::c_void) -> isize {
+extern fn vec_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
     let mut input: &mut std::io::Cursor<Vec<u8>> = unsafe { &mut *(userdata as *mut _) };
 
     let mut buf = unsafe { std::slice::from_raw_parts_mut(buf, size) };
@@ -23,7 +22,7 @@ fn doit() {
     let mut input = Vec::new();
     std::io::stdin().read_to_end(&mut input).unwrap();
     let mut cursor = std::io::Cursor::new(input);
-    let io = mp4parse_io { read: vec_read, userdata: &mut cursor as *mut _ as *mut libc::c_void };
+    let io = mp4parse_io { read: vec_read, userdata: &mut cursor as *mut _ as *mut std::os::raw::c_void };
     unsafe {
         let context = mp4parse_new(&io);
         let rv = mp4parse_read(context);

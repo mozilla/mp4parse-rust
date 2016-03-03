@@ -6,10 +6,9 @@
 //!
 //! ```rust
 //! extern crate mp4parse;
-//! extern crate libc;
 //! use std::io::Read;
 //!
-//! extern fn buf_read(buf: *mut u8, size: usize, userdata: *mut libc::c_void) -> isize {
+//! extern fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
 //!    let mut input: &mut std::fs::File = unsafe { &mut *(userdata as *mut _) };
 //!    let mut buf = unsafe { std::slice::from_raw_parts_mut(buf, size) };
 //!    match input.read(&mut buf) {
@@ -19,7 +18,7 @@
 //! }
 //!
 //! let mut file = std::fs::File::open("media/small.mp4").unwrap();
-//! let io = mp4parse::mp4parse_io { read: buf_read, userdata: &mut file as *mut _ as *mut libc::c_void };
+//! let io = mp4parse::mp4parse_io { read: buf_read, userdata: &mut file as *mut _ as *mut std::os::raw::c_void };
 //! unsafe {
 //!     let parser = mp4parse::mp4parse_new(&io);
 //!     let rv = mp4parse::mp4parse_read(parser);
@@ -31,13 +30,6 @@
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
-
-// Sadly, this is *only* needed for libc::c_void.  I'd use
-// std::os::raw::c_void instead, but rusty-cheddar doesn't have support for
-// converting that in to a C type.  Once
-// https://github.com/Sean1708/rusty-cheddar/pull/36 is merged, we can drop
-// the libc crate requirement.
-extern crate libc;
 
 use std;
 use std::io::Read;
@@ -138,8 +130,8 @@ impl mp4parse_parser {
 #[repr(C)]
 #[derive(Clone)]
 pub struct mp4parse_io {
-    pub read: extern fn(buffer: *mut u8, size: usize, userdata: *mut libc::c_void) -> isize,
-    pub userdata: *mut libc::c_void,
+    pub read: extern fn(buffer: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize,
+    pub userdata: *mut std::os::raw::c_void,
 }
 
 // Required for the panic-catching thread in mp4parse_read because raw
@@ -175,7 +167,7 @@ pub unsafe extern fn mp4parse_new(io: *const mp4parse_io) -> *mut mp4parse_parse
     // it *could* be null.  Ideally, we'd wrap it in an Option to represent
     // reality, but this causes rusty-cheddar to emit the wrong type
     // (https://github.com/Sean1708/rusty-cheddar/issues/30).
-    if ((*io).read as *mut libc::c_void).is_null() {
+    if ((*io).read as *mut std::os::raw::c_void).is_null() {
         return std::ptr::null_mut();
     }
     let parser = Box::new(mp4parse_parser(Wrap { context: MediaContext::new(), io: (*io).clone() }));
@@ -355,17 +347,17 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
 }
 
 #[cfg(test)]
-extern fn panic_read(_: *mut u8, _: usize, _: *mut libc::c_void) -> isize {
+extern fn panic_read(_: *mut u8, _: usize, _: *mut std::os::raw::c_void) -> isize {
     panic!("panic_read shouldn't be called in these tests");
 }
 
 #[cfg(test)]
-extern fn error_read(_: *mut u8, _: usize, _: *mut libc::c_void) -> isize {
+extern fn error_read(_: *mut u8, _: usize, _: *mut std::os::raw::c_void) -> isize {
     -1
 }
 
 #[cfg(test)]
-extern fn valid_read(buf: *mut u8, size: usize, userdata: *mut libc::c_void) -> isize {
+extern fn valid_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
     let mut input: &mut std::fs::File = unsafe { &mut *(userdata as *mut _) };
 
     let mut buf = unsafe { std::slice::from_raw_parts_mut(buf, size) };
@@ -379,7 +371,7 @@ extern fn valid_read(buf: *mut u8, size: usize, userdata: *mut libc::c_void) -> 
 fn new_parser() {
     let mut dummy_value: u32 = 42;
     let io = mp4parse_io { read: panic_read,
-                           userdata: &mut dummy_value as *mut _ as *mut libc::c_void };
+                           userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void };
     unsafe {
         let parser = mp4parse_new(&io);
         assert!(!parser.is_null());
@@ -410,7 +402,7 @@ fn arg_validation() {
         let parser = mp4parse_new(std::ptr::null());
         assert!(parser.is_null());
 
-        let null_mut: *mut libc::c_void  = std::ptr::null_mut();
+        let null_mut: *mut std::os::raw::c_void  = std::ptr::null_mut();
 
         // Passing an mp4parse_io with null members is an error.
         let io = mp4parse_io { read: std::mem::transmute(null_mut),
@@ -425,7 +417,7 @@ fn arg_validation() {
 
         let mut dummy_value = 42;
         let io = mp4parse_io { read: std::mem::transmute(null_mut),
-                               userdata: &mut dummy_value as *mut _ as *mut libc::c_void };
+                               userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void };
         let parser = mp4parse_new(&io);
         assert!(parser.is_null());
 
@@ -456,7 +448,7 @@ fn arg_validation_with_parser() {
     unsafe {
         let mut dummy_value = 42;
         let io = mp4parse_io { read: error_read,
-                               userdata: &mut dummy_value as *mut _ as *mut libc::c_void };
+                               userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void };
         let parser = mp4parse_new(&io);
         assert!(!parser.is_null());
 
@@ -478,7 +470,7 @@ fn arg_validation_with_data() {
     unsafe {
         let mut file = std::fs::File::open("media/small.mp4").unwrap();
         let io = mp4parse_io { read: valid_read,
-                               userdata: &mut file as *mut _ as *mut libc::c_void };
+                               userdata: &mut file as *mut _ as *mut std::os::raw::c_void };
         let parser = mp4parse_new(&io);
         assert!(!parser.is_null());
 
