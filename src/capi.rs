@@ -17,7 +17,7 @@
 //!    }
 //! }
 //!
-//! let mut file = std::fs::File::open("media/small.mp4").unwrap();
+//! let mut file = std::fs::File::open("examples/minimal.mp4").unwrap();
 //! let io = mp4parse::mp4parse_io { read: buf_read, userdata: &mut file as *mut _ as *mut std::os::raw::c_void };
 //! unsafe {
 //!     let parser = mp4parse::mp4parse_new(&io);
@@ -468,7 +468,7 @@ fn arg_validation_with_parser() {
 #[test]
 fn arg_validation_with_data() {
     unsafe {
-        let mut file = std::fs::File::open("media/small.mp4").unwrap();
+        let mut file = std::fs::File::open("examples/minimal.mp4").unwrap();
         let io = mp4parse_io { read: valid_read,
                                userdata: &mut file as *mut _ as *mut std::os::raw::c_void };
         let parser = mp4parse_new(&io);
@@ -485,24 +485,24 @@ fn arg_validation_with_data() {
         assert_eq!(MP4PARSE_OK, mp4parse_get_track_info(parser, 0, &mut info));
         assert_eq!(info.track_type, MP4PARSE_TRACK_TYPE_VIDEO);
         assert_eq!(info.track_id, 1);
-        assert_eq!(info.duration, 9843344);
-        assert_eq!(info.media_time, -95000);
+        assert_eq!(info.duration, 40000);
+        assert_eq!(info.media_time, 0);
 
         assert_eq!(MP4PARSE_OK, mp4parse_get_track_info(parser, 1, &mut info));
         assert_eq!(info.track_type, MP4PARSE_TRACK_TYPE_AUDIO);
         assert_eq!(info.track_id, 2);
-        assert_eq!(info.duration, 10031020);
-        assert_eq!(info.media_time, 0);
+        assert_eq!(info.duration, 61333);
+        assert_eq!(info.media_time, 21333);
 
         let mut video = mp4parse_track_video_info { display_width: 0,
                                                     display_height: 0,
                                                     image_width: 0,
                                                     image_height: 0 };
         assert_eq!(MP4PARSE_OK, mp4parse_get_track_video_info(parser, 0, &mut video));
-        assert_eq!(video.display_width, 400);
-        assert_eq!(video.display_height, 300);
-        assert_eq!(video.image_width, 400);
-        assert_eq!(video.image_height, 300);
+        assert_eq!(video.display_width, 320);
+        assert_eq!(video.display_height, 240);
+        assert_eq!(video.image_width, 320);
+        assert_eq!(video.image_height, 240);
 
         let mut audio = mp4parse_track_audio_info { channels: 0,
                                                     bit_depth: 0,
@@ -510,7 +510,7 @@ fn arg_validation_with_data() {
         assert_eq!(MP4PARSE_OK, mp4parse_get_track_audio_info(parser, 1, &mut audio));
         assert_eq!(audio.channels, 2);
         assert_eq!(audio.bit_depth, 16);
-        assert_eq!(audio.sample_rate, 22050);
+        assert_eq!(audio.sample_rate, 48000);
 
         // Test with an invalid track number.
         let mut info = mp4parse_track_info { track_type: MP4PARSE_TRACK_TYPE_VIDEO,

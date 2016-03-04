@@ -124,7 +124,7 @@ void test_arg_validation_with_parser()
 
 void test_arg_validation_with_data()
 {
-  FILE* f = fopen("media/small.mp4", "rb");
+  FILE* f = fopen("examples/minimal.mp4", "rb");
   assert(f != nullptr);
   mp4parse_io io = { io_read, f };
   mp4parse_parser *parser = mp4parse_new(&io);
@@ -142,25 +142,25 @@ void test_arg_validation_with_data()
   assert(rv == MP4PARSE_OK);
   assert(info.track_type == MP4PARSE_TRACK_TYPE_VIDEO);
   assert(info.track_id == 1);
-  assert(info.duration == 9843344);
-  assert(info.media_time == -95000);
+  assert(info.duration == 40000);
+  assert(info.media_time == 0);
 
   memset(&info, 0, sizeof(info));
   rv = mp4parse_get_track_info(parser, 1, &info);
   assert(rv == MP4PARSE_OK);
   assert(info.track_type == MP4PARSE_TRACK_TYPE_AUDIO);
   assert(info.track_id == 2);
-  assert(info.duration == 10031020);
-  assert(info.media_time == 0);
+  assert(info.duration == 61333);
+  assert(info.media_time == 21333);
 
   mp4parse_track_video_info video;
   memset(&video, 0, sizeof(video));
   rv = mp4parse_get_track_video_info(parser, 0, &video);
   assert(rv == MP4PARSE_OK);
-  assert(video.display_width == 400);
-  assert(video.display_height == 300);
-  assert(video.image_width == 400);
-  assert(video.image_height == 300);
+  assert(video.display_width == 320);
+  assert(video.display_height == 240);
+  assert(video.image_width == 320);
+  assert(video.image_height == 240);
 
   mp4parse_track_audio_info audio;
   memset(&audio, 0, sizeof(audio));
@@ -168,7 +168,7 @@ void test_arg_validation_with_data()
   assert(rv == MP4PARSE_OK);
   assert(audio.channels == 2);
   assert(audio.bit_depth == 16);
-  assert(audio.sample_rate == 22050);
+  assert(audio.sample_rate == 48000);
 
   // Test with an invalid track number.
   memset(&info, 0, sizeof(info));
