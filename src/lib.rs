@@ -467,6 +467,8 @@ macro_rules! check_parser_state {
 pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     let mut found_ftyp = false;
     let mut found_moov = false;
+    // TODO(kinetik): Top-level parsing should handle zero-sized boxes
+    // rather than throwing an error.
     let mut iter = BoxIter::new(f);
     while let Some(mut b) = try!(iter.next_box()) {
         // box ordering: ftyp before any variable length box (inc. moov),
