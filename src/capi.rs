@@ -18,7 +18,8 @@
 //! }
 //!
 //! let mut file = std::fs::File::open("examples/minimal.mp4").unwrap();
-//! let io = mp4parse::mp4parse_io { read: buf_read, userdata: &mut file as *mut _ as *mut std::os::raw::c_void };
+//! let io = mp4parse::mp4parse_io { read: buf_read,
+//!                                  userdata: &mut file as *mut _ as *mut std::os::raw::c_void };
 //! unsafe {
 //!     let parser = mp4parse::mp4parse_new(&io);
 //!     let rv = mp4parse::mp4parse_read(parser);
@@ -402,7 +403,7 @@ fn arg_validation() {
         let parser = mp4parse_new(std::ptr::null());
         assert!(parser.is_null());
 
-        let null_mut: *mut std::os::raw::c_void  = std::ptr::null_mut();
+        let null_mut: *mut std::os::raw::c_void = std::ptr::null_mut();
 
         // Passing an mp4parse_io with null members is an error.
         let io = mp4parse_io { read: std::mem::transmute(null_mut),
