@@ -1297,14 +1297,14 @@ fn read_null_terminated_string<T: ReadBytesExt>(src: &mut T, mut size: usize) ->
         buf.push(c);
         size -= 1;
     }
-    Ok(try!(String::from_utf8(buf)))
+    String::from_utf8(buf).map_err(From::from)
 }
 
 #[allow(dead_code)]
 fn read_pascal_string<T: ReadBytesExt>(src: &mut T) -> Result<String> {
     let len = try!(src.read_u8());
     let buf = try!(read_buf(src, len as usize));
-    Ok(try!(String::from_utf8(buf)))
+    String::from_utf8(buf).map_err(From::from)
 }
 
 // Weird string encoding with a length prefix and a fixed sized buffer which
@@ -1314,7 +1314,7 @@ fn read_fixed_length_pascal_string<T: Read>(src: &mut T, size: usize) -> Result<
     let len = cmp::min(try!(src.read_u8()) as usize, size - 1);
     let buf = try!(read_buf(src, len));
     try!(skip(src, size - 1 - buf.len()));
-    Ok(try!(String::from_utf8(buf)))
+    String::from_utf8(buf).map_err(From::from)
 }
 
 fn media_time_to_ms(time: MediaScaledTime, scale: MediaTimeScale) -> u64 {
