@@ -10,8 +10,8 @@ macro_rules! box_database {
             UnknownBox(u32),
         }
 
-        impl BoxType {
-            pub fn from(t: u32) -> BoxType {
+        impl From<u32> for BoxType {
+            fn from(t: u32) -> BoxType {
                 use self::BoxType::*;
                 match t {
                     $($boxtype => $boxenum),*,
