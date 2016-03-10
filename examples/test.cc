@@ -106,9 +106,6 @@ void test_arg_validation_with_parser()
   int32_t rv = mp4parse_read(parser);
   assert(rv == MP4PARSE_ERROR_IO);
 
-  uint32_t tracks = mp4parse_get_track_count(parser);
-  assert(tracks == 0);
-
   rv = mp4parse_get_track_info(parser, 0, nullptr);
   assert(rv == MP4PARSE_ERROR_BADARG);
 

@@ -108,6 +108,7 @@ pub struct mp4parse_track_video_info {
 struct Wrap {
     context: MediaContext,
     io: mp4parse_io,
+    poisoned: bool,
 }
 
 #[repr(C)]
@@ -125,6 +126,14 @@ impl mp4parse_parser {
 
     fn io_mut(&mut self) -> &mut mp4parse_io {
         &mut self.0.io
+    }
+
+    fn poisoned(&self) -> bool {
+        self.0.poisoned
+    }
+
+    fn set_poisoned(&mut self, poisoned: bool) {
+        self.0.poisoned = poisoned;
     }
 }
 
@@ -171,7 +180,7 @@ pub unsafe extern fn mp4parse_new(io: *const mp4parse_io) -> *mut mp4parse_parse
     if ((*io).read as *mut std::os::raw::c_void).is_null() {
         return std::ptr::null_mut();
     }
-    let parser = Box::new(mp4parse_parser(Wrap { context: MediaContext::new(), io: (*io).clone() }));
+    let parser = Box::new(mp4parse_parser(Wrap { context: MediaContext::new(), io: (*io).clone(), poisoned: false }));
     Box::into_raw(parser)
 }
 
@@ -186,7 +195,7 @@ pub unsafe extern fn mp4parse_free(parser: *mut mp4parse_parser) {
 #[no_mangle]
 pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_error {
     // Validate arguments from C.
-    if parser.is_null() {
+    if parser.is_null() || (*parser).poisoned() {
         return MP4PARSE_ERROR_BADARG;
     }
 
@@ -205,6 +214,7 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_err
     } else {
         read_mp4(io, context)
     };
+    (*parser).set_poisoned(r.is_err());
     match r {
         Ok(_) => MP4PARSE_OK,
         Err(Error::NoMoov) | Err(Error::InvalidData(_)) => MP4PARSE_ERROR_INVALID,
@@ -219,7 +229,7 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_err
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_count(parser: *const mp4parse_parser) -> u32 {
     // Validate argument from C.
-    assert!(!parser.is_null());
+    assert!(!parser.is_null() && !(*parser).poisoned());
     let context = (*parser).context();
 
     // Make sure the track count fits in a u32.
@@ -230,7 +240,7 @@ pub unsafe extern fn mp4parse_get_track_count(parser: *const mp4parse_parser) ->
 /// Fill the supplied `mp4parse_track_info` with metadata for `track`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track: u32, info: *mut mp4parse_track_info) -> mp4parse_error {
-    if parser.is_null() || info.is_null() {
+    if parser.is_null() || info.is_null() || (*parser).poisoned() {
         return MP4PARSE_ERROR_BADARG;
     }
 
@@ -271,7 +281,7 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
 /// Fill the supplied `mp4parse_track_audio_info` with metadata for `track`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser, track: u32, info: *mut mp4parse_track_audio_info) -> mp4parse_error {
-    if parser.is_null() || info.is_null() {
+    if parser.is_null() || info.is_null() || (*parser).poisoned() {
         return MP4PARSE_ERROR_BADARG;
     }
 
@@ -308,7 +318,7 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
 /// Fill the supplied `mp4parse_track_video_info` with metadata for `track`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser, track: u32, info: *mut mp4parse_track_video_info) -> mp4parse_error {
-    if parser.is_null() || info.is_null() {
+    if parser.is_null() || info.is_null() || (*parser).poisoned() {
         return MP4PARSE_ERROR_BADARG;
     }
 
@@ -456,13 +466,49 @@ fn arg_validation_with_parser() {
         // Our mp4parse_io read should simply fail with an error.
         assert_eq!(MP4PARSE_ERROR_IO, mp4parse_read(parser));
 
-        assert_eq!(0, mp4parse_get_track_count(parser));
+        // The parser is now poisoned and unusable.
+        assert_eq!(MP4PARSE_ERROR_BADARG,  mp4parse_read(parser));
 
+        // Null info pointers are an error.
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_info(parser, 0, std::ptr::null_mut()));
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(parser, 0, std::ptr::null_mut()));
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_audio_info(parser, 0, std::ptr::null_mut()));
 
+        let mut dummy_info = mp4parse_track_info { track_type: MP4PARSE_TRACK_TYPE_VIDEO,
+                                                   track_id: 0,
+                                                   duration: 0,
+                                                   media_time: 0 };
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_info(parser, 0, &mut dummy_info));
+
+        let mut dummy_video = mp4parse_track_video_info { display_width: 0,
+                                                          display_height: 0,
+                                                          image_width: 0,
+                                                          image_height: 0 };
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(parser, 0, &mut dummy_video));
+
+        let mut dummy_audio = mp4parse_track_audio_info { channels: 0,
+                                                          bit_depth: 0,
+                                                          sample_rate: 0 };
+        assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_audio_info(parser, 0, &mut dummy_audio));
+
         mp4parse_free(parser);
+    }
+}
+
+#[test]
+#[should_panic(expected = "assertion failed")]
+fn get_track_count_poisoned_parser() {
+    unsafe {
+        let mut dummy_value = 42;
+        let io = mp4parse_io { read: error_read,
+                               userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void };
+        let parser = mp4parse_new(&io);
+        assert!(!parser.is_null());
+
+        // Our mp4parse_io read should simply fail with an error.
+        assert_eq!(MP4PARSE_ERROR_IO, mp4parse_read(parser));
+
+        let _ = mp4parse_get_track_count(parser);
     }
 }
 
