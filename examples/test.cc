@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 
 #include "mp4parse.h"
@@ -119,9 +120,9 @@ void test_arg_validation_with_parser()
   assert(dummy_value == 42);
 }
 
-void test_arg_validation_with_data()
+void test_arg_validation_with_data(const std::string& filename)
 {
-  FILE* f = fopen("examples/minimal.mp4", "rb");
+  FILE* f = fopen(filename.c_str(), "rb");
   assert(f != nullptr);
   mp4parse_io io = { io_read, f };
   mp4parse_parser *parser = mp4parse_new(&io);
@@ -248,8 +249,14 @@ int main(int argc, char* argv[])
   test_new_parser();
   test_arg_validation();
   test_arg_validation_with_parser();
-  test_arg_validation_with_data();
 
+  // Find our test file relative to our executable file path.
+  std::string path(realpath(argv[0], NULL));
+  auto split = path.rfind('/');
+  path.replace(split, path.length() - split, "/minimal.mp4");
+  test_arg_validation_with_data(path);
+
+  // Run any other test files passed on the command line.
   for (auto i = 1; i < argc; ++i) {
     read_file(argv[i]);
   }
