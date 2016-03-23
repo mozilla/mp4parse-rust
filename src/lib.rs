@@ -56,7 +56,7 @@ pub enum Error {
     InvalidData(&'static str),
     /// Parse error caused by limited parser support rather than invalid data.
     Unsupported(&'static str),
-    /// Reflect `byteorder::Error::UnexpectedEOF` for short data.
+    /// Reflect `std::io::ErrorKind::UnexpectedEof` for short data.
     UnexpectedEOF,
     /// Caught panic! or assert! meaning the parser couldn't recover.
     AssertCaught,
@@ -68,15 +68,9 @@ pub enum Error {
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Error {
-        Error::Io(err)
-    }
-}
-
-impl From<byteorder::Error> for Error {
-    fn from(err: byteorder::Error) -> Error {
-        match err {
-            byteorder::Error::UnexpectedEOF => Error::UnexpectedEOF,
-            byteorder::Error::Io(e) => Error::Io(e),
+        match err.kind() {
+            std::io::ErrorKind::UnexpectedEof => Error::UnexpectedEOF,
+            _ => Error::Io(err),
         }
     }
 }
@@ -1328,26 +1322,26 @@ fn track_time_to_ms(time: TrackScaledTime, scale: TrackTimeScale) -> u64 {
     time.0 * 1000000 / scale.0
 }
 
-fn be_i16<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<i16> {
-    src.read_i16::<byteorder::BigEndian>()
+fn be_i16<T: ReadBytesExt>(src: &mut T) -> Result<i16> {
+    src.read_i16::<byteorder::BigEndian>().map_err(From::from)
 }
 
-fn be_i32<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<i32> {
-    src.read_i32::<byteorder::BigEndian>()
+fn be_i32<T: ReadBytesExt>(src: &mut T) -> Result<i32> {
+    src.read_i32::<byteorder::BigEndian>().map_err(From::from)
 }
 
-fn be_i64<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<i64> {
-    src.read_i64::<byteorder::BigEndian>()
+fn be_i64<T: ReadBytesExt>(src: &mut T) -> Result<i64> {
+    src.read_i64::<byteorder::BigEndian>().map_err(From::from)
 }
 
-fn be_u16<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<u16> {
-    src.read_u16::<byteorder::BigEndian>()
+fn be_u16<T: ReadBytesExt>(src: &mut T) -> Result<u16> {
+    src.read_u16::<byteorder::BigEndian>().map_err(From::from)
 }
 
-fn be_u32<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<u32> {
-    src.read_u32::<byteorder::BigEndian>()
+fn be_u32<T: ReadBytesExt>(src: &mut T) -> Result<u32> {
+    src.read_u32::<byteorder::BigEndian>().map_err(From::from)
 }
 
-fn be_u64<T: ReadBytesExt>(src: &mut T) -> byteorder::Result<u64> {
-    src.read_u64::<byteorder::BigEndian>()
+fn be_u64<T: ReadBytesExt>(src: &mut T) -> Result<u64> {
+    src.read_u64::<byteorder::BigEndian>().map_err(From::from)
 }
