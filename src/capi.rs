@@ -229,7 +229,8 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_err
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_count(parser: *const mp4parse_parser) -> u32 {
     // Validate argument from C.
-    assert!(!parser.is_null() && !(*parser).poisoned());
+    assert!(!parser.is_null());
+    assert!(!(*parser).poisoned());
     let context = (*parser).context();
 
     // Make sure the track count fits in a u32.
