@@ -144,12 +144,6 @@ pub struct mp4parse_io {
     pub userdata: *mut std::os::raw::c_void,
 }
 
-// Required for the panic-catching thread in mp4parse_read because raw
-// pointers don't impl Send by default.  This is *only* safe because we wait
-// on the panic-catching thread to complete before returning from
-// mp4parse_read and there's no concurrent access.
-unsafe impl Send for mp4parse_io {}
-
 impl Read for mp4parse_io {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if buf.len() > isize::max_value() as usize {
@@ -202,18 +196,7 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_err
     let mut context = (*parser).context_mut();
     let mut io = (*parser).io_mut();
 
-    let r = if cfg!(not(feature = "fuzz")) {
-        // Parse in a subthread to catch any panics.
-        let task = std::thread::spawn(move || read_mp4(io, context));
-        // The task's JoinHandle will return an error result if the thread
-        // panicked, and will wrap the closure's return'd result in an
-        // Ok(..) otherwise, meaning we could see Ok(Err(Error::..))
-        // here. So map thread failures back to an
-        // mp4parse::Error::AssertCaught.
-        task.join().unwrap_or_else(|_| Err(Error::AssertCaught))
-    } else {
-        read_mp4(io, context)
-    };
+    let r = read_mp4(io, context);
     (*parser).set_poisoned(r.is_err());
     match r {
         Ok(_) => MP4PARSE_OK,
