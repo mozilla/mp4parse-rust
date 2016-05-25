@@ -58,8 +58,6 @@ pub enum Error {
     Unsupported(&'static str),
     /// Reflect `std::io::ErrorKind::UnexpectedEof` for short data.
     UnexpectedEOF,
-    /// Caught panic! or assert! meaning the parser couldn't recover.
-    AssertCaught,
     /// Propagate underlying errors from `std::io`.
     Io(std::io::Error),
     /// read_mp4 terminated without detecting a moov box.

@@ -68,8 +68,6 @@ fn doit() {
                     }
                 }
             }
-        } else if rv == mp4parse_error::MP4PARSE_ERROR_ASSERT {
-            panic!("wrapper thread caught panic");
         }
         mp4parse_free(context);
     }

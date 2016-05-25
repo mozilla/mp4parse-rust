@@ -204,7 +204,6 @@ const char * errorstring(mp4parse_error error)
     case MP4PARSE_ERROR_INVALID: return "Invalid data";
     case MP4PARSE_ERROR_UNSUPPORTED: return "Feature unsupported";
     case MP4PARSE_ERROR_EOF: return "Unexpected end-of-file";
-    case MP4PARSE_ERROR_ASSERT: return "Caught assert or panic";
     case MP4PARSE_ERROR_IO: return "I/O error";
   }
   return "Unknown error";

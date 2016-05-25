@@ -60,8 +60,7 @@ pub enum mp4parse_error {
     MP4PARSE_ERROR_INVALID = 2,
     MP4PARSE_ERROR_UNSUPPORTED = 3,
     MP4PARSE_ERROR_EOF = 4,
-    MP4PARSE_ERROR_ASSERT = 5,
-    MP4PARSE_ERROR_IO = 6,
+    MP4PARSE_ERROR_IO = 5,
 }
 
 #[repr(C)]
@@ -203,7 +202,6 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_err
         Err(Error::NoMoov) | Err(Error::InvalidData(_)) => MP4PARSE_ERROR_INVALID,
         Err(Error::Unsupported(_)) => MP4PARSE_ERROR_UNSUPPORTED,
         Err(Error::UnexpectedEOF) => MP4PARSE_ERROR_EOF,
-        Err(Error::AssertCaught) => MP4PARSE_ERROR_ASSERT,
         Err(Error::Io(_)) => MP4PARSE_ERROR_IO,
     }
 }
