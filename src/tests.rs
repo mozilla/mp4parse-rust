@@ -483,6 +483,51 @@ fn read_dops() {
 }
 
 #[test]
+fn serialize_opus_header() {
+    let opus = super::OpusSpecificBox {
+        version: 0,
+        output_channel_count: 1,
+        pre_skip: 342,
+        input_sample_rate: 24000,
+        output_gain: 0,
+        channel_mapping_family: 0,
+        channel_mapping_table: None,
+    };
+    let mut v = Vec::<u8>::new();
+    super::serialize_opus_header(&opus, &mut v).unwrap();
+    assert!(v.len() == 19);
+    assert!(v == vec![
+            0x4f, 0x70, 0x75, 0x73, 0x48,0x65, 0x61, 0x64,
+            0x00, 0x01, 0x56, 0x01,
+            0xc0, 0x5d, 0x00, 0x00,
+            0x00, 0x00, 0x00,
+    ]);
+    let opus = super::OpusSpecificBox {
+        version: 0,
+        output_channel_count: 6,
+        pre_skip: 152,
+        input_sample_rate: 48000,
+        output_gain: 0,
+        channel_mapping_family: 1,
+        channel_mapping_table: Some(super::ChannelMappingTable {
+            stream_count: 4,
+            coupled_count: 2,
+            channel_mapping: vec![0, 4, 1, 2, 3, 5],
+        }),
+    };
+    let mut v = Vec::<u8>::new();
+    super::serialize_opus_header(&opus, &mut v).unwrap();
+    assert!(v.len() == 27);
+    assert!(v == vec![
+            0x4f, 0x70, 0x75, 0x73, 0x48,0x65, 0x61, 0x64,
+            0x00, 0x06, 0x98, 0x00,
+            0x80, 0xbb, 0x00, 0x00,
+            0x00, 0x00, 0x01, 0x04, 0x02,
+            0x00, 0x04, 0x01, 0x02, 0x03, 0x05,
+    ]);
+}
+
+#[test]
 fn avcc_limit() {
     let mut stream = make_box(BoxSize::Auto, b"avc1", |s| {
         s.append_repeated(0, 6)

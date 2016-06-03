@@ -1024,6 +1024,45 @@ fn read_dops<T: Read>(src: &mut BMFFBox<T>) -> Result<OpusSpecificBox> {
     })
 }
 
+/// Re-serialize the Opus codec-specific config data as an OpusHead packet.
+///
+/// Some decoders expect the initialization data in the format used by the
+/// Ogg and WebM encapsulations. To support this we prepend the 'OpusHead'
+/// tag and byte-swap the data from big- to little-endian relative to the
+/// dOps box.
+fn serialize_opus_header<W: byteorder::WriteBytesExt + std::io::Write>(opus: &OpusSpecificBox, dst: &mut W) -> Result<()> {
+    match dst.write(b"OpusHead") {
+        Err(e) => return Err(Error::from(e)),
+        Ok(bytes) => {
+            if bytes != 8 {
+                return Err(Error::InvalidData("Couldn't write OpusHead tag."));
+            }
+        }
+    }
+    try!(dst.write_u8(opus.version));
+    try!(dst.write_u8(opus.output_channel_count));
+    try!(dst.write_u16::<byteorder::LittleEndian>(opus.pre_skip));
+    try!(dst.write_u32::<byteorder::LittleEndian>(opus.input_sample_rate));
+    try!(dst.write_i16::<byteorder::LittleEndian>(opus.output_gain));
+    try!(dst.write_u8(opus.channel_mapping_family));
+    match opus.channel_mapping_table {
+        None => {}
+        Some(ref table) => {
+            try!(dst.write_u8(table.stream_count));
+            try!(dst.write_u8(table.coupled_count));
+            match dst.write(&table.channel_mapping) {
+                Err(e) => return Err(Error::from(e)),
+                Ok(bytes) => {
+                    if bytes != table.channel_mapping.len() {
+                        return Err(Error::InvalidData("Couldn't write channel mapping table data."));
+                    }
+                }
+            }
+        }
+    };
+    Ok(())
+}
+
 /// Parse a hdlr box.
 fn read_hdlr<T: Read>(src: &mut BMFFBox<T>) -> Result<HandlerBox> {
     let (_, _) = try!(read_fullbox_extra(src));
@@ -1185,6 +1224,8 @@ fn read_audio_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<S
                     return Err(Error::InvalidData("malformed audio sample entry"));
                 }
                 let dops = try!(read_dops(&mut b));
+                let mut file = try!(std::fs::File::create("opus-header.dat").map_err(Error::from));
+                try!(serialize_opus_header(&dops, &mut file));
                 codec_specific = Some(AudioCodecSpecific::OpusSpecificBox(dops));
             }
             _ => try!(skip_box_content(&mut b)),
