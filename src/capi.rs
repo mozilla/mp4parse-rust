@@ -221,13 +221,13 @@ pub unsafe extern fn mp4parse_get_track_count(parser: *const mp4parse_parser) ->
 
 /// Fill the supplied `mp4parse_track_info` with metadata for `track`.
 #[no_mangle]
-pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track: u32, info: *mut mp4parse_track_info) -> mp4parse_error {
+pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track_index: u32, info: *mut mp4parse_track_info) -> mp4parse_error {
     if parser.is_null() || info.is_null() || (*parser).poisoned() {
         return MP4PARSE_ERROR_BADARG;
     }
 
     let context = (*parser).context_mut();
-    let track_index: usize = track as usize;
+    let track_index: usize = track_index as usize;
     let info: &mut mp4parse_track_info = &mut *info;
 
     if track_index >= context.tracks.len() {
@@ -262,18 +262,18 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
 
 /// Fill the supplied `mp4parse_track_audio_info` with metadata for `track`.
 #[no_mangle]
-pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser, track: u32, info: *mut mp4parse_track_audio_info) -> mp4parse_error {
+pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser, track_index: u32, info: *mut mp4parse_track_audio_info) -> mp4parse_error {
     if parser.is_null() || info.is_null() || (*parser).poisoned() {
         return MP4PARSE_ERROR_BADARG;
     }
 
     let context = (*parser).context_mut();
 
-    if track as usize >= context.tracks.len() {
+    if track_index as usize >= context.tracks.len() {
         return MP4PARSE_ERROR_BADARG;
     }
 
-    let track = &context.tracks[track as usize];
+    let track = &context.tracks[track_index as usize];
 
     match track.track_type {
         TrackType::Audio => {}
@@ -299,18 +299,18 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
 
 /// Fill the supplied `mp4parse_track_video_info` with metadata for `track`.
 #[no_mangle]
-pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser, track: u32, info: *mut mp4parse_track_video_info) -> mp4parse_error {
+pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser, track_index: u32, info: *mut mp4parse_track_video_info) -> mp4parse_error {
     if parser.is_null() || info.is_null() || (*parser).poisoned() {
         return MP4PARSE_ERROR_BADARG;
     }
 
     let context = (*parser).context_mut();
 
-    if track as usize >= context.tracks.len() {
+    if track_index as usize >= context.tracks.len() {
         return MP4PARSE_ERROR_BADARG;
     }
 
-    let track = &context.tracks[track as usize];
+    let track = &context.tracks[track_index as usize];
 
     match track.track_type {
         TrackType::Video => {}
