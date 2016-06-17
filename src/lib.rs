@@ -1228,8 +1228,6 @@ fn read_audio_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<S
                     return Err(Error::InvalidData("malformed audio sample entry"));
                 }
                 let dops = try!(read_dops(&mut b));
-                let mut file = try!(std::fs::File::create("opus-header.dat").map_err(Error::from));
-                try!(serialize_opus_header(&dops, &mut file));
                 codec_specific = Some(AudioCodecSpecific::OpusSpecificBox(dops));
             }
             _ => try!(skip_box_content(&mut b)),
