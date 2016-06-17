@@ -1039,7 +1039,11 @@ fn serialize_opus_header<W: byteorder::WriteBytesExt + std::io::Write>(opus: &Op
             }
         }
     }
-    try!(dst.write_u8(opus.version));
+    // In mp4 encapsulation, the version field is 0, but in ogg
+    // it is 1. While decoders generally accept zero as well, write
+    // out the version of the header we're supporting rather than
+    // whatever we parsed out of mp4.
+    try!(dst.write_u8(1));
     try!(dst.write_u8(opus.output_channel_count));
     try!(dst.write_u16::<byteorder::LittleEndian>(opus.pre_skip));
     try!(dst.write_u32::<byteorder::LittleEndian>(opus.input_sample_rate));
