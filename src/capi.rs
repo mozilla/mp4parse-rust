@@ -80,6 +80,7 @@ pub struct mp4parse_track_info {
 }
 
 #[repr(C)]
+#[derive(Default)]
 pub struct mp4parse_track_audio_info {
     pub channels: u16,
     pub bit_depth: u16,
@@ -429,9 +430,7 @@ fn arg_validation() {
                                                           image_height: 0 };
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(std::ptr::null_mut(), 0, &mut dummy_video));
 
-        let mut dummy_audio = mp4parse_track_audio_info { channels: 0,
-                                                          bit_depth: 0,
-                                                          sample_rate: 0 };
+        let mut dummy_audio = Default::default();
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_audio_info(std::ptr::null_mut(), 0, &mut dummy_audio));
     }
 }
@@ -468,9 +467,7 @@ fn arg_validation_with_parser() {
                                                           image_height: 0 };
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(parser, 0, &mut dummy_video));
 
-        let mut dummy_audio = mp4parse_track_audio_info { channels: 0,
-                                                          bit_depth: 0,
-                                                          sample_rate: 0 };
+        let mut dummy_audio = Default::default();
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_audio_info(parser, 0, &mut dummy_audio));
 
         mp4parse_free(parser);
@@ -533,9 +530,7 @@ fn arg_validation_with_data() {
         assert_eq!(video.image_width, 320);
         assert_eq!(video.image_height, 240);
 
-        let mut audio = mp4parse_track_audio_info { channels: 0,
-                                                    bit_depth: 0,
-                                                    sample_rate: 0 };
+        let mut audio = Default::default();
         assert_eq!(MP4PARSE_OK, mp4parse_get_track_audio_info(parser, 1, &mut audio));
         assert_eq!(audio.channels, 2);
         assert_eq!(audio.bit_depth, 16);
@@ -562,9 +557,7 @@ fn arg_validation_with_data() {
         assert_eq!(video.image_width, 0);
         assert_eq!(video.image_height, 0);
 
-        let mut audio = mp4parse_track_audio_info { channels: 0,
-                                                    bit_depth: 0,
-                                                    sample_rate: 0 };
+        let mut audio = Default::default();
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_audio_info(parser, 3, &mut audio));
         assert_eq!(audio.channels, 0);
         assert_eq!(audio.bit_depth, 0);

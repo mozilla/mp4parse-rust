@@ -54,11 +54,7 @@ fn doit() {
                             }
                         }
                         mp4parse_track_type::MP4PARSE_TRACK_TYPE_AUDIO => {
-                            let mut audio = mp4parse_track_audio_info {
-                                channels: 0,
-                                bit_depth: 0,
-                                sample_rate: 0,
-                            };
+                            let mut audio = Default::default();
                             let rv = mp4parse_get_track_audio_info(context, track, &mut audio);
                             if rv == mp4parse_error::MP4PARSE_OK {
                                 println!("  audio: channels={} bit_depth={} sample_rate={}",
