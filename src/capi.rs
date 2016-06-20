@@ -34,6 +34,7 @@
 
 use std;
 use std::io::Read;
+use std::collections::HashMap;
 
 // Symbols we need from our rust api.
 use MediaContext;
@@ -43,6 +44,8 @@ use Error;
 use media_time_to_ms;
 use track_time_to_ms;
 use SampleEntry;
+use AudioCodecSpecific;
+use serialize_opus_header;
 
 // rusty-cheddar's C enum generation doesn't namespace enum members by
 // prefixing them, so we're forced to do it in our member names until
@@ -80,7 +83,22 @@ pub struct mp4parse_track_info {
 }
 
 #[repr(C)]
+pub struct mp4parse_codec_specific_config {
+    pub length: u32,
+    pub data: *const u8,
+}
+
+impl Default for mp4parse_codec_specific_config {
+    fn default() -> Self {
+        mp4parse_codec_specific_config {
+            length: 0,
+            data: std::ptr::null_mut(),
+        }
+    }
+}
+
 #[derive(Default)]
+#[repr(C)]
 pub struct mp4parse_track_audio_info {
     pub channels: u16,
     pub bit_depth: u16,
@@ -88,8 +106,7 @@ pub struct mp4parse_track_audio_info {
     // TODO(kinetik):
     // int32_t profile;
     // int32_t extended_profile; // check types
-    // extra_data
-    // codec_specific_config
+    codec_specific_config: mp4parse_codec_specific_config,
 }
 
 #[repr(C)]
@@ -109,6 +126,7 @@ struct Wrap {
     context: MediaContext,
     io: mp4parse_io,
     poisoned: bool,
+    opus_header: HashMap<u32, Vec<u8>>,
 }
 
 #[repr(C)]
@@ -134,6 +152,10 @@ impl mp4parse_parser {
 
     fn set_poisoned(&mut self, poisoned: bool) {
         self.0.poisoned = poisoned;
+    }
+
+    fn opus_header_mut(&mut self) -> &mut HashMap<u32, Vec<u8>> {
+        &mut self.0.opus_header
     }
 }
 
@@ -174,7 +196,12 @@ pub unsafe extern fn mp4parse_new(io: *const mp4parse_io) -> *mut mp4parse_parse
     if ((*io).read as *mut std::os::raw::c_void).is_null() {
         return std::ptr::null_mut();
     }
-    let parser = Box::new(mp4parse_parser(Wrap { context: MediaContext::new(), io: (*io).clone(), poisoned: false }));
+    let parser = Box::new(mp4parse_parser(Wrap {
+        context: MediaContext::new(),
+        io: (*io).clone(),
+        poisoned: false,
+        opus_header: HashMap::new(),
+    }));
     Box::into_raw(parser)
 }
 
@@ -294,6 +321,35 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
     (*info).channels = audio.channelcount;
     (*info).bit_depth = audio.samplesize;
     (*info).sample_rate = audio.samplerate >> 16; // 16.16 fixed point
+
+    match audio.codec_specific {
+        AudioCodecSpecific::ES_Descriptor(ref v) => {
+            if v.len() > std::u32::MAX as usize {
+                return MP4PARSE_ERROR_INVALID;
+            }
+            (*info).codec_specific_config.length = v.len() as u32;
+            (*info).codec_specific_config.data = v.as_ptr();
+        }
+        AudioCodecSpecific::OpusSpecificBox(ref opus) => {
+            let mut v = Vec::new();
+            match serialize_opus_header(opus, &mut v) {
+                Err(_) => {
+                    return MP4PARSE_ERROR_INVALID;
+                }
+                Ok(_) => {
+                    let header = (*parser).opus_header_mut();
+                    header.insert(track_index, v);
+                    match header.get(&track_index) {
+                        None => {}
+                        Some(v) => {
+                            (*info).codec_specific_config.length = v.len() as u32;
+                            (*info).codec_specific_config.data = v.as_ptr();
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     MP4PARSE_OK
 }
