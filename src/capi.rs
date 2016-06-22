@@ -224,13 +224,23 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_err
     let mut io = (*parser).io_mut();
 
     let r = read_mp4(io, context);
-    (*parser).set_poisoned(r.is_err());
     match r {
         Ok(_) => MP4PARSE_OK,
-        Err(Error::NoMoov) | Err(Error::InvalidData(_)) => MP4PARSE_ERROR_INVALID,
+        Err(Error::NoMoov) | Err(Error::InvalidData(_)) => {
+            // Block further calls. We've probable lost sync.
+            (*parser).set_poisoned(true);
+            MP4PARSE_ERROR_INVALID
+        }
         Err(Error::Unsupported(_)) => MP4PARSE_ERROR_UNSUPPORTED,
         Err(Error::UnexpectedEOF) => MP4PARSE_ERROR_EOF,
-        Err(Error::Io(_)) => MP4PARSE_ERROR_IO,
+        Err(Error::Io(_)) => {
+            // Block further calls after a read failure.
+            // Getting std::io::ErrorKind::UnexpectedEof is normal
+            // but our From trait implementation should have converted
+            // those to our Error::UnexpectedEOF variant.
+            (*parser).set_poisoned(true);
+            MP4PARSE_ERROR_IO
+        }
     }
 }
 
