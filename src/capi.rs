@@ -458,8 +458,10 @@ extern fn valid_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_v
 #[test]
 fn new_parser() {
     let mut dummy_value: u32 = 42;
-    let io = mp4parse_io { read: panic_read,
-                           userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void };
+    let io = mp4parse_io {
+        read: panic_read,
+        userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
+    };
     unsafe {
         let parser = mp4parse_new(&io);
         assert!(!parser.is_null());
@@ -504,8 +506,10 @@ fn arg_validation() {
         assert!(parser.is_null());
 
         let mut dummy_value = 42;
-        let io = mp4parse_io { read: std::mem::transmute(null_mut),
-                               userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void };
+        let io = mp4parse_io {
+            read: std::mem::transmute(null_mut),
+            userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
+        };
         let parser = mp4parse_new(&io);
         assert!(parser.is_null());
 
@@ -521,10 +525,12 @@ fn arg_validation() {
         };
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_info(std::ptr::null_mut(), 0, &mut dummy_info));
 
-        let mut dummy_video = mp4parse_track_video_info { display_width: 0,
-                                                          display_height: 0,
-                                                          image_width: 0,
-                                                          image_height: 0 };
+        let mut dummy_video = mp4parse_track_video_info {
+            display_width: 0,
+            display_height: 0,
+            image_width: 0,
+            image_height: 0,
+        };
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(std::ptr::null_mut(), 0, &mut dummy_video));
 
         let mut dummy_audio = Default::default();
@@ -536,8 +542,10 @@ fn arg_validation() {
 fn arg_validation_with_parser() {
     unsafe {
         let mut dummy_value = 42;
-        let io = mp4parse_io { read: error_read,
-                               userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void };
+        let io = mp4parse_io {
+            read: error_read,
+            userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
+        };
         let parser = mp4parse_new(&io);
         assert!(!parser.is_null());
 
@@ -561,10 +569,12 @@ fn arg_validation_with_parser() {
         };
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_info(parser, 0, &mut dummy_info));
 
-        let mut dummy_video = mp4parse_track_video_info { display_width: 0,
-                                                          display_height: 0,
-                                                          image_width: 0,
-                                                          image_height: 0 };
+        let mut dummy_video = mp4parse_track_video_info {
+            display_width: 0,
+            display_height: 0,
+            image_width: 0,
+            image_height: 0,
+        };
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(parser, 0, &mut dummy_video));
 
         let mut dummy_audio = Default::default();
@@ -579,8 +589,10 @@ fn arg_validation_with_parser() {
 fn get_track_count_poisoned_parser() {
     unsafe {
         let mut dummy_value = 42;
-        let io = mp4parse_io { read: error_read,
-                               userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void };
+        let io = mp4parse_io {
+            read: error_read,
+            userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
+        };
         let parser = mp4parse_new(&io);
         assert!(!parser.is_null());
 
@@ -625,10 +637,12 @@ fn arg_validation_with_data() {
         assert_eq!(info.duration, 61333);
         assert_eq!(info.media_time, 21333);
 
-        let mut video = mp4parse_track_video_info { display_width: 0,
-                                                    display_height: 0,
-                                                    image_width: 0,
-                                                    image_height: 0 };
+        let mut video = mp4parse_track_video_info {
+            display_width: 0,
+            display_height: 0,
+            image_width: 0,
+            image_height: 0,
+        };
         assert_eq!(MP4PARSE_OK, mp4parse_get_track_video_info(parser, 0, &mut video));
         assert_eq!(video.display_width, 320);
         assert_eq!(video.display_height, 240);
