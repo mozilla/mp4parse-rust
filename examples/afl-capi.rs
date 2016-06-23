@@ -30,6 +30,7 @@ fn doit() {
             for track in 0..mp4parse_get_track_count(context) {
                 let mut info = mp4parse_track_info {
                     track_type: mp4parse_track_type::MP4PARSE_TRACK_TYPE_VIDEO,
+                    codec: mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,
                     track_id: 0,
                     duration: 0,
                     media_time: 0,

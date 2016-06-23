@@ -45,6 +45,7 @@ use media_time_to_ms;
 use track_time_to_ms;
 use SampleEntry;
 use AudioCodecSpecific;
+use VideoCodecSpecific;
 use serialize_opus_header;
 
 // rusty-cheddar's C enum generation doesn't namespace enum members by
@@ -74,8 +75,19 @@ pub enum mp4parse_track_type {
 }
 
 #[repr(C)]
+#[derive(PartialEq, Debug)]
+pub enum mp4parse_codec {
+    MP4PARSE_CODEC_UNKNOWN,
+    MP4PARSE_CODEC_AAC,
+    MP4PARSE_CODEC_OPUS,
+    MP4PARSE_CODEC_AVC,
+    MP4PARSE_CODEC_VP9,
+}
+
+#[repr(C)]
 pub struct mp4parse_track_info {
     pub track_type: mp4parse_track_type,
+    pub codec: mp4parse_codec,
     pub track_id: u32,
     pub duration: u64,
     pub media_time: i64, // wants to be u64? understand how elst adjustment works
@@ -276,6 +288,22 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
         TrackType::Video => MP4PARSE_TRACK_TYPE_VIDEO,
         TrackType::Audio => MP4PARSE_TRACK_TYPE_AUDIO,
         TrackType::Unknown => return MP4PARSE_ERROR_UNSUPPORTED,
+    };
+
+    info.codec = match context.tracks[track_index].data {
+        Some(SampleEntry::Audio(ref audio)) => match audio.codec_specific {
+            AudioCodecSpecific::OpusSpecificBox(_) =>
+                mp4parse_codec::MP4PARSE_CODEC_OPUS,
+            AudioCodecSpecific::ES_Descriptor(_) =>
+                mp4parse_codec::MP4PARSE_CODEC_AAC,
+        },
+        Some(SampleEntry::Video(ref video)) => match video.codec_specific {
+            VideoCodecSpecific::VPxConfig(_) =>
+                mp4parse_codec::MP4PARSE_CODEC_VP9,
+            VideoCodecSpecific::AVCConfig(_) =>
+                mp4parse_codec::MP4PARSE_CODEC_AVC,
+        },
+        _ => mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,
     };
 
     // Maybe context & track should just have a single simple is_valid() instead?
@@ -484,10 +512,13 @@ fn arg_validation() {
         // Passing a null mp4parse_parser is an error.
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_read(std::ptr::null_mut()));
 
-        let mut dummy_info = mp4parse_track_info { track_type: MP4PARSE_TRACK_TYPE_VIDEO,
-                                                   track_id: 0,
-                                                   duration: 0,
-                                                   media_time: 0 };
+        let mut dummy_info = mp4parse_track_info {
+            track_type: MP4PARSE_TRACK_TYPE_VIDEO,
+            codec: mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,
+            track_id: 0,
+            duration: 0,
+            media_time: 0,
+        };
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_info(std::ptr::null_mut(), 0, &mut dummy_info));
 
         let mut dummy_video = mp4parse_track_video_info { display_width: 0,
@@ -521,10 +552,13 @@ fn arg_validation_with_parser() {
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(parser, 0, std::ptr::null_mut()));
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_audio_info(parser, 0, std::ptr::null_mut()));
 
-        let mut dummy_info = mp4parse_track_info { track_type: MP4PARSE_TRACK_TYPE_VIDEO,
-                                                   track_id: 0,
-                                                   duration: 0,
-                                                   media_time: 0 };
+        let mut dummy_info = mp4parse_track_info {
+            track_type: MP4PARSE_TRACK_TYPE_VIDEO,
+            codec: mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,
+            track_id: 0,
+            duration: 0,
+            media_time: 0,
+        };
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_info(parser, 0, &mut dummy_info));
 
         let mut dummy_video = mp4parse_track_video_info { display_width: 0,
@@ -570,18 +604,23 @@ fn arg_validation_with_data() {
 
         assert_eq!(2, mp4parse_get_track_count(parser));
 
-        let mut info = mp4parse_track_info { track_type: MP4PARSE_TRACK_TYPE_VIDEO,
-                                             track_id: 0,
-                                             duration: 0,
-                                             media_time: 0 };
+        let mut info = mp4parse_track_info {
+            track_type: MP4PARSE_TRACK_TYPE_VIDEO,
+            codec: mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,
+            track_id: 0,
+            duration: 0,
+            media_time: 0,
+        };
         assert_eq!(MP4PARSE_OK, mp4parse_get_track_info(parser, 0, &mut info));
         assert_eq!(info.track_type, MP4PARSE_TRACK_TYPE_VIDEO);
+        assert_eq!(info.codec, mp4parse_codec::MP4PARSE_CODEC_AVC);
         assert_eq!(info.track_id, 1);
         assert_eq!(info.duration, 40000);
         assert_eq!(info.media_time, 0);
 
         assert_eq!(MP4PARSE_OK, mp4parse_get_track_info(parser, 1, &mut info));
         assert_eq!(info.track_type, MP4PARSE_TRACK_TYPE_AUDIO);
+        assert_eq!(info.codec, mp4parse_codec::MP4PARSE_CODEC_AAC);
         assert_eq!(info.track_id, 2);
         assert_eq!(info.duration, 61333);
         assert_eq!(info.media_time, 21333);
@@ -603,12 +642,16 @@ fn arg_validation_with_data() {
         assert_eq!(audio.sample_rate, 48000);
 
         // Test with an invalid track number.
-        let mut info = mp4parse_track_info { track_type: MP4PARSE_TRACK_TYPE_VIDEO,
-                                             track_id: 0,
-                                             duration: 0,
-                                             media_time: 0 };
+        let mut info = mp4parse_track_info {
+            track_type: MP4PARSE_TRACK_TYPE_VIDEO,
+            codec: mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,
+            track_id: 0,
+            duration: 0,
+            media_time: 0,
+        };
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_info(parser, 3, &mut info));
         assert_eq!(info.track_type, MP4PARSE_TRACK_TYPE_VIDEO);
+        assert_eq!(info.codec, mp4parse_codec::MP4PARSE_CODEC_UNKNOWN);
         assert_eq!(info.track_id, 0);
         assert_eq!(info.duration, 0);
         assert_eq!(info.media_time, 0);
