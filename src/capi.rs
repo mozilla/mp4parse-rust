@@ -258,15 +258,19 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_err
 
 /// Return the number of tracks parsed by previous `mp4parse_read()` call.
 #[no_mangle]
-pub unsafe extern fn mp4parse_get_track_count(parser: *const mp4parse_parser) -> u32 {
-    // Validate argument from C.
-    assert!(!parser.is_null());
-    assert!(!(*parser).poisoned());
+pub unsafe extern fn mp4parse_get_track_count(parser: *const mp4parse_parser, count: *mut u32) -> mp4parse_error {
+    // Validate arguments from C.
+    if parser.is_null() || count.is_null() || (*parser).poisoned() {
+        return MP4PARSE_ERROR_BADARG;
+    }
     let context = (*parser).context();
 
     // Make sure the track count fits in a u32.
-    assert!(context.tracks.len() < u32::max_value() as usize);
-    context.tracks.len() as u32
+    if context.tracks.len() >= u32::max_value() as usize {
+        return MP4PARSE_ERROR_INVALID;
+    }
+    *count = context.tracks.len() as u32;
+    MP4PARSE_OK
 }
 
 /// Fill the supplied `mp4parse_track_info` with metadata for `track`.
@@ -478,10 +482,13 @@ fn free_null_parser() {
 }
 
 #[test]
-#[should_panic(expected = "assertion failed")]
 fn get_track_count_null_parser() {
     unsafe {
-        let _ = mp4parse_get_track_count(std::ptr::null());
+        let mut count: u32 = 0;
+        let rv = mp4parse_get_track_count(std::ptr::null(), std::ptr::null_mut());
+        assert!(rv == MP4PARSE_ERROR_BADARG);
+        let rv = mp4parse_get_track_count(std::ptr::null(), &mut count);
+        assert!(rv == MP4PARSE_ERROR_BADARG);
     }
 }
 
@@ -585,7 +592,6 @@ fn arg_validation_with_parser() {
 }
 
 #[test]
-#[should_panic(expected = "assertion failed")]
 fn get_track_count_poisoned_parser() {
     unsafe {
         let mut dummy_value = 42;
@@ -599,7 +605,9 @@ fn get_track_count_poisoned_parser() {
         // Our mp4parse_io read should simply fail with an error.
         assert_eq!(MP4PARSE_ERROR_IO, mp4parse_read(parser));
 
-        let _ = mp4parse_get_track_count(parser);
+        let mut count: u32 = 0;
+        let rv = mp4parse_get_track_count(parser, &mut count);
+        assert!(rv == MP4PARSE_ERROR_BADARG);
     }
 }
 
@@ -614,7 +622,9 @@ fn arg_validation_with_data() {
 
         assert_eq!(MP4PARSE_OK, mp4parse_read(parser));
 
-        assert_eq!(2, mp4parse_get_track_count(parser));
+        let mut count: u32 = 0;
+        assert_eq!(MP4PARSE_OK, mp4parse_get_track_count(parser, &mut count));
+        assert_eq!(2, count);
 
         let mut info = mp4parse_track_info {
             track_type: MP4PARSE_TRACK_TYPE_VIDEO,

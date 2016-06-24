@@ -27,7 +27,13 @@ fn doit() {
         let context = mp4parse_new(&io);
         let rv = mp4parse_read(context);
         if rv == mp4parse_error::MP4PARSE_OK {
-            for track in 0..mp4parse_get_track_count(context) {
+            let count = {
+                let mut count = 0;
+                let rv = mp4parse_get_track_count(context, &mut count);
+                assert!(rv == mp4parse_error::MP4PARSE_OK);
+                count
+            };
+            for track in 0..count {
                 let mut info = mp4parse_track_info {
                     track_type: mp4parse_track_type::MP4PARSE_TRACK_TYPE_VIDEO,
                     codec: mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,

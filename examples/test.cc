@@ -128,10 +128,12 @@ void test_arg_validation_with_data(const std::string& filename)
   mp4parse_parser *parser = mp4parse_new(&io);
   assert(parser != nullptr);
 
-  int32_t rv = mp4parse_read(parser);
+  mp4parse_error rv = mp4parse_read(parser);
   assert(rv == MP4PARSE_OK);
 
-  uint32_t tracks = mp4parse_get_track_count(parser);
+  uint32_t tracks;
+  rv = mp4parse_get_track_count(parser, &tracks);
+  assert(rv == MP4PARSE_OK);
   assert(tracks == 2);
 
   mp4parse_track_info info;
@@ -226,7 +228,9 @@ int32_t read_file(const char* filename)
     fprintf(stderr, "Parsing failed: %s\n", errorstring(rv));
     return rv;
   }
-  uint32_t tracks = mp4parse_get_track_count(parser);
+  uint32_t tracks;
+  rv = mp4parse_get_track_count(parser, &tracks);
+  assert(rv == MP4PARSE_OK);
   fprintf(stderr, "%u tracks returned to C code.\n", tracks);
 
   for (uint32_t i = 0; i < tracks; ++i) {
