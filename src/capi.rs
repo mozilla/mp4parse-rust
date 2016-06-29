@@ -266,7 +266,7 @@ pub unsafe extern fn mp4parse_get_track_count(parser: *const mp4parse_parser, co
     let context = (*parser).context();
 
     // Make sure the track count fits in a u32.
-    if context.tracks.len() >= u32::max_value() as usize {
+    if context.tracks.len() > u32::max_value() as usize {
         return MP4PARSE_ERROR_INVALID;
     }
     *count = context.tracks.len() as u32;
