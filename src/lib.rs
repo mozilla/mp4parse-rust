@@ -1151,16 +1151,14 @@ fn read_video_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<S
         check_parser_state!(b.content);
     }
 
-    if codec_specific.is_none() {
-        return Err(Error::InvalidData("malformed video sample entry"));
-    }
-
-    Ok(SampleEntry::Video(VideoSampleEntry {
-        data_reference_index: data_reference_index,
-        width: width,
-        height: height,
-        codec_specific: codec_specific.unwrap(),
-    }))
+    codec_specific
+        .map(|codec_specific| SampleEntry::Video(VideoSampleEntry {
+            data_reference_index: data_reference_index,
+            width: width,
+            height: height,
+            codec_specific: codec_specific,
+        }))
+        .ok_or_else(|| Error::InvalidData("malformed video sample entry"))
 }
 
 /// Parse an audio description inside an stsd box.
@@ -1235,17 +1233,15 @@ fn read_audio_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<S
         check_parser_state!(b.content);
     }
 
-    if codec_specific.is_none() {
-        return Err(Error::InvalidData("malformed audio sample entry"));
-    }
-
-    Ok(SampleEntry::Audio(AudioSampleEntry {
-        data_reference_index: data_reference_index,
-        channelcount: channelcount,
-        samplesize: samplesize,
-        samplerate: samplerate,
-        codec_specific: codec_specific.unwrap(),
-    }))
+    codec_specific
+        .map(|codec_specific| SampleEntry::Audio(AudioSampleEntry {
+            data_reference_index: data_reference_index,
+            channelcount: channelcount,
+            samplesize: samplesize,
+            samplerate: samplerate,
+            codec_specific: codec_specific,
+        }))
+        .ok_or_else(|| Error::InvalidData("malformed audio sample entry"))
 }
 
 /// Parse a stsd box.
