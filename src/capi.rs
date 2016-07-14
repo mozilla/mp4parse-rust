@@ -310,22 +310,34 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
         _ => mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,
     };
 
-    // Maybe context & track should just have a single simple is_valid() instead?
-    if context.timescale.is_none() ||
-       context.tracks[track_index].timescale.is_none() ||
-       context.tracks[track_index].duration.is_none() ||
-       context.tracks[track_index].track_id.is_none() {
-        return MP4PARSE_ERROR_INVALID;
-    }
-
     let track = &context.tracks[track_index];
+
+    let track_timescale = match track.timescale {
+        Some(timescale) => timescale,
+        None => return MP4PARSE_ERROR_INVALID,
+    };
+    let context_timescale = match context.timescale {
+        Some(timescale) => timescale,
+        None => return MP4PARSE_ERROR_INVALID,
+    };
     info.media_time = track.media_time.map_or(0, |media_time| {
-        track_time_to_ms(media_time, track.timescale.unwrap()) as i64
+        track_time_to_ms(media_time, track_timescale) as i64
     }) - track.empty_duration.map_or(0, |empty_duration| {
-        media_time_to_ms(empty_duration, context.timescale.unwrap()) as i64
+        media_time_to_ms(empty_duration, context_timescale) as i64
     });
-    info.duration = track_time_to_ms(track.duration.unwrap(), track.timescale.unwrap());
-    info.track_id = track.track_id.unwrap();
+
+    let duration_ms = track.duration.map(|duration| {
+        track_time_to_ms(duration, track_timescale)
+    });
+    info.duration = match duration_ms {
+        Some(duration_ms) => duration_ms,
+        None => return MP4PARSE_ERROR_INVALID,
+    };
+
+    info.track_id = match track.track_id {
+        Some(track_id) => track_id,
+        None => return MP4PARSE_ERROR_INVALID,
+    };
 
     MP4PARSE_OK
 }
