@@ -18,3 +18,10 @@ script:
   - cargo build --verbose
   - cargo test --verbose
   - make -C examples
+  - cargo doc
+
+deploy:
+  provider: surge
+  project: ./target/doc/
+  domain: mp4parse-docs.surge.sh
+  skip_cleanup: true
