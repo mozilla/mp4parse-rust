@@ -312,27 +312,21 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
 
     let track = &context.tracks[track_index];
 
-    let track_timescale = match track.timescale {
-        Some(timescale) => timescale,
-        None => return MP4PARSE_ERROR_INVALID,
-    };
-    let context_timescale = match context.timescale {
-        Some(timescale) => timescale,
-        None => return MP4PARSE_ERROR_INVALID,
-    };
-    info.media_time = track.media_time.map_or(0, |media_time| {
-        track_time_to_ms(media_time, track_timescale) as i64
-    }) - track.empty_duration.map_or(0, |empty_duration| {
-        media_time_to_ms(empty_duration, context_timescale) as i64
-    });
+    if let (Some(track_timescale),
+            Some(context_timescale),
+            Some(track_duration)) = (track.timescale,
+                                     context.timescale,
+                                     track.duration) {
+        info.media_time = track.media_time.map_or(0, |media_time| {
+            track_time_to_ms(media_time, track_timescale) as i64
+        }) - track.empty_duration.map_or(0, |empty_duration| {
+            media_time_to_ms(empty_duration, context_timescale) as i64
+        });
 
-    let duration_ms = track.duration.map(|duration| {
-        track_time_to_ms(duration, track_timescale)
-    });
-    info.duration = match duration_ms {
-        Some(duration_ms) => duration_ms,
-        None => return MP4PARSE_ERROR_INVALID,
-    };
+        info.duration = track_time_to_ms(track_duration, track_timescale);
+    } else {
+        return MP4PARSE_ERROR_INVALID
+    }
 
     info.track_id = match track.track_id {
         Some(track_id) => track_id,
