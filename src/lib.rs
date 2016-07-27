@@ -270,7 +270,7 @@ struct OpusSpecificBox {
 }
 
 /// Internal data structures.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct MediaContext {
     timescale: Option<MediaTimeScale>,
     /// Tracks found in the file.
@@ -279,10 +279,7 @@ pub struct MediaContext {
 
 impl MediaContext {
     pub fn new() -> MediaContext {
-        MediaContext {
-            timescale: None,
-            tracks: Vec::new(),
-        }
+        Default::default()
     }
 }
 
@@ -291,6 +288,10 @@ enum TrackType {
     Audio,
     Video,
     Unknown,
+}
+
+impl Default for TrackType {
+    fn default() -> Self { TrackType::Unknown }
 }
 
 /// The media's global (mvhd) timescale.
@@ -309,7 +310,7 @@ struct TrackTimeScale(u64, usize);
 #[derive(Debug, Copy, Clone)]
 struct TrackScaledTime(u64, usize);
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Track {
     id: usize,
     track_type: TrackType,
@@ -325,18 +326,7 @@ struct Track {
 
 impl Track {
     fn new(id: usize) -> Track {
-        Track {
-            id: id,
-            track_type: TrackType::Unknown,
-            empty_duration: None,
-            media_time: None,
-            timescale: None,
-            duration: None,
-            track_id: None,
-            mime_type: String::new(),
-            data: None,
-            tkhd: None,
-        }
+        Track { id: id, ..Default::default() }
     }
 }
 
@@ -454,7 +444,7 @@ macro_rules! check_parser_state {
 
 /// Read the contents of a box, including sub boxes.
 ///
-/// Metadata is accumulated in the passed-through MediaContext struct,
+/// Metadata is accumulated in the passed-through `MediaContext` struct,
 /// which can be examined later.
 pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     let mut found_ftyp = false;
@@ -985,7 +975,7 @@ fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
     })
 }
 
-/// Parse OpusSpecificBox.
+/// Parse `OpusSpecificBox`.
 fn read_dops<T: Read>(src: &mut BMFFBox<T>) -> Result<OpusSpecificBox> {
     let version = try!(src.read_u8());
     if version != 0 {
@@ -1024,10 +1014,10 @@ fn read_dops<T: Read>(src: &mut BMFFBox<T>) -> Result<OpusSpecificBox> {
     })
 }
 
-/// Re-serialize the Opus codec-specific config data as an OpusHead packet.
+/// Re-serialize the Opus codec-specific config data as an `OpusHead` packet.
 ///
 /// Some decoders expect the initialization data in the format used by the
-/// Ogg and WebM encapsulations. To support this we prepend the 'OpusHead'
+/// Ogg and WebM encapsulations. To support this we prepend the `OpusHead`
 /// tag and byte-swap the data from big- to little-endian relative to the
 /// dOps box.
 fn serialize_opus_header<W: byteorder::WriteBytesExt + std::io::Write>(opus: &OpusSpecificBox, dst: &mut W) -> Result<()> {
