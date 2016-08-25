@@ -269,6 +269,7 @@ pub struct OpusSpecificBox {
 #[derive(Debug, Default)]
 pub struct MediaContext {
     pub timescale: Option<MediaTimeScale>,
+    pub has_mvex: bool,
     /// Tracks found in the file.
     pub tracks: Vec<Track>,
 }
@@ -306,6 +307,21 @@ pub struct TrackTimeScale(pub u64, pub usize);
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct TrackScaledTime(pub u64, pub usize);
 
+/// A fragmented file contains no sample data in stts, stsc, and stco.
+#[derive(Debug, Default)]
+pub struct EmptySampleTableBoxes {
+    pub empty_stts : bool,
+    pub empty_stsc : bool,
+    pub empty_stco : bool,
+}
+
+/// Check boxes contain data.
+impl EmptySampleTableBoxes {
+    pub fn all_empty(&self) -> bool {
+        self.empty_stts & self.empty_stsc & self.empty_stco
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Track {
     id: usize,
@@ -316,6 +332,7 @@ pub struct Track {
     pub duration: Option<TrackScaledTime>,
     pub track_id: Option<u32>,
     pub mime_type: String,
+    pub empty_sample_boxes: EmptySampleTableBoxes,
     pub data: Option<SampleEntry>,
     pub tkhd: Option<TrackHeaderBox>, // TODO(kinetik): find a nicer way to export this.
 }
@@ -519,6 +536,10 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: &mut MediaContext) -> Result<
                 try!(read_trak(&mut b, &mut track));
                 context.tracks.push(track);
             }
+            BoxType::MovieExtendsBox => {
+                context.has_mvex = true;
+                try!(skip_box_content(&mut b));
+            }
             _ => try!(skip_box_content(&mut b)),
         };
         check_parser_state!(b.content);
@@ -640,10 +661,12 @@ fn read_stbl<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
             }
             BoxType::TimeToSampleBox => {
                 let stts = try!(read_stts(&mut b));
+                track.empty_sample_boxes.empty_stts = stts.samples.is_empty();
                 log!("{:?}", stts);
             }
             BoxType::SampleToChunkBox => {
                 let stsc = try!(read_stsc(&mut b));
+                track.empty_sample_boxes.empty_stsc = stsc.samples.is_empty();
                 log!("{:?}", stsc);
             }
             BoxType::SampleSizeBox => {
@@ -652,6 +675,7 @@ fn read_stbl<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
             }
             BoxType::ChunkOffsetBox => {
                 let stco = try!(read_stco(&mut b));
+                track.empty_sample_boxes.empty_stco = stco.offsets.is_empty();
                 log!("{:?}", stco);
             }
             BoxType::ChunkLargeOffsetBox => {

@@ -460,6 +460,32 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
     MP4PARSE_OK
 }
 
+// A fragmented file needs mvex table and contains no data in stts, stsc, and stco boxes.
+#[no_mangle]
+pub unsafe extern fn mp4parse_is_fragmented(parser: *mut mp4parse_parser, track_id: u32, fragmented: *mut u8) -> mp4parse_error {
+    if parser.is_null() || (*parser).poisoned() {
+        return MP4PARSE_ERROR_BADARG;
+    }
+
+    let context = (*parser).context_mut();
+    let tracks = &context.tracks;
+    (*fragmented) = false as u8;
+
+    if !context.has_mvex {
+        return MP4PARSE_OK;
+    }
+
+    // check sample tables.
+    let mut iter = tracks.iter();
+    match iter.find(|track| track.track_id == Some(track_id)) {
+        Some(track) if track.empty_sample_boxes.all_empty() => (*fragmented) = true as u8,
+        Some(_) => {},
+        None => return MP4PARSE_ERROR_BADARG,
+    }
+
+    MP4PARSE_OK
+}
+
 #[cfg(test)]
 extern fn panic_read(_: *mut u8, _: usize, _: *mut std::os::raw::c_void) -> isize {
     panic!("panic_read shouldn't be called in these tests");
