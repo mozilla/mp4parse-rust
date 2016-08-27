@@ -115,12 +115,12 @@ struct MovieHeaderBox {
 
 /// Track header box 'tkhd'
 #[derive(Debug, Clone)]
-struct TrackHeaderBox {
+pub struct TrackHeaderBox {
     track_id: u32,
-    disabled: bool,
-    duration: u64,
-    width: u32,
-    height: u32,
+    pub disabled: bool,
+    pub duration: u64,
+    pub width: u32,
+    pub height: u32,
 }
 
 /// Edit list box 'elst'
@@ -201,7 +201,7 @@ struct SampleDescriptionBox {
 }
 
 #[derive(Debug, Clone)]
-enum SampleEntry {
+pub enum SampleEntry {
     Audio(AudioSampleEntry),
     Video(VideoSampleEntry),
     Unknown,
@@ -209,45 +209,45 @@ enum SampleEntry {
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone)]
-enum AudioCodecSpecific {
+pub enum AudioCodecSpecific {
     ES_Descriptor(Vec<u8>),
     OpusSpecificBox(OpusSpecificBox),
 }
 
 #[derive(Debug, Clone)]
-struct AudioSampleEntry {
+pub struct AudioSampleEntry {
     data_reference_index: u16,
     channelcount: u16,
     samplesize: u16,
-    samplerate: u32,
-    codec_specific: AudioCodecSpecific,
+    pub samplerate: u32,
+    pub codec_specific: AudioCodecSpecific,
 }
 
 #[derive(Debug, Clone)]
-enum VideoCodecSpecific {
+pub enum VideoCodecSpecific {
     AVCConfig(Vec<u8>),
     VPxConfig(VPxConfigBox),
 }
 
 #[derive(Debug, Clone)]
-struct VideoSampleEntry {
+pub struct VideoSampleEntry {
     data_reference_index: u16,
-    width: u16,
-    height: u16,
-    codec_specific: VideoCodecSpecific,
+    pub width: u16,
+    pub height: u16,
+    pub codec_specific: VideoCodecSpecific,
 }
 
 /// Represent a Video Partition Codec Configuration 'vpcC' box (aka vp9).
 #[derive(Debug, Clone)]
-struct VPxConfigBox {
+pub struct VPxConfigBox {
     profile: u8,
     level: u8,
-    bit_depth: u8,
-    color_space: u8, // Really an enum
-    chroma_subsampling: u8,
+    pub bit_depth: u8,
+    pub color_space: u8, // Really an enum
+    pub chroma_subsampling: u8,
     transfer_function: u8,
     video_full_range: bool,
-    codec_init: Vec<u8>, // Empty for vp8/vp9.
+    pub codec_init: Vec<u8>, // Empty for vp8/vp9.
 }
 
 #[derive(Debug, Clone)]
@@ -259,8 +259,8 @@ struct ChannelMappingTable {
 
 /// Represent an OpusSpecificBox 'dOps'
 #[derive(Debug, Clone)]
-struct OpusSpecificBox {
-    version: u8,
+pub struct OpusSpecificBox {
+    pub version: u8,
     output_channel_count: u8,
     pre_skip: u16,
     input_sample_rate: u32,
@@ -274,7 +274,7 @@ struct OpusSpecificBox {
 pub struct MediaContext {
     timescale: Option<MediaTimeScale>,
     /// Tracks found in the file.
-    tracks: Vec<Track>,
+    pub tracks: Vec<Track>,
 }
 
 impl MediaContext {
@@ -284,7 +284,7 @@ impl MediaContext {
 }
 
 #[derive(Debug)]
-enum TrackType {
+pub enum TrackType {
     Audio,
     Video,
     Unknown,
@@ -311,17 +311,17 @@ struct TrackTimeScale(u64, usize);
 struct TrackScaledTime(u64, usize);
 
 #[derive(Debug, Default)]
-struct Track {
+pub struct Track {
     id: usize,
-    track_type: TrackType,
+    pub track_type: TrackType,
     empty_duration: Option<MediaScaledTime>,
     media_time: Option<TrackScaledTime>,
     timescale: Option<TrackTimeScale>,
     duration: Option<TrackScaledTime>,
     track_id: Option<u32>,
-    mime_type: String,
-    data: Option<SampleEntry>,
-    tkhd: Option<TrackHeaderBox>, // TODO(kinetik): find a nicer way to export this.
+    pub mime_type: String,
+    pub data: Option<SampleEntry>,
+    pub tkhd: Option<TrackHeaderBox>, // TODO(kinetik): find a nicer way to export this.
 }
 
 impl Track {
