@@ -1338,17 +1338,6 @@ fn read_fixed_length_pascal_string<T: Read>(src: &mut T, size: usize) -> Result<
     String::from_utf8(buf).map_err(From::from)
 }
 
-fn media_time_to_ms(time: MediaScaledTime, scale: MediaTimeScale) -> u64 {
-    assert!(scale.0 != 0);
-    time.0 * 1000000 / scale.0
-}
-
-fn track_time_to_ms(time: TrackScaledTime, scale: TrackTimeScale) -> u64 {
-    assert!(time.1 == scale.1);
-    assert!(scale.0 != 0);
-    time.0 * 1000000 / scale.0
-}
-
 fn be_i16<T: ReadBytesExt>(src: &mut T) -> Result<i16> {
     src.read_i16::<byteorder::BigEndian>().map_err(From::from)
 }
