@@ -218,7 +218,7 @@ pub enum AudioCodecSpecific {
 pub struct AudioSampleEntry {
     data_reference_index: u16,
     channelcount: u16,
-    samplesize: u16,
+    pub samplesize: u16,
     pub samplerate: u32,
     pub codec_specific: AudioCodecSpecific,
 }
@@ -272,7 +272,7 @@ pub struct OpusSpecificBox {
 /// Internal data structures.
 #[derive(Debug, Default)]
 pub struct MediaContext {
-    timescale: Option<MediaTimeScale>,
+    pub timescale: Option<MediaTimeScale>,
     /// Tracks found in the file.
     pub tracks: Vec<Track>,
 }
@@ -295,29 +295,29 @@ impl Default for TrackType {
 }
 
 /// The media's global (mvhd) timescale.
-#[derive(Debug, Copy, Clone)]
-struct MediaTimeScale(u64);
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MediaTimeScale(pub u64);
 
 /// A time scaled by the media's global (mvhd) timescale.
-#[derive(Debug, Copy, Clone)]
-struct MediaScaledTime(u64);
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct MediaScaledTime(pub u64);
 
 /// The track's local (mdhd) timescale.
-#[derive(Debug, Copy, Clone)]
-struct TrackTimeScale(u64, usize);
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct TrackTimeScale(pub u64, pub usize);
 
 /// A time scaled by the track's local (mdhd) timescale.
-#[derive(Debug, Copy, Clone)]
-struct TrackScaledTime(u64, usize);
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct TrackScaledTime(pub u64, pub usize);
 
 #[derive(Debug, Default)]
 pub struct Track {
     id: usize,
     pub track_type: TrackType,
-    empty_duration: Option<MediaScaledTime>,
-    media_time: Option<TrackScaledTime>,
-    timescale: Option<TrackTimeScale>,
-    duration: Option<TrackScaledTime>,
+    pub empty_duration: Option<MediaScaledTime>,
+    pub media_time: Option<TrackScaledTime>,
+    pub timescale: Option<TrackTimeScale>,
+    pub duration: Option<TrackScaledTime>,
     track_id: Option<u32>,
     pub mime_type: String,
     pub data: Option<SampleEntry>,
