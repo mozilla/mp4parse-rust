@@ -1020,7 +1020,7 @@ fn read_dops<T: Read>(src: &mut BMFFBox<T>) -> Result<OpusSpecificBox> {
 /// Ogg and WebM encapsulations. To support this we prepend the `OpusHead`
 /// tag and byte-swap the data from big- to little-endian relative to the
 /// dOps box.
-fn serialize_opus_header<W: byteorder::WriteBytesExt + std::io::Write>(opus: &OpusSpecificBox, dst: &mut W) -> Result<()> {
+pub fn serialize_opus_header<W: byteorder::WriteBytesExt + std::io::Write>(opus: &OpusSpecificBox, dst: &mut W) -> Result<()> {
     match dst.write(b"OpusHead") {
         Err(e) => return Err(Error::from(e)),
         Ok(bytes) => {
@@ -1336,17 +1336,6 @@ fn read_fixed_length_pascal_string<T: Read>(src: &mut T, size: usize) -> Result<
     let buf = try!(read_buf(src, len));
     try!(skip(src, size - 1 - buf.len()));
     String::from_utf8(buf).map_err(From::from)
-}
-
-fn media_time_to_ms(time: MediaScaledTime, scale: MediaTimeScale) -> u64 {
-    assert!(scale.0 != 0);
-    time.0 * 1000000 / scale.0
-}
-
-fn track_time_to_ms(time: TrackScaledTime, scale: TrackTimeScale) -> u64 {
-    assert!(time.1 == scale.1);
-    assert!(scale.0 != 0);
-    time.0 * 1000000 / scale.0
 }
 
 fn be_i16<T: ReadBytesExt>(src: &mut T) -> Result<i16> {

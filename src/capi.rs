@@ -41,11 +41,13 @@ use MediaContext;
 use TrackType;
 use read_mp4;
 use Error;
-use media_time_to_ms;
-use track_time_to_ms;
 use SampleEntry;
 use AudioCodecSpecific;
 use VideoCodecSpecific;
+use MediaTimeScale;
+use MediaScaledTime;
+use TrackTimeScale;
+use TrackScaledTime;
 use serialize_opus_header;
 
 // rusty-cheddar's C enum generation doesn't namespace enum members by
@@ -271,6 +273,17 @@ pub unsafe extern fn mp4parse_get_track_count(parser: *const mp4parse_parser, co
     }
     *count = context.tracks.len() as u32;
     MP4PARSE_OK
+}
+
+fn media_time_to_ms(time: MediaScaledTime, scale: MediaTimeScale) -> u64 {
+    assert!(scale.0 != 0);
+    time.0 * 1000000 / scale.0
+}
+
+fn track_time_to_ms(time: TrackScaledTime, scale: TrackTimeScale) -> u64 {
+    assert!(time.1 == scale.1);
+    assert!(scale.0 != 0);
+    time.0 * 1000000 / scale.0
 }
 
 /// Fill the supplied `mp4parse_track_info` with metadata for `track`.
