@@ -9,9 +9,9 @@ extern crate mp4parse as mp4;
 use std::io::{Cursor, Read};
 use std::fs::File;
 
-// Took from https://github.com/GuillaumeGomez/audio-video-metadata/blob/9dff40f565af71d5502e03a2e78ae63df95cfd40/src/metadata.rs#L53
+// Taken from https://github.com/GuillaumeGomez/audio-video-metadata/blob/9dff40f565af71d5502e03a2e78ae63df95cfd40/src/metadata.rs#L53
 #[test]
-fn check_mp4() {
+fn public_api() {
     let mut fd = File::open("examples/minimal.mp4").expect("Unknown file");
     let mut buf = Vec::new();
     fd.read_to_end(&mut buf).expect("File error");
