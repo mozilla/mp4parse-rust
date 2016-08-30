@@ -5,7 +5,7 @@
 //! # Examples
 //!
 //! ```rust
-//! extern crate mp4parse;
+//! extern crate mp4parse_capi;
 //! use std::io::Read;
 //!
 //! extern fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
@@ -18,13 +18,15 @@
 //! }
 //!
 //! let mut file = std::fs::File::open("examples/minimal.mp4").unwrap();
-//! let io = mp4parse::mp4parse_io { read: buf_read,
-//!                                  userdata: &mut file as *mut _ as *mut std::os::raw::c_void };
+//! let io = mp4parse_capi::mp4parse_io {
+//!     read: buf_read,
+//!     userdata: &mut file as *mut _ as *mut std::os::raw::c_void
+//! };
 //! unsafe {
-//!     let parser = mp4parse::mp4parse_new(&io);
-//!     let rv = mp4parse::mp4parse_read(parser);
-//!     assert_eq!(rv, mp4parse::mp4parse_error::MP4PARSE_OK);
-//!     mp4parse::mp4parse_free(parser);
+//!     let parser = mp4parse_capi::mp4parse_new(&io);
+//!     let rv = mp4parse_capi::mp4parse_read(parser);
+//!     assert_eq!(rv, mp4parse_capi::mp4parse_error::MP4PARSE_OK);
+//!     mp4parse_capi::mp4parse_free(parser);
 //! }
 //! ```
 
@@ -32,23 +34,24 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-use std;
+extern crate mp4parse;
+
 use std::io::Read;
 use std::collections::HashMap;
 
 // Symbols we need from our rust api.
-use MediaContext;
-use TrackType;
-use read_mp4;
-use Error;
-use SampleEntry;
-use AudioCodecSpecific;
-use VideoCodecSpecific;
-use MediaTimeScale;
-use MediaScaledTime;
-use TrackTimeScale;
-use TrackScaledTime;
-use serialize_opus_header;
+use mp4parse::MediaContext;
+use mp4parse::TrackType;
+use mp4parse::read_mp4;
+use mp4parse::Error;
+use mp4parse::SampleEntry;
+use mp4parse::AudioCodecSpecific;
+use mp4parse::VideoCodecSpecific;
+use mp4parse::MediaTimeScale;
+use mp4parse::MediaScaledTime;
+use mp4parse::TrackTimeScale;
+use mp4parse::TrackScaledTime;
+use mp4parse::serialize_opus_header;
 
 // rusty-cheddar's C enum generation doesn't namespace enum members by
 // prefixing them, so we're forced to do it in our member names until

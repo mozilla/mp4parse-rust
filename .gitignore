@@ -1,7 +1,7 @@
-/target
-/Cargo.lock
+target
+Cargo.lock
 *.o
 libmp4parse.a*
 mp4parse.d
 examples/test
-include/mp4parse.h
+mp4parse_capi/include/mp4parse.h
