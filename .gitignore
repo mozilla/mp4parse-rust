@@ -1,7 +1,10 @@
-target
-Cargo.lock
-*.o
-libmp4parse.a*
-mp4parse.d
-examples/test
+mp4parse/Cargo.lock
+mp4parse/target/
+mp4parse_capi/Cargo.lock
+mp4parse_capi/target/
 mp4parse_capi/include/mp4parse.h
+mp4parse_capi/examples/test
+mp4parse_capi/examples/libmp4parse.a
+mp4parse_capi/examples/libmp4parse.a.out
+mp4parse_capi/examples/mp4parse.d
+mp4parse_capi/examples/test.o
