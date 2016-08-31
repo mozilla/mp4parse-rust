@@ -17,7 +17,7 @@
 //!    }
 //! }
 //!
-//! let mut file = std::fs::File::open("examples/minimal.mp4").unwrap();
+//! let mut file = std::fs::File::open("../mp4parse/tests/minimal.mp4").unwrap();
 //! let io = mp4parse_capi::mp4parse_io {
 //!     read: buf_read,
 //!     userdata: &mut file as *mut _ as *mut std::os::raw::c_void
@@ -636,7 +636,7 @@ fn get_track_count_poisoned_parser() {
 #[test]
 fn arg_validation_with_data() {
     unsafe {
-        let mut file = std::fs::File::open("examples/minimal.mp4").unwrap();
+        let mut file = std::fs::File::open("../mp4parse/tests/minimal.mp4").unwrap();
         let io = mp4parse_io { read: valid_read,
                                userdata: &mut file as *mut _ as *mut std::os::raw::c_void };
         let parser = mp4parse_new(&io);
