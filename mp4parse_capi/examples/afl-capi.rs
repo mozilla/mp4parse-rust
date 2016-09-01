@@ -1,6 +1,6 @@
-extern crate mp4parse;
+extern crate mp4parse_capi;
 
-use mp4parse::*;
+use mp4parse_capi::*;
 
 #[cfg(feature = "fuzz")]
 #[macro_use]

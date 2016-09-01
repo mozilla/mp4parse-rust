@@ -13,10 +13,6 @@ use byteorder::ReadBytesExt;
 use std::io::{Read, Take};
 use std::cmp;
 
-// Expose C api wrapper.
-pub mod capi;
-pub use capi::*;
-
 mod boxes;
 use boxes::BoxType;
 
@@ -109,7 +105,7 @@ struct FileTypeBox {
 /// Movie header box 'mvhd'.
 #[derive(Debug)]
 struct MovieHeaderBox {
-    timescale: u32,
+    pub timescale: u32,
     duration: u64,
 }
 
@@ -217,7 +213,7 @@ pub enum AudioCodecSpecific {
 #[derive(Debug, Clone)]
 pub struct AudioSampleEntry {
     data_reference_index: u16,
-    channelcount: u16,
+    pub channelcount: u16,
     pub samplesize: u16,
     pub samplerate: u32,
     pub codec_specific: AudioCodecSpecific,
@@ -318,7 +314,7 @@ pub struct Track {
     pub media_time: Option<TrackScaledTime>,
     pub timescale: Option<TrackTimeScale>,
     pub duration: Option<TrackScaledTime>,
-    track_id: Option<u32>,
+    pub track_id: Option<u32>,
     pub mime_type: String,
     pub data: Option<SampleEntry>,
     pub tkhd: Option<TrackHeaderBox>, // TODO(kinetik): find a nicer way to export this.
