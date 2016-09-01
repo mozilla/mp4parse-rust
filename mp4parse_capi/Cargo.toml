@@ -20,7 +20,7 @@ exclude = [
 build = "build.rs"
 
 [dependencies]
-"mp4parse" = {path = "../mp4parse"}
+"mp4parse" = {version = "0.5.0", path = "../mp4parse"}
 
 [build-dependencies]
 rusty-cheddar = "0.3.2"
