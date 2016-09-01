@@ -17,7 +17,7 @@ env:
 script:
   - (cd mp4parse && cargo test --verbose)
   - (cd mp4parse_capi && cargo test --verbose)
-  - make -C mp4parse_capi/examples
+  - make -C mp4parse_capi/examples check
   - (cd mp4parse_capi && cargo doc)
 
 deploy:
