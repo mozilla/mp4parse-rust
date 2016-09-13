@@ -291,6 +291,22 @@ impl Default for TrackType {
     fn default() -> Self { TrackType::Unknown }
 }
 
+#[derive(Debug)]
+pub enum CodecType {
+    Unknown,
+    AAC,
+    Opus,
+    H264,
+    VP9,
+    VP8,
+    EncryptedVideo,
+    EncryptedAudio,
+}
+
+impl Default for CodecType {
+    fn default() -> Self { CodecType::Unknown }
+}
+
 /// The media's global (mvhd) timescale in units per second.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct MediaTimeScale(pub u64);
@@ -333,7 +349,7 @@ pub struct Track {
     pub timescale: Option<TrackTimeScale>,
     pub duration: Option<TrackScaledTime>,
     pub track_id: Option<u32>,
-    pub mime_type: String,
+    pub codec_type: CodecType,
     pub empty_sample_boxes: EmptySampleTableBoxes,
     pub data: Option<SampleEntry>,
     pub tkhd: Option<TrackHeaderBox>, // TODO(kinetik): find a nicer way to export this.
@@ -1102,12 +1118,12 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>) -> Result<HandlerBox> {
 /// Parse an video description inside an stsd box.
 fn read_video_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleEntry> {
     let name = src.get_header().name;
-    track.mime_type = match name {
-        BoxType::AVCSampleEntry | BoxType::AVC3SampleEntry => String::from("video/avc"),
-        BoxType::VP8SampleEntry => String::from("video/vp8"),
-        BoxType::VP9SampleEntry => String::from("video/vp9"),
-        BoxType::ProtectedVisualSampleEntry => String::from("video/crypto"),
-        _ => return Err(Error::Unsupported("unhandled video sample entry type")),
+    track.codec_type = match name {
+        BoxType::AVCSampleEntry | BoxType::AVC3SampleEntry => CodecType::H264,
+        BoxType::VP8SampleEntry => CodecType::VP8,
+        BoxType::VP9SampleEntry => CodecType::VP9,
+        BoxType::ProtectedVisualSampleEntry => CodecType::EncryptedVideo,
+        _ => CodecType::Unknown,
     };
 
     // Skip uninteresting fields.
@@ -1176,13 +1192,12 @@ fn read_video_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<S
 /// Parse an audio description inside an stsd box.
 fn read_audio_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleEntry> {
     let name = src.get_header().name;
-    track.mime_type = match name {
+    track.codec_type = match name {
         // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
-        BoxType::MP4AudioSampleEntry => String::from("audio/mp4a-latm"),
-        // TODO(kinetik): stagefright doesn't have a MIME mapping for this, revisit.
-        BoxType::OpusSampleEntry => String::from("audio/opus"),
-        BoxType::ProtectedAudioSampleEntry => String::from("audio/crypto"),
-        _ => return Err(Error::Unsupported("unhandled audio sample entry type")),
+        BoxType::MP4AudioSampleEntry => CodecType::AAC,
+        BoxType::OpusSampleEntry => CodecType::Opus,
+        BoxType::ProtectedAudioSampleEntry => CodecType::EncryptedAudio,
+        _ => CodecType::Unknown,
     };
 
     // Skip uninteresting fields.
