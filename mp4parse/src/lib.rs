@@ -207,6 +207,7 @@ pub enum SampleEntry {
 #[derive(Debug, Clone)]
 pub enum AudioCodecSpecific {
     ES_Descriptor(Vec<u8>),
+    FLACSpecificBox(FLACSpecificBox),
     OpusSpecificBox(OpusSpecificBox),
 }
 
@@ -244,6 +245,19 @@ pub struct VPxConfigBox {
     transfer_function: u8,
     video_full_range: bool,
     pub codec_init: Vec<u8>, // Empty for vp8/vp9.
+}
+
+#[derive(Debug, Clone)]
+struct FLACMetadataBlock {
+    block_type: u8,
+    data: Vec<u8>,
+}
+
+/// Represet a FLACSpecificBox 'dfLa'
+#[derive(Debug, Clone)]
+pub struct FLACSpecificBox {
+    version: u8,
+    blocks: Vec<FLACMetadataBlock>,
 }
 
 #[derive(Debug, Clone)]
@@ -300,6 +314,7 @@ impl Default for TrackType {
 pub enum CodecType {
     Unknown,
     AAC,
+    FLAC,
     Opus,
     H264,
     VP9,
@@ -1075,11 +1090,52 @@ fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
     })
 }
 
+fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock> {
+    let temp = try!(src.read_u8());
+    let block_type = temp & 0x8f;
+    let length = try!(be_u24(src));
+    // TODO: verify against box bounds.
+    let data = try!(read_buf(src, length as usize));
+    Ok(FLACMetadataBlock {
+        block_type: block_type,
+        data: data,
+    })
+}
+
+/// Parse `FLACSpecifcBox`.
+fn read_dfla<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACSpecificBox> {
+    let version = try!(src.read_u8());
+    if version != 0 {
+        return Err(Error::Unsupported("unknown dfLa (FLAC) version"));
+    }
+    let mut blocks = Vec::new();
+    while src.bytes_left() > 0 {
+        let block = try!(read_flac_metadata(src));
+        blocks.push(block);
+    }
+    // The box must have at least one meta block, and the first block
+    // must be the METADATA_BLOCK_STREAMINFO
+    if blocks.is_empty() {
+        return Err(Error::InvalidData("FLACSpecificBox missing metadata"));
+    } else if blocks[0].block_type != 0 {
+        println!("flac metadata block:\n  {:?}", blocks[0]);
+        return Err(Error::InvalidData(
+                "FLACSpecificBox must have STREAMINFO metadata first"));
+    } else if blocks[0].data.len() != 34 {
+        return Err(Error::InvalidData(
+                "FLACSpecificBox STREAMINFO block is the wrong size"));
+    }
+    Ok(FLACSpecificBox {
+        version: version,
+        blocks: blocks,
+    })
+}
+
 /// Parse `OpusSpecificBox`.
 fn read_dops<T: Read>(src: &mut BMFFBox<T>) -> Result<OpusSpecificBox> {
     let version = try!(src.read_u8());
     if version != 0 {
-        return Err(Error::Unsupported("unknown dOps version"));
+        return Err(Error::Unsupported("unknown dOps (Opus) version"));
     }
 
     let output_channel_count = try!(src.read_u8());
@@ -1257,6 +1313,7 @@ fn read_audio_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<S
     track.codec_type = match name {
         // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
         BoxType::MP4AudioSampleEntry => CodecType::AAC,
+        BoxType::FLACSampleEntry => CodecType::FLAC,
         BoxType::OpusSampleEntry => CodecType::Opus,
         BoxType::ProtectedAudioSampleEntry => CodecType::EncryptedAudio,
         _ => CodecType::Unknown,
@@ -1308,6 +1365,14 @@ fn read_audio_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<S
                 let esds = try!(read_buf(&mut b.content, esds_size as usize));
                 // TODO(kinetik): Parse esds box?  For now we just stash the data.
                 codec_specific = Some(AudioCodecSpecific::ES_Descriptor(esds));
+            }
+            BoxType::FLACSpecificBox => {
+                if name != BoxType::FLACSampleEntry ||
+                    codec_specific.is_some() {
+                    return Err(Error::InvalidData("malformed audio sample entry"));
+                }
+                let dfla = try!(read_dfla(&mut b));
+                codec_specific = Some(AudioCodecSpecific::FLACSpecificBox(dfla));
             }
             BoxType::OpusSpecificBox => {
                 if name != BoxType::OpusSampleEntry ||
@@ -1456,6 +1521,13 @@ fn be_i64<T: ReadBytesExt>(src: &mut T) -> Result<i64> {
 
 fn be_u16<T: ReadBytesExt>(src: &mut T) -> Result<u16> {
     src.read_u16::<byteorder::BigEndian>().map_err(From::from)
+}
+
+fn be_u24<T: ReadBytesExt>(src: &mut T) -> Result<u32> {
+    let a = try!(src.read_u8()) as u32;
+    let b = try!(src.read_u8()) as u32;
+    let c = try!(src.read_u8()) as u32;
+    Ok(a << 16 | b << 8 | c)
 }
 
 fn be_u32<T: ReadBytesExt>(src: &mut T) -> Result<u32> {
