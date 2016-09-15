@@ -84,6 +84,7 @@ pub enum mp4parse_track_type {
 pub enum mp4parse_codec {
     MP4PARSE_CODEC_UNKNOWN,
     MP4PARSE_CODEC_AAC,
+    MP4PARSE_CODEC_FLAC,
     MP4PARSE_CODEC_OPUS,
     MP4PARSE_CODEC_AVC,
     MP4PARSE_CODEC_VP9,
@@ -342,6 +343,8 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
         Some(SampleEntry::Audio(ref audio)) => match audio.codec_specific {
             AudioCodecSpecific::OpusSpecificBox(_) =>
                 mp4parse_codec::MP4PARSE_CODEC_OPUS,
+            AudioCodecSpecific::FLACSpecificBox(_) =>
+                mp4parse_codec::MP4PARSE_CODEC_FLAC,
             AudioCodecSpecific::ES_Descriptor(_) =>
                 mp4parse_codec::MP4PARSE_CODEC_AAC,
         },
@@ -435,6 +438,9 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
             }
             (*info).codec_specific_config.length = v.len() as u32;
             (*info).codec_specific_config.data = v.as_ptr();
+        }
+        AudioCodecSpecific::FLACSpecificBox(_) => {
+            return MP4PARSE_ERROR_UNSUPPORTED;
         }
         AudioCodecSpecific::OpusSpecificBox(ref opus) => {
             let mut v = Vec::new();

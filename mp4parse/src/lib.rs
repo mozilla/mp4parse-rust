@@ -299,7 +299,7 @@ impl MediaContext {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TrackType {
     Audio,
     Video,
@@ -1092,9 +1092,12 @@ fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
 
 fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock> {
     let temp = try!(src.read_u8());
-    let block_type = temp & 0x8f;
+    let block_type = temp & 0x7f;
     let length = try!(be_u24(src));
-    // TODO: verify against box bounds.
+    if length as usize > src.bytes_left() {
+        return Err(Error::InvalidData(
+                "FLACMetadataBlock larger than parent box"));
+    }
     let data = try!(read_buf(src, length as usize));
     Ok(FLACMetadataBlock {
         block_type: block_type,
@@ -1102,7 +1105,7 @@ fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock
     })
 }
 
-/// Parse `FLACSpecifcBox`.
+/// Parse `FLACSpecificBox`.
 fn read_dfla<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACSpecificBox> {
     let version = try!(src.read_u8());
     if version != 0 {

@@ -74,7 +74,7 @@ fn public_api() {
                         assert!(v.len() > 0);
                         "ES"
                     }
-                    mp4::AudioCodecSpecific::FLACSpecificBox(_flac) => {
+                    mp4::AudioCodecSpecific::FLACSpecificBox(_) => {
                         // No public fields.
                         "FLAC"
                     }
