@@ -265,13 +265,18 @@ pub struct OpusSpecificBox {
     channel_mapping_table: Option<ChannelMappingTable>,
 }
 
+#[derive(Debug)]
+pub struct MovieExtendsBox {
+    pub fragment_duration: Option<MediaScaledTime>,
+}
+
 /// Internal data structures.
 #[derive(Debug, Default)]
 pub struct MediaContext {
     pub timescale: Option<MediaTimeScale>,
-    pub has_mvex: bool,
     /// Tracks found in the file.
     pub tracks: Vec<Track>,
+    pub mvex: Option<MovieExtendsBox>,
 }
 
 impl MediaContext {
@@ -555,14 +560,42 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: &mut MediaContext) -> Result<
                 context.tracks.push(track);
             }
             BoxType::MovieExtendsBox => {
-                context.has_mvex = true;
-                try!(skip_box_content(&mut b));
+                let mvex = try!(read_mvex(&mut b));
+                log!("{:?}", mvex);
+                context.mvex = Some(mvex);
             }
             _ => try!(skip_box_content(&mut b)),
         };
         check_parser_state!(b.content);
     }
     Ok(())
+}
+
+fn read_mvex<T: Read>(src: &mut BMFFBox<T>) -> Result<MovieExtendsBox> {
+    let mut iter = src.box_iter();
+    let mut fragment_duration = None;
+    while let Some(mut b) = try!(iter.next_box()) {
+        match b.head.name {
+            BoxType::MovieExtendsHeaderBox => {
+                let duration = try!(read_mehd(&mut b));
+                fragment_duration = Some(duration);
+            },
+            _ => try!(skip_box_content(&mut b)),
+        }
+    }
+    Ok(MovieExtendsBox {
+        fragment_duration: fragment_duration,
+    })
+}
+
+fn read_mehd<T: Read>(src: &mut BMFFBox<T>) -> Result<MediaScaledTime> {
+    let (version, _) = try!(read_fullbox_extra(src));
+    let fragment_duration = match version {
+        1 => try!(be_u64(src)),
+        0 => try!(be_u32(src)) as u64,
+        _ => return Err(Error::InvalidData("unhandled mehd version")),
+    };
+    Ok(MediaScaledTime(fragment_duration))
 }
 
 fn read_trak<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
