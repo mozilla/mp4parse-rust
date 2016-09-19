@@ -52,6 +52,7 @@ use mp4parse::MediaScaledTime;
 use mp4parse::TrackTimeScale;
 use mp4parse::TrackScaledTime;
 use mp4parse::serialize_opus_header;
+use mp4parse::Track;
 
 // rusty-cheddar's C enum generation doesn't namespace enum members by
 // prefixing them, so we're forced to do it in our member names until
@@ -393,16 +394,15 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
 
     let context = (*parser).context_mut();
 
-    if track_index as usize >= context.tracks.len() {
-        return MP4PARSE_ERROR_BADARG;
+    let track: &Track;
+
+    // track_index here is the audio track number counting from 0. So we collect all audio
+    // tracks and get the track_index-th track.
+    let iter = (&context.tracks).iter();
+    match iter.filter(|track| track.track_type == TrackType::Audio).nth(track_index as usize) {
+        Some(ref found) => track = found,
+        None => return MP4PARSE_ERROR_BADARG,
     }
-
-    let track = &context.tracks[track_index as usize];
-
-    match track.track_type {
-        TrackType::Audio => {}
-        _ => return MP4PARSE_ERROR_INVALID,
-    };
 
     let audio = match track.data {
         Some(ref data) => data,
@@ -459,16 +459,15 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
 
     let context = (*parser).context_mut();
 
-    if track_index as usize >= context.tracks.len() {
-        return MP4PARSE_ERROR_BADARG;
+    let track: &Track;
+
+    // track_index here is the video track number counting from 0. So we collect all video
+    // tracks and get the track_index-th track.
+    let iter = (&context.tracks).iter();
+    match iter.filter(|track| track.track_type == TrackType::Video).nth(track_index as usize) {
+        Some(ref found) => track = found,
+        None => return MP4PARSE_ERROR_BADARG,
     }
-
-    let track = &context.tracks[track_index as usize];
-
-    match track.track_type {
-        TrackType::Video => {}
-        _ => return MP4PARSE_ERROR_INVALID,
-    };
 
     let video = match track.data {
         Some(ref data) => data,
@@ -510,7 +509,7 @@ pub unsafe extern fn mp4parse_is_fragmented(parser: *mut mp4parse_parser, track_
     // check sample tables.
     let mut iter = tracks.iter();
     match iter.find(|track| track.track_id == Some(track_id)) {
-        Some(track) if track.empty_sample_boxes.all_empty() => (*fragmented) = true as u8,
+        Some(ref track) if track.empty_sample_boxes.all_empty() => (*fragmented) = true as u8,
         Some(_) => {},
         None => return MP4PARSE_ERROR_BADARG,
     }

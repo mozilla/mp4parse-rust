@@ -280,7 +280,7 @@ impl MediaContext {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum TrackType {
     Audio,
     Video,
