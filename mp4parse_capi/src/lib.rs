@@ -357,10 +357,8 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
     let track = &context.tracks[track_index];
 
     if let (Some(track_timescale),
-            Some(context_timescale),
-            Some(track_duration)) = (track.timescale,
-                                     context.timescale,
-                                     track.duration) {
+            Some(context_timescale)) = (track.timescale,
+                                        context.timescale) {
         let media_time =
             match track.media_time.map_or(Some(0), |media_time| {
                     track_time_to_us(media_time, track_timescale) }) {
@@ -375,9 +373,14 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
             };
         info.media_time = media_time - empty_duration;
 
-        match track_time_to_us(track_duration, track_timescale) {
-            Some(duration) => info.duration = duration,
-            None => return MP4PARSE_ERROR_INVALID,
+        if let Some(track_duration) = track.duration {
+            match track_time_to_us(track_duration, track_timescale) {
+                Some(duration) => info.duration = duration,
+                None => return MP4PARSE_ERROR_INVALID,
+            }
+        } else {
+            // Duration unknown; stagefright returns 0 for this.
+            info.duration = 0
         }
     } else {
         return MP4PARSE_ERROR_INVALID
