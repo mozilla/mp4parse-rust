@@ -469,6 +469,17 @@ fn skip_box_content<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
     skip(src, to_skip)
 }
 
+/// Skip over the remain data of a box.
+fn skip_box_remain<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
+    let remain = {
+        let header = src.get_header();
+        let len = src.bytes_left();
+        log!("remain {} (skipped) in {:?}", len, header);
+        len
+    };
+    skip(src, remain)
+}
+
 macro_rules! check_parser_state {
     ( $src:expr ) => {
         if $src.limit() > 0 {
@@ -921,6 +932,9 @@ fn read_stco<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
         offsets.push(try!(be_u32(src)) as u64);
     }
 
+    // Padding could be added in some contents.
+    try!(skip_box_remain(src));
+
     Ok(ChunkOffsetBox {
         offsets: offsets,
     })
@@ -935,6 +949,9 @@ fn read_co64<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
         offsets.push(try!(be_u64(src)));
     }
 
+    // Padding could be added in some contents.
+    try!(skip_box_remain(src));
+
     Ok(ChunkOffsetBox {
         offsets: offsets,
     })
@@ -948,6 +965,9 @@ fn read_stss<T: Read>(src: &mut BMFFBox<T>) -> Result<SyncSampleBox> {
     for _ in 0..sample_count {
         samples.push(try!(be_u32(src)));
     }
+
+    // Padding could be added in some contents.
+    try!(skip_box_remain(src));
 
     Ok(SyncSampleBox {
         samples: samples,
@@ -970,6 +990,9 @@ fn read_stsc<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleToChunkBox> {
         });
     }
 
+    // Padding could be added in some contents.
+    try!(skip_box_remain(src));
+
     Ok(SampleToChunkBox {
         samples: samples,
     })
@@ -986,6 +1009,9 @@ fn read_stsz<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleSizeBox> {
             sample_sizes.push(try!(be_u32(src)));
         }
     }
+
+    // Padding could be added in some contents.
+    try!(skip_box_remain(src));
 
     Ok(SampleSizeBox {
         sample_size: sample_size,
@@ -1006,6 +1032,9 @@ fn read_stts<T: Read>(src: &mut BMFFBox<T>) -> Result<TimeToSampleBox> {
             sample_delta: sample_delta,
         });
     }
+
+    // Padding could be added in some contents.
+    try!(skip_box_remain(src));
 
     Ok(TimeToSampleBox {
         samples: samples,
@@ -1311,37 +1340,42 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
     let description_count = try!(be_u32(src));
     let mut descriptions = Vec::new();
 
-    // TODO(kinetik): check if/when more than one desc per track? do we need to support?
-    let mut iter = src.box_iter();
-    while let Some(mut b) = try!(iter.next_box()) {
-        let description = match track.track_type {
-            TrackType::Video => read_video_desc(&mut b, track),
-            TrackType::Audio => read_audio_desc(&mut b, track),
-            TrackType::Unknown => Err(Error::Unsupported("unknown track type")),
-        };
-        let description = match description {
-            Ok(desc) => desc,
-            Err(Error::Unsupported(_)) => {
-                // read_{audio,video}_desc may have returned Unsupported
-                // after partially reading the box content, so we can't
-                // simply use skip_box_content here.
-                let to_skip = b.bytes_left();
-                try!(skip(&mut b, to_skip));
-                SampleEntry::Unknown
+    {
+        // TODO(kinetik): check if/when more than one desc per track? do we need to support?
+        let mut iter = src.box_iter();
+        while let Some(mut b) = try!(iter.next_box()) {
+            let description = match track.track_type {
+                TrackType::Video => read_video_desc(&mut b, track),
+                TrackType::Audio => read_audio_desc(&mut b, track),
+                TrackType::Unknown => Err(Error::Unsupported("unknown track type")),
+            };
+            let description = match description {
+                Ok(desc) => desc,
+                Err(Error::Unsupported(_)) => {
+                    // read_{audio,video}_desc may have returned Unsupported
+                    // after partially reading the box content, so we can't
+                    // simply use skip_box_content here.
+                    let to_skip = b.bytes_left();
+                    try!(skip(&mut b, to_skip));
+                    SampleEntry::Unknown
+                }
+                Err(e) => return Err(e),
+            };
+            if track.data.is_none() {
+                track.data = Some(description.clone());
+            } else {
+                log!("** don't know how to handle multiple descriptions **");
             }
-            Err(e) => return Err(e),
-        };
-        if track.data.is_none() {
-            track.data = Some(description.clone());
-        } else {
-            log!("** don't know how to handle multiple descriptions **");
-        }
-        descriptions.push(description);
-        check_parser_state!(b.content);
-        if descriptions.len() == description_count as usize {
-            break;
+            descriptions.push(description);
+            check_parser_state!(b.content);
+            if descriptions.len() == description_count as usize {
+                break;
+            }
         }
     }
+
+    // Padding could be added in some contents.
+    try!(skip_box_remain(src));
 
     Ok(SampleDescriptionBox {
         descriptions: descriptions,
