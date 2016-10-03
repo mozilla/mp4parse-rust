@@ -74,6 +74,10 @@ fn public_api() {
                         assert!(v.len() > 0);
                         "ES"
                     }
+                    mp4::AudioCodecSpecific::FLACSpecificBox(_) => {
+                        // No public fields.
+                        "FLAC"
+                    }
                     mp4::AudioCodecSpecific::OpusSpecificBox(opus) => {
                         // We don't enter in here, we just check if fields are public.
                         assert!(opus.version > 0);

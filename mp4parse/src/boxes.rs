@@ -50,6 +50,8 @@ box_database!(
     VP8SampleEntry             0x76703038, // "vp08"
     VP9SampleEntry             0x76703039, // "vp09"
     VPCodecConfigurationBox    0x76706343, // "vpcC"
+    FLACSampleEntry            0x664c6143, // "fLaC"
+    FLACSpecificBox            0x64664c61, // "dfLa"
     OpusSampleEntry            0x4f707573, // "Opus"
     OpusSpecificBox            0x644f7073, // "dOps"
     ProtectedVisualSampleEntry 0x656e6376, // "encv" - Need to check official name in spec.
