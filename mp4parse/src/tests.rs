@@ -496,7 +496,7 @@ enum FlacBlockLength {
 fn make_dfla(block_type: FlacBlockType, last: bool, data: &Vec<u8>,
              data_length: FlacBlockLength) -> Cursor<Vec<u8>> {
     assert!(data.len() < 1<<24);
-    make_box(BoxSize::Auto, b"dfLa", |s| {
+    make_fullbox(BoxSize::Auto, b"dfLa", 0, |s| {
         let flag = match last {
             true => 1,
             false => 0,
@@ -509,8 +509,7 @@ fn make_dfla(block_type: FlacBlockType, last: bool, data: &Vec<u8>,
             }
         };
         let block_type = (block_type as u32) & 0x7f;
-        s.B8(0) // version
-         .B32(flag << 31 | block_type << 24 | size)
+        s.B32(flag << 31 | block_type << 24 | size)
          .append_bytes(data)
     })
 }
