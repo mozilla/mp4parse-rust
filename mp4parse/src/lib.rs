@@ -1107,9 +1107,12 @@ fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock
 
 /// Parse `FLACSpecificBox`.
 fn read_dfla<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACSpecificBox> {
-    let version = try!(src.read_u8());
+    let (version, flags) = try!(read_fullbox_extra(src));
     if version != 0 {
         return Err(Error::Unsupported("unknown dfLa (FLAC) version"));
+    }
+    if flags != 0 {
+        return Err(Error::InvalidData("no-zero dfLa (FLAC) flags"));
     }
     let mut blocks = Vec::new();
     while src.bytes_left() > 0 {
