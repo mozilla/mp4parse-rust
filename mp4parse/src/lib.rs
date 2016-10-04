@@ -1530,10 +1530,9 @@ fn be_u16<T: ReadBytesExt>(src: &mut T) -> Result<u16> {
 }
 
 fn be_u24<T: ReadBytesExt>(src: &mut T) -> Result<u32> {
-    let a = try!(src.read_u8()) as u32;
-    let b = try!(src.read_u8()) as u32;
-    let c = try!(src.read_u8()) as u32;
-    Ok(a << 16 | b << 8 | c)
+    src.read_uint::<byteorder::BigEndian>(3)
+        .map(|v| v as u32)
+        .map_err(From::from)
 }
 
 fn be_u32<T: ReadBytesExt>(src: &mut T) -> Result<u32> {
