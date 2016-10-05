@@ -757,3 +757,68 @@ fn invalid_pascal_string() {
     let s = super::read_fixed_length_pascal_string(&mut stream, 32).unwrap();
     assert_eq!(s.len(), 31);
 }
+
+#[test]
+fn skip_padding_in_boxes() {
+    // Padding data could be added in the end of these boxes. Parser needs to skip
+    // them instead of returning error.
+    let box_names = vec![b"stts", b"stsc", b"stsz", b"stco", b"co64", b"stss"];
+
+    for name in box_names {
+        let mut stream = make_fullbox(BoxSize::Auto, name, 1, |s| {
+            s.append_repeated(0, 100) // add padding data
+        });
+        let mut iter = super::BoxIter::new(&mut stream);
+        let mut stream = iter.next_box().unwrap().unwrap();
+        match name {
+            b"stts" => {
+                super::read_stts(&mut stream).expect("fail to skip padding: stts");
+            },
+            b"stsc" => {
+                super::read_stsc(&mut stream).expect("fail to skip padding: stsc");
+            },
+            b"stsz" => {
+                super::read_stsz(&mut stream).expect("fail to skip padding: stsz");
+            },
+            b"stco" => {
+                super::read_stco(&mut stream).expect("fail to skip padding: stco");
+            },
+            b"co64" => {
+                super::read_co64(&mut stream).expect("fail to skip padding: co64");
+            },
+            b"stss" => {
+                super::read_stss(&mut stream).expect("fail to skip padding: stss");
+            },
+            _ => (),
+        }
+    }
+}
+
+#[test]
+fn skip_padding_in_stsd() {
+    // Padding data could be added in the end of stsd boxes. Parser needs to skip
+    // them instead of returning error.
+    let avc = make_box(BoxSize::Auto, b"avc1", |s| {
+        s.append_repeated(0, 6)
+         .B16(1)
+         .append_repeated(0, 16)
+         .B16(320)
+         .B16(240)
+         .append_repeated(0, 14)
+         .append_repeated(0, 32)
+         .append_repeated(0, 4)
+         .B32(0xffffffff)
+         .append_bytes(b"avcC")
+         .append_repeated(0, 100)
+    }).into_inner();
+    let mut stream = make_fullbox(BoxSize::Auto, b"stsd", 0, |s| {
+        s.B32(1)
+         .append_bytes(avc.as_slice())
+         .append_repeated(0, 100) // add padding data
+    });
+
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    super::read_stsd(&mut stream, &mut super::Track::new(0))
+          .expect("fail to skip padding: stsd");
+}
