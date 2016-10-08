@@ -1105,6 +1105,18 @@ fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock
     })
 }
 
+fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<AudioCodecSpecific> {
+    let (_, _) = try!(read_fullbox_extra(src));
+
+    let esds_size = src.head.size - src.head.offset - 4;
+    if esds_size > BUF_SIZE_LIMIT {
+        return Err(Error::InvalidData("esds box exceeds BUF_SIZE_LIMIT"));
+    }
+    let esds = try!(read_buf(&mut src.content, esds_size as usize));
+
+    Ok(AudioCodecSpecific::ES_Descriptor(esds))
+}
+
 /// Parse `FLACSpecificBox`.
 fn read_dfla<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACSpecificBox> {
     let (version, flags) = try!(read_fullbox_extra(src));
@@ -1240,7 +1252,7 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>) -> Result<HandlerBox> {
 }
 
 /// Parse an video description inside an stsd box.
-fn read_video_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleEntry> {
+fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleEntry> {
     let name = src.get_header().name;
     track.codec_type = match name {
         BoxType::AVCSampleEntry | BoxType::AVC3SampleEntry => CodecType::H264,
@@ -1313,8 +1325,24 @@ fn read_video_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<S
         .ok_or_else(|| Error::InvalidData("malformed video sample entry"))
 }
 
+fn read_qt_wave_atom<T: Read>(src: &mut BMFFBox<T>) -> Result<AudioCodecSpecific> {
+    let mut codec_specific = None;
+    let mut iter = src.box_iter();
+    while let Some(mut b) = try!(iter.next_box()) {
+        match b.head.name {
+            BoxType::ESDBox => {
+                let esds = try!(read_esds(&mut b));
+                codec_specific = Some(esds);
+            },
+            _ => try!(skip_box_content(&mut b)),
+        }
+    }
+
+    codec_specific.ok_or_else(|| Error::InvalidData("malformed audio sample entry"))
+}
+
 /// Parse an audio description inside an stsd box.
-fn read_audio_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleEntry> {
+fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleEntry> {
     let name = src.get_header().name;
     track.codec_type = match name {
         // TODO(kinetik): stagefright inspects ESDS to detect MP3 (audio/mpeg).
@@ -1349,6 +1377,11 @@ fn read_audio_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<S
 
     match version {
         0 => (),
+        1 => {
+            // Quicktime sound sample description version 1.
+            // Skip uninteresting fields.
+            try!(skip(src, 16));
+        },
         _ => return Err(Error::Unsupported("unsupported non-isom audio sample entry")),
     }
 
@@ -1362,15 +1395,10 @@ fn read_audio_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<S
                     name != BoxType::ProtectedAudioSampleEntry) ||
                     codec_specific.is_some() {
                         return Err(Error::InvalidData("malformed audio sample entry"));
-                    }
-                let (_, _) = try!(read_fullbox_extra(&mut b.content));
-                let esds_size = b.head.size - b.head.offset - 4;
-                if esds_size > BUF_SIZE_LIMIT {
-                    return Err(Error::InvalidData("esds box exceeds BUF_SIZE_LIMIT"));
                 }
-                let esds = try!(read_buf(&mut b.content, esds_size as usize));
-                // TODO(kinetik): Parse esds box?  For now we just stash the data.
-                codec_specific = Some(AudioCodecSpecific::ES_Descriptor(esds));
+
+                let esds = try!(read_esds(&mut b));
+                codec_specific = Some(esds);
             }
             BoxType::FLACSpecificBox => {
                 if name != BoxType::FLACSampleEntry ||
@@ -1387,6 +1415,10 @@ fn read_audio_desc<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<S
                 }
                 let dops = try!(read_dops(&mut b));
                 codec_specific = Some(AudioCodecSpecific::OpusSpecificBox(dops));
+            }
+            BoxType::QTWaveAtom => {
+                let qt_desc = try!(read_qt_wave_atom(&mut b));
+                codec_specific = Some(qt_desc);
             }
             _ => try!(skip_box_content(&mut b)),
         }
@@ -1416,8 +1448,8 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
         let mut iter = src.box_iter();
         while let Some(mut b) = try!(iter.next_box()) {
             let description = match track.track_type {
-                TrackType::Video => read_video_desc(&mut b, track),
-                TrackType::Audio => read_audio_desc(&mut b, track),
+                TrackType::Video => read_video_sample_entry(&mut b, track),
+                TrackType::Audio => read_audio_sample_entry(&mut b, track),
                 TrackType::Unknown => Err(Error::Unsupported("unknown track type")),
             };
             let description = match description {
