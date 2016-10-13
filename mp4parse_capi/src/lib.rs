@@ -347,11 +347,11 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
                 mp4parse_codec::MP4PARSE_CODEC_OPUS,
             AudioCodecSpecific::FLACSpecificBox(_) =>
                 mp4parse_codec::MP4PARSE_CODEC_FLAC,
-            AudioCodecSpecific::EsDescriptor(ref esds) if esds.audio_codec == CodecType::AAC =>
+            AudioCodecSpecific::ES_Descriptor(ref esds) if esds.audio_codec == CodecType::AAC =>
                 mp4parse_codec::MP4PARSE_CODEC_AAC,
-            AudioCodecSpecific::EsDescriptor(ref esds) if esds.audio_codec == CodecType::MP3 =>
+            AudioCodecSpecific::ES_Descriptor(ref esds) if esds.audio_codec == CodecType::MP3 =>
                 mp4parse_codec::MP4PARSE_CODEC_MP3,
-            AudioCodecSpecific::EsDescriptor(_) =>
+            AudioCodecSpecific::ES_Descriptor(_) =>
                 mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,
         },
         Some(SampleEntry::Video(ref video)) => match video.codec_specific {
@@ -438,7 +438,7 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
     (*info).sample_rate = audio.samplerate >> 16; // 16.16 fixed point
 
     match audio.codec_specific {
-        AudioCodecSpecific::EsDescriptor(ref v) => {
+        AudioCodecSpecific::ES_Descriptor(ref v) => {
             if v.codec_specific_config.len() > std::u32::MAX as usize {
                 return MP4PARSE_ERROR_INVALID;
             }

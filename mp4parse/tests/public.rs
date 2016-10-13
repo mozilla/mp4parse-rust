@@ -70,7 +70,7 @@ fn public_api() {
 
                 // track.data part
                 assert_eq!(match a.codec_specific {
-                    mp4::AudioCodecSpecific::EsDescriptor(esds) => {
+                    mp4::AudioCodecSpecific::ES_Descriptor(esds) => {
                         assert_eq!(esds.audio_codec, mp4::CodecType::AAC);
                         "ES"
                     }
