@@ -826,7 +826,14 @@ fn skip_padding_in_stsd() {
 #[test]
 fn read_qt_wave_atom() {
     let esds = make_fullbox(BoxSize::Auto, b"esds", 0, |s| {
-        s.append_repeated(0, 30)
+        s.B8(0x03)  // elementary stream descriptor tag
+         .B8(0x0b)  // esds length
+         .append_repeated(0, 2)
+         .B8(0x00)  // flags
+         .B8(0x04)  // decoder config descriptor tag
+         .B8(0x06)  // dcds length
+         .B8(0x6b)  // mp3
+         .append_repeated(0, 5)
     }).into_inner();
     let wave = make_box(BoxSize::Auto, b"wave", |s| {
         s.append_bytes(esds.as_slice())
@@ -849,4 +856,5 @@ fn read_qt_wave_atom() {
     let mut track = super::Track::new(0);
     super::read_audio_sample_entry(&mut stream, &mut track)
           .expect("fail to read qt wave atom");
+    assert_eq!(track.codec_type, super::CodecType::MP3);
 }
