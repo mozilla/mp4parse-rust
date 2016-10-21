@@ -1115,7 +1115,6 @@ fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock
     })
 }
 
-#[allow(unused_assignments)]
 fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
     // Tags for elementary stream description
     const ESDESCR_TAG: u8          = 0x03;
@@ -1144,22 +1143,21 @@ fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
 
         // clone a esds cursor for parsing.
         let esds = &mut Cursor::new(&esds_array);
-        let mut next_tag = try!(esds.read_u8());
+        let next_tag = try!(esds.read_u8());
 
         if next_tag != ESDESCR_TAG {
             return Err(Error::Unsupported("fail to parse ES descriptor"));
         }
 
         let esds_extend = try!(esds.read_u8());
-        let mut esds_end: u64 = 0;
         // extension tag start from 0x80.
-        if esds_extend >= 0x80 {
+        let esds_end = if esds_extend >= 0x80 {
             // skip remaining extension.
             try!(skip(esds, 2));
-            esds_end = esds.position() + try!(esds.read_u8()) as u64;
+            esds.position() + try!(esds.read_u8()) as u64
         } else {
-            esds_end = esds.position() + esds_extend as u64;
-        }
+            esds.position() + esds_extend as u64
+        };
         try!(skip(esds, 2));
 
         let esds_flags = try!(esds.read_u8());
@@ -1179,7 +1177,7 @@ fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
 
         // find DecoderConfig descriptor (tag = DECODER_CONFIG_TAG)
         if esds_end > esds.position() {
-            next_tag = try!(esds.read_u8());
+            let next_tag = try!(esds.read_u8());
             if next_tag == DECODER_CONFIG_TAG {
                 let dcds_extend = try!(esds.read_u8());
                 // extension tag start from 0x80.
@@ -1198,7 +1196,7 @@ fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
 
         // find DecoderSpecific descriptor (tag = DECODER_SPECIFIC_TAG)
         if esds_end > esds.position() {
-            next_tag = try!(esds.read_u8());
+            let next_tag = try!(esds.read_u8());
             if next_tag == DECODER_SPECIFIC_TAG {
                 let dsds_extend = try!(esds.read_u8());
                 // extension tag start from 0x80.

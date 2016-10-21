@@ -444,11 +444,8 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
             }
             (*info).codec_specific_config.length = v.codec_specific_config.len() as u32;
             (*info).codec_specific_config.data = v.codec_specific_config.as_ptr();
-            match v.audio_sample_rate {
-                Some(rate) => {
-                    (*info).sample_rate = rate;
-                },
-                _ => {},
+            if let Some(rate) = v.audio_sample_rate {
+                (*info).sample_rate = rate;
             }
         }
         AudioCodecSpecific::FLACSpecificBox(_) => {
