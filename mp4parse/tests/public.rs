@@ -72,6 +72,7 @@ fn public_api() {
                 assert_eq!(match a.codec_specific {
                     mp4::AudioCodecSpecific::ES_Descriptor(esds) => {
                         assert_eq!(esds.audio_codec, mp4::CodecType::AAC);
+                        assert_eq!(esds.audio_sample_rate.unwrap(), 48000);
                         "ES"
                     }
                     mp4::AudioCodecSpecific::FLACSpecificBox(_) => {

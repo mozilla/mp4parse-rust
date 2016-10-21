@@ -831,9 +831,9 @@ fn read_qt_wave_atom() {
          .append_repeated(0, 2)
          .B8(0x00)  // flags
          .B8(0x04)  // decoder config descriptor tag
-         .B8(0x06)  // dcds length
+         .B8(0x0d)  // dcds length
          .B8(0x6b)  // mp3
-         .append_repeated(0, 5)
+         .append_repeated(0, 12)
     }).into_inner();
     let wave = make_box(BoxSize::Auto, b"wave", |s| {
         s.append_bytes(esds.as_slice())

@@ -208,6 +208,7 @@ pub enum SampleEntry {
 #[derive(Debug, Clone)]
 pub struct ES_Descriptor {
     pub audio_codec: CodecType,
+    pub audio_sample_rate: Option<u32>,
     pub codec_specific_config: Vec<u8>,
 }
 
@@ -1116,8 +1117,15 @@ fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock
 
 fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
     // Tags for elementary stream description
-    const ESDESCR_TAG: u8           = 0x03;
-    const DECODER_CONFIG_TAG: u8    = 0x04;
+    const ESDESCR_TAG: u8          = 0x03;
+    const DECODER_CONFIG_TAG: u8   = 0x04;
+    const DECODER_SPECIFIC_TAG: u8 = 0x05;
+
+    let frequency_table =
+        vec![(0x1, 96000), (0x1, 88200), (0x2, 64000), (0x3, 48000),
+             (0x4, 44100), (0x5, 32000), (0x6, 24000), (0x7, 22050),
+             (0x8, 16000), (0x9, 12000), (0xa, 11025), (0xb, 8000),
+             (0xc, 7350)];
 
     let (_, _) = try!(read_fullbox_extra(src));
 
@@ -1128,24 +1136,29 @@ fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
     let esds_array = try!(read_buf(src, esds_size as usize));
 
     // Parsing DecoderConfig descriptor to get the object_profile_indicator
-    // for correct codec type.
-    let object_profile_indicator = {
+    // for correct codec type and audio sample rate.
+    let (object_profile_indicator, sample_frequency) = {
+        let mut object_profile: u8 = 0;
+        let mut sample_frequency = None;
+
         // clone a esds cursor for parsing.
         let esds = &mut Cursor::new(&esds_array);
-        let esds_tag = try!(esds.read_u8());
+        let next_tag = try!(esds.read_u8());
 
-        if esds_tag != ESDESCR_TAG {
+        if next_tag != ESDESCR_TAG {
             return Err(Error::Unsupported("fail to parse ES descriptor"));
         }
 
         let esds_extend = try!(esds.read_u8());
         // extension tag start from 0x80.
-        if esds_extend >= 0x80 {
-            // skip remaining extension and length.
-            try!(skip(esds, 5));
-        } else {
+        let esds_end = if esds_extend >= 0x80 {
+            // skip remaining extension.
             try!(skip(esds, 2));
-        }
+            esds.position() + try!(esds.read_u8()) as u64
+        } else {
+            esds.position() + esds_extend as u64
+        };
+        try!(skip(esds, 2));
 
         let esds_flags = try!(esds.read_u8());
 
@@ -1163,19 +1176,45 @@ fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
         }
 
         // find DecoderConfig descriptor (tag = DECODER_CONFIG_TAG)
-        let dcds = try!(esds.read_u8());
-        if dcds != DECODER_CONFIG_TAG {
-            return Err(Error::Unsupported("fail to parse decoder config descriptor"));
+        if esds_end > esds.position() {
+            let next_tag = try!(esds.read_u8());
+            if next_tag == DECODER_CONFIG_TAG {
+                let dcds_extend = try!(esds.read_u8());
+                // extension tag start from 0x80.
+                if dcds_extend >= 0x80 {
+                    // skip remains extension and length.
+                    try!(skip(esds, 3));
+                }
+
+                object_profile = try!(esds.read_u8());
+
+                // Skip uninteresting fields.
+                try!(skip(esds, 12));
+            }
         }
 
-        let dcds_extend = try!(esds.read_u8());
-        // extension tag start from 0x80.
-        if dcds_extend >= 0x80 {
-            // skip remains extension and length.
-            try!(skip(esds, 3));
+
+        // find DecoderSpecific descriptor (tag = DECODER_SPECIFIC_TAG)
+        if esds_end > esds.position() {
+            let next_tag = try!(esds.read_u8());
+            if next_tag == DECODER_SPECIFIC_TAG {
+                let dsds_extend = try!(esds.read_u8());
+                // extension tag start from 0x80.
+                if dsds_extend >= 0x80 {
+                    // skip remains extension and length.
+                    try!(skip(esds, 3));
+                }
+
+                let audio_specific_config = try!(be_u16(esds));
+
+                let sample_index = (audio_specific_config & 0x07FF) >> 7;
+
+                sample_frequency =
+                    frequency_table.iter().find(|item| item.0 == sample_index).map(|x| x.1);
+            }
         }
 
-        try!(esds.read_u8())
+        (object_profile, sample_frequency)
     };
 
     let codec = match object_profile_indicator {
@@ -1190,6 +1229,7 @@ fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
 
     Ok(ES_Descriptor {
         audio_codec: codec,
+        audio_sample_rate: sample_frequency,
         codec_specific_config: esds_array,
     })
 }
