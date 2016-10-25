@@ -75,8 +75,9 @@ fn public_api() {
                         assert_eq!(esds.audio_sample_rate.unwrap(), 48000);
                         "ES"
                     }
-                    mp4::AudioCodecSpecific::FLACSpecificBox(_) => {
-                        // No public fields.
+                    mp4::AudioCodecSpecific::FLACSpecificBox(flac) => {
+                        assert!(flac.blocks.len() > 0);
+                        assert!(flac.blocks[0].data.len() > 0);
                         "FLAC"
                     }
                     mp4::AudioCodecSpecific::OpusSpecificBox(opus) => {
