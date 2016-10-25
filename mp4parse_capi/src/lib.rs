@@ -469,6 +469,9 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
                     match header.get(&track_index) {
                         None => {}
                         Some(v) => {
+                            if v.len() > std::u32::MAX as usize {
+                                return MP4PARSE_ERROR_INVALID;
+                            }
                             (*info).codec_specific_config.length = v.len() as u32;
                             (*info).codec_specific_config.data = v.as_ptr();
                         }
