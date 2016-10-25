@@ -257,16 +257,16 @@ pub struct VPxConfigBox {
 }
 
 #[derive(Debug, Clone)]
-struct FLACMetadataBlock {
-    block_type: u8,
-    data: Vec<u8>,
+pub struct FLACMetadataBlock {
+    pub block_type: u8,
+    pub data: Vec<u8>,
 }
 
 /// Represet a FLACSpecificBox 'dfLa'
 #[derive(Debug, Clone)]
 pub struct FLACSpecificBox {
     version: u8,
-    blocks: Vec<FLACMetadataBlock>,
+    pub blocks: Vec<FLACMetadataBlock>,
 }
 
 #[derive(Debug, Clone)]
