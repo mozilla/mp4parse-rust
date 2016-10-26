@@ -450,12 +450,12 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
         }
         AudioCodecSpecific::FLACSpecificBox(ref flac) => {
             // Return the STREAMINFO metadata block in the codec_specific.
-            let streaminfo = &flac.blocks[0].data;
-            if streaminfo.len() > std::u32::MAX as usize {
+            let streaminfo = &flac.blocks[0];
+            if streaminfo.block_type != 0 || streaminfo.data.len() != 34 {
                 return MP4PARSE_ERROR_INVALID;
             }
-            (*info).codec_specific_config.length = streaminfo.len() as u32;
-            (*info).codec_specific_config.data = streaminfo.as_ptr();
+            (*info).codec_specific_config.length = streaminfo.data.len() as u32;
+            (*info).codec_specific_config.data = streaminfo.data.as_ptr();
         }
         AudioCodecSpecific::OpusSpecificBox(ref opus) => {
             let mut v = Vec::new();
