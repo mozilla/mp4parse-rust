@@ -166,7 +166,7 @@ void test_arg_validation_with_data(const std::string& filename)
   memset(&audio, 0, sizeof(audio));
   rv = mp4parse_get_track_audio_info(parser, 1, &audio);
   assert(rv == MP4PARSE_OK);
-  assert(audio.channels == 2);
+  assert(audio.channels == 1);
   assert(audio.bit_depth == 16);
   assert(audio.sample_rate == 48000);
 
