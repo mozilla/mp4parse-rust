@@ -4,6 +4,7 @@ version = "0.5.1"
 authors = [
   "Ralph Giles <giles@mozilla.com>",
   "Matthew Gregan <kinetik@flim.org>",
+  "Alfredo Yang <ayang@mozilla.com>",
 ]
 
 description = "Parser for ISO base media file format (mp4)"
