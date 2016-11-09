@@ -603,7 +603,12 @@ pub unsafe extern fn mp4parse_is_fragmented(parser: *mut mp4parse_parser, track_
     MP4PARSE_OK
 }
 
-/// Get pssh system id and pssh box content for eme playback.
+/// Get 'pssh' system id and 'pssh' box content for eme playback.
+///
+/// The data format in 'info' passing to gecko is:
+///   system_id
+///   pssh box size (in native endian)
+///   pssh box content (including header)
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_pssh_info(parser: *mut mp4parse_parser, info: *mut mp4parse_pssh_info) -> mp4parse_error {
     if parser.is_null() || info.is_null() || (*parser).poisoned() {
@@ -623,10 +628,6 @@ pub unsafe extern fn mp4parse_get_pssh_info(parser: *mut mp4parse_parser, info: 
             },
             _ => (),
         }
-        // pssh data format in gecko:
-        //   system_id
-        //   pssh size (in native endian)
-        //   pssh box content (including header)
         pssh_data.extend_from_slice(pssh.system_id.as_slice());
         pssh_data.extend_from_slice(data_len.as_slice());
         pssh_data.extend_from_slice(pssh.box_content.as_slice());
