@@ -30,7 +30,7 @@ fn doit() {
             let count = {
                 let mut count = 0;
                 let rv = mp4parse_get_track_count(context, &mut count);
-                assert!(rv == mp4parse_error::MP4PARSE_OK);
+                assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
                 count
             };
             for track in 0..count {
