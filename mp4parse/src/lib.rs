@@ -504,7 +504,7 @@ fn skip_box_content<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
         log!("{:?} (skipped)", header);
         (header.size - header.offset) as usize
     };
-    assert!(to_skip == src.bytes_left());
+    assert_eq!(to_skip, src.bytes_left());
     skip(src, to_skip)
 }
 

@@ -593,8 +593,8 @@ fn serialize_opus_header() {
     };
     let mut v = Vec::<u8>::new();
     super::serialize_opus_header(&opus, &mut v).unwrap();
-    assert!(v.len() == 19);
-    assert!(v == vec![
+    assert_eq!(v.len(), 19);
+    assert_eq!(v, vec![
             0x4f, 0x70, 0x75, 0x73, 0x48,0x65, 0x61, 0x64,
             0x01, 0x01, 0x56, 0x01,
             0xc0, 0x5d, 0x00, 0x00,
@@ -615,8 +615,8 @@ fn serialize_opus_header() {
     };
     let mut v = Vec::<u8>::new();
     super::serialize_opus_header(&opus, &mut v).unwrap();
-    assert!(v.len() == 27);
-    assert!(v == vec![
+    assert_eq!(v.len(), 27);
+    assert_eq!(v, vec![
             0x4f, 0x70, 0x75, 0x73, 0x48,0x65, 0x61, 0x64,
             0x01, 0x06, 0x98, 0x00,
             0x80, 0xbb, 0x00, 0x00,

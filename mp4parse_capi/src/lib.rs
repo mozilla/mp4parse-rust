@@ -336,7 +336,7 @@ fn media_time_to_us(time: MediaScaledTime, scale: MediaTimeScale) -> Option<u64>
 }
 
 fn track_time_to_us(time: TrackScaledTime, scale: TrackTimeScale) -> Option<u64> {
-    assert!(time.1 == scale.1);
+    assert_eq!(time.1, scale.1);
     let microseconds_per_second = 1000000;
     rational_scale(time.0, scale.0, microseconds_per_second)
 }
@@ -686,9 +686,9 @@ fn get_track_count_null_parser() {
     unsafe {
         let mut count: u32 = 0;
         let rv = mp4parse_get_track_count(std::ptr::null(), std::ptr::null_mut());
-        assert!(rv == MP4PARSE_ERROR_BADARG);
+        assert_eq!(rv, MP4PARSE_ERROR_BADARG);
         let rv = mp4parse_get_track_count(std::ptr::null(), &mut count);
-        assert!(rv == MP4PARSE_ERROR_BADARG);
+        assert_eq!(rv, MP4PARSE_ERROR_BADARG);
     }
 }
 
@@ -807,7 +807,7 @@ fn get_track_count_poisoned_parser() {
 
         let mut count: u32 = 0;
         let rv = mp4parse_get_track_count(parser, &mut count);
-        assert!(rv == MP4PARSE_ERROR_BADARG);
+        assert_eq!(rv, MP4PARSE_ERROR_BADARG);
     }
 }
 
