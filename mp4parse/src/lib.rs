@@ -205,12 +205,12 @@ pub enum SampleEntry {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ES_Descriptor {
     pub audio_codec: CodecType,
     pub audio_sample_rate: Option<u32>,
     pub audio_channel_count: Option<u16>,
-    pub codec_specific_config: Vec<u8>,
+    pub codec_esds: Vec<u8>,
 }
 
 #[allow(non_camel_case_types)]
@@ -1173,18 +1173,127 @@ fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock
     })
 }
 
-fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
+fn find_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
     // Tags for elementary stream description
     const ESDESCR_TAG: u8          = 0x03;
     const DECODER_CONFIG_TAG: u8   = 0x04;
     const DECODER_SPECIFIC_TAG: u8 = 0x05;
 
+    let mut remains = data;
+
+    while !remains.is_empty() {
+        let des = &mut Cursor::new(remains);
+        let tag = des.read_u8()?;
+
+        let extend_or_len = des.read_u8()?;
+        // extension tag start from 0x80.
+        let end = if extend_or_len >= 0x80 {
+            // Extension found, skip remaining extension.
+            skip(des, 2)?;
+            des.read_u8()? as u64 + des.position()
+        } else {
+            extend_or_len as u64 + des.position()
+        };
+
+        if end as usize > remains.len() {
+            return Err(Error::InvalidData("Invalid descriptor."));
+        }
+
+        let descriptor = &remains[des.position() as usize .. end as usize];
+
+        match tag {
+            ESDESCR_TAG => {
+                read_es_descriptor(descriptor, esds)?;
+            },
+            DECODER_CONFIG_TAG => {
+                read_dc_descriptor(descriptor, esds)?;
+            },
+            DECODER_SPECIFIC_TAG => {
+                read_ds_descriptor(descriptor, esds)?;
+            },
+            _ => {
+                log!("Unsupported descriptor, tag {}", tag);
+            },
+        }
+
+        remains = &remains[end as usize .. remains.len()];
+    }
+
+    Ok(())
+}
+
+fn read_ds_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
     let frequency_table =
         vec![(0x1, 96000), (0x1, 88200), (0x2, 64000), (0x3, 48000),
              (0x4, 44100), (0x5, 32000), (0x6, 24000), (0x7, 22050),
              (0x8, 16000), (0x9, 12000), (0xa, 11025), (0xb, 8000),
              (0xc, 7350)];
 
+    let des = &mut Cursor::new(data);
+
+    let audio_specific_config = be_u16(des)?;
+
+    let sample_index = (audio_specific_config & 0x07FF) >> 7;
+
+    let channel_counts = (audio_specific_config & 0x007F) >> 3;
+
+    let sample_frequency =
+        frequency_table.iter().find(|item| item.0 == sample_index).map(|x| x.1);
+
+    esds.audio_sample_rate = sample_frequency;
+    esds.audio_channel_count = Some(channel_counts);
+
+    Ok(())
+}
+
+fn read_dc_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
+    let des = &mut Cursor::new(data);
+    let object_profile = des.read_u8()?;
+
+    // Skip uninteresting fields.
+    skip(des, 12)?;
+
+    if data.len() > des.position() as usize {
+        find_descriptor(&data[des.position() as usize .. data.len()], esds)?;
+    }
+
+    esds.audio_codec = match object_profile {
+        0x40 | 0x41 => CodecType::AAC,
+        0x6B => CodecType::MP3,
+        _ => CodecType::Unknown,
+    };
+
+    Ok(())
+}
+
+fn read_es_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
+    let des = &mut Cursor::new(data);
+
+    skip(des, 2)?;
+
+    let esds_flags = des.read_u8()?;
+
+    // Stream dependency flag, first bit from left most.
+    if esds_flags & 0x80 > 0 {
+        // Skip uninteresting fields.
+        skip(des, 2)?;
+    }
+
+    // Url flag, second bit from left most.
+    if esds_flags & 0x40 > 0 {
+        // Skip uninteresting fields.
+        let skip_es_len: usize = des.read_u8()? as usize + 2;
+        skip(des, skip_es_len)?;
+    }
+
+    if data.len() > des.position() as usize {
+        find_descriptor(&data[des.position() as usize .. data.len()], esds)?;
+    }
+
+    Ok(())
+}
+
+fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
     let (_, _) = read_fullbox_extra(src)?;
 
     let esds_size = src.head.size - src.head.offset - 4;
@@ -1193,109 +1302,12 @@ fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
     }
     let esds_array = read_buf(src, esds_size as usize)?;
 
-    // Parsing DecoderConfig descriptor to get the object_profile_indicator
-    // for correct codec type, audio sample rate and channel counts.
-    let (object_profile_indicator, sample_frequency, channels) = {
-        let mut object_profile: u8 = 0;
-        let mut sample_frequency = None;
-        let mut channels = None;
+    let mut es_data = ES_Descriptor::default();
+    find_descriptor(&esds_array, &mut es_data)?;
 
-        // clone a esds cursor for parsing.
-        let esds = &mut Cursor::new(&esds_array);
-        let next_tag = esds.read_u8()?;
+    es_data.codec_esds = esds_array;
 
-        if next_tag != ESDESCR_TAG {
-            return Err(Error::Unsupported("fail to parse ES descriptor"));
-        }
-
-        let esds_extend = esds.read_u8()?;
-        // extension tag start from 0x80.
-        let esds_end = if esds_extend >= 0x80 {
-            // skip remaining extension.
-            skip(esds, 2)?;
-            esds.position() + esds.read_u8()? as u64
-        } else {
-            esds.position() + esds_extend as u64
-        };
-        skip(esds, 2)?;
-
-        let esds_flags = esds.read_u8()?;
-
-        // Stream dependency flag, first bit from left most.
-        if esds_flags & 0x80 > 0 {
-            // Skip uninteresting fields.
-            skip(esds, 2)?;
-        }
-
-        // Url flag, second bit from left most.
-        if esds_flags & 0x40 > 0 {
-            // Skip uninteresting fields.
-            let skip_es_len: usize = esds.read_u8()? as usize + 2;
-            skip(esds, skip_es_len)?;
-        }
-
-        // find DecoderConfig descriptor (tag = DECODER_CONFIG_TAG)
-        if esds_end > esds.position() {
-            let next_tag = esds.read_u8()?;
-            if next_tag == DECODER_CONFIG_TAG {
-                let dcds_extend = esds.read_u8()?;
-                // extension tag start from 0x80.
-                if dcds_extend >= 0x80 {
-                    // skip remains extension and length.
-                    skip(esds, 3)?;
-                }
-
-                object_profile = esds.read_u8()?;
-
-                // Skip uninteresting fields.
-                skip(esds, 12)?;
-            }
-        }
-
-
-        // find DecoderSpecific descriptor (tag = DECODER_SPECIFIC_TAG)
-        if esds_end > esds.position() {
-            let next_tag = esds.read_u8()?;
-            if next_tag == DECODER_SPECIFIC_TAG {
-                let dsds_extend = esds.read_u8()?;
-                // extension tag start from 0x80.
-                if dsds_extend >= 0x80 {
-                    // skip remains extension and length.
-                    skip(esds, 3)?;
-                }
-
-                let audio_specific_config = be_u16(esds)?;
-
-                let sample_index = (audio_specific_config & 0x07FF) >> 7;
-
-                let channel_counts = (audio_specific_config & 0x007F) >> 3;
-
-                sample_frequency =
-                    frequency_table.iter().find(|item| item.0 == sample_index).map(|x| x.1);
-
-                channels = Some(channel_counts);
-            }
-        }
-
-        (object_profile, sample_frequency, channels)
-    };
-
-    let codec = match object_profile_indicator {
-        0x40 | 0x41 => CodecType::AAC,
-        0x6B => CodecType::MP3,
-        _ => CodecType::Unknown,
-    };
-
-    if codec == CodecType::Unknown {
-        return Err(Error::Unsupported("unknown audio codec"));
-    }
-
-    Ok(ES_Descriptor {
-        audio_codec: codec,
-        audio_sample_rate: sample_frequency,
-        audio_channel_count: channels,
-        codec_specific_config: esds_array,
-    })
+    Ok(es_data)
 }
 
 /// Parse `FLACSpecificBox`.

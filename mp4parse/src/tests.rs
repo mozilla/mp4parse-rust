@@ -827,7 +827,7 @@ fn skip_padding_in_stsd() {
 fn read_qt_wave_atom() {
     let esds = make_fullbox(BoxSize::Auto, b"esds", 0, |s| {
         s.B8(0x03)  // elementary stream descriptor tag
-         .B8(0x0b)  // esds length
+         .B8(0x12)  // esds length
          .append_repeated(0, 2)
          .B8(0x00)  // flags
          .B8(0x04)  // decoder config descriptor tag
