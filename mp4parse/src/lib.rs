@@ -1173,7 +1173,7 @@ fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock
     })
 }
 
-fn find_descriptor<'a>(data: &'a [u8], esds: &mut ES_Descriptor) -> Result<()> {
+fn find_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
     // Tags for elementary stream description
     const ESDESCR_TAG: u8          = 0x03;
     const DECODER_CONFIG_TAG: u8   = 0x04;
