@@ -4,7 +4,7 @@ use std::env;
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
 
-fn dump_file(filename: &String, verbose: bool) {
+fn dump_file(filename: &str, verbose: bool) {
     let mut reader = match File::open(filename) {
         Ok(reader) => reader,
         _ => {
@@ -48,7 +48,7 @@ fn main() {
         if verbose {
             println!("-- dump of '{}' --", filename);
         }
-        dump_file(&filename, verbose);
+        dump_file(filename, verbose);
         if verbose {
             println!("-- end of '{}' --", filename);
         }

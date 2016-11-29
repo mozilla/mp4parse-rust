@@ -11,7 +11,7 @@ fn doit() -> bool {
     std::io::stdin().read_to_end(&mut input).unwrap();
     let mut reader = Cursor::new(&input);
     let mut context = mp4parse::MediaContext::new();
-    return mp4parse::read_mp4(&mut reader, &mut context).is_ok();
+    mp4parse::read_mp4(&mut reader, &mut context).is_ok()
 }
 
 #[cfg(feature = "fuzz")]
