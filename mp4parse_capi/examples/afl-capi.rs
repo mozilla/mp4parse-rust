@@ -53,6 +53,7 @@ fn doit() {
                                 image_width: 0,
                                 image_height: 0,
                                 extra_data: mp4parse_byte_data::default(), 
+                                protected_data: Default::default(),
                             };
                             let rv = mp4parse_get_track_video_info(context, track, &mut video);
                             if rv == mp4parse_error::MP4PARSE_OK {

@@ -132,6 +132,14 @@ pub struct mp4parse_pssh_info {
     pub data: mp4parse_byte_data,
 }
 
+#[repr(C)]
+#[derive(Default)]
+pub struct mp4parser_sinf_info {
+    pub is_encrypted: u32,
+    pub iv_size: u8,
+    pub kid: mp4parse_byte_data,
+}
+
 #[derive(Default)]
 #[repr(C)]
 pub struct mp4parse_track_audio_info {
@@ -142,6 +150,7 @@ pub struct mp4parse_track_audio_info {
     // int32_t profile;
     // int32_t extended_profile; // check types
     pub codec_specific_config: mp4parse_byte_data,
+    pub protected_data: mp4parser_sinf_info,
 }
 
 #[repr(C)]
@@ -151,6 +160,7 @@ pub struct mp4parse_track_video_info {
     pub image_width: u16,
     pub image_height: u16,
     pub extra_data: mp4parse_byte_data,
+    pub protected_data: mp4parser_sinf_info,
 }
 
 #[repr(C)]
@@ -503,6 +513,15 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
         }
     }
 
+    match audio.protect_info {
+        Some(ref protected) => {
+            (*info).protected_data.is_encrypted = protected.tenc.is_encrypted;
+            (*info).protected_data.iv_size = protected.tenc.iv_size;
+            (*info).protected_data.kid.set_data(&(protected.tenc.kid));
+        },
+        _ => {},
+    }
+
     MP4PARSE_OK
 }
 
@@ -548,6 +567,15 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
     match video.codec_specific {
         VideoCodecSpecific::AVCConfig(ref avc) => {
             (*info).extra_data.set_data(avc);
+        },
+        _ => {},
+    }
+
+    match video.protect_info {
+        Some(ref protected) => {
+            (*info).protected_data.is_encrypted = protected.tenc.is_encrypted;
+            (*info).protected_data.iv_size = protected.tenc.iv_size;
+            (*info).protected_data.kid.set_data(&(protected.tenc.kid));
         },
         _ => {},
     }
@@ -743,6 +771,7 @@ fn arg_validation() {
             image_width: 0,
             image_height: 0,
             extra_data: mp4parse_byte_data::default(),
+            protected_data: Default::default(),
         };
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(std::ptr::null_mut(), 0, &mut dummy_video));
 
@@ -788,6 +817,7 @@ fn arg_validation_with_parser() {
             image_width: 0,
             image_height: 0,
             extra_data: mp4parse_byte_data::default(),
+            protected_data: Default::default(),
         };
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(parser, 0, &mut dummy_video));
 
@@ -860,6 +890,7 @@ fn arg_validation_with_data() {
             image_width: 0,
             image_height: 0,
             extra_data: mp4parse_byte_data::default(),
+            protected_data: Default::default(),
         };
         assert_eq!(MP4PARSE_OK, mp4parse_get_track_video_info(parser, 0, &mut video));
         assert_eq!(video.display_width, 320);
@@ -892,7 +923,9 @@ fn arg_validation_with_data() {
                                                     display_height: 0,
                                                     image_width: 0,
                                                     image_height: 0,
-                                                    extra_data: mp4parse_byte_data::default(),};
+                                                    extra_data: mp4parse_byte_data::default(),
+                                                    protected_data: Default::default(),
+        };
         assert_eq!(MP4PARSE_ERROR_BADARG, mp4parse_get_track_video_info(parser, 3, &mut video));
         assert_eq!(video.display_width, 0);
         assert_eq!(video.display_height, 0);
