@@ -146,9 +146,7 @@ pub struct mp4parse_track_audio_info {
     pub channels: u16,
     pub bit_depth: u16,
     pub sample_rate: u32,
-    // TODO(kinetik):
-    // int32_t profile;
-    // int32_t extended_profile; // check types
+    pub profile: u16,
     pub codec_specific_config: mp4parse_byte_data,
     pub protected_data: mp4parser_sinf_info,
 }
@@ -478,6 +476,9 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
             }
             if let Some(channels) = v.audio_channel_count {
                 (*info).channels = channels;
+            }
+            if let Some(profile) = v.audio_object_type {
+                (*info).profile = profile;
             }
         }
         AudioCodecSpecific::FLACSpecificBox(ref flac) => {

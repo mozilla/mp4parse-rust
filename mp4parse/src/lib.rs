@@ -208,6 +208,7 @@ pub enum SampleEntry {
 #[derive(Debug, Clone, Default)]
 pub struct ES_Descriptor {
     pub audio_codec: CodecType,
+    pub audio_object_type: Option<u16>,
     pub audio_sample_rate: Option<u32>,
     pub audio_channel_count: Option<u16>,
     pub codec_esds: Vec<u8>,
@@ -1248,6 +1249,8 @@ fn read_ds_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
 
     let audio_specific_config = be_u16(des)?;
 
+    let audio_object_type = audio_specific_config >> 11;
+
     let sample_index = (audio_specific_config & 0x07FF) >> 7;
 
     let channel_counts = (audio_specific_config & 0x007F) >> 3;
@@ -1255,6 +1258,7 @@ fn read_ds_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
     let sample_frequency =
         frequency_table.iter().find(|item| item.0 == sample_index).map(|x| x.1);
 
+    esds.audio_object_type = Some(audio_object_type);
     esds.audio_sample_rate = sample_frequency;
     esds.audio_channel_count = Some(channel_counts);
 
