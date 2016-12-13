@@ -228,7 +228,7 @@ pub struct AudioSampleEntry {
     pub samplesize: u16,
     pub samplerate: u32,
     pub codec_specific: AudioCodecSpecific,
-    pub protect_info: Option<ProtectionSchemeInfoBox>,
+    pub protection_info: Option<ProtectionSchemeInfoBox>,
 }
 
 #[derive(Debug, Clone)]
@@ -243,7 +243,7 @@ pub struct VideoSampleEntry {
     pub width: u16,
     pub height: u16,
     pub codec_specific: VideoCodecSpecific,
-    pub protect_info: Option<ProtectionSchemeInfoBox>,
+    pub protection_info: Option<ProtectionSchemeInfoBox>,
 }
 
 /// Represent a Video Partition Codec Configuration 'vpcC' box (aka vp9).
@@ -1491,7 +1491,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> 
 
     // Skip clap/pasp/etc. for now.
     let mut codec_specific = None;
-    let mut protect_info = None;
+    let mut protection_info = None;
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
@@ -1526,7 +1526,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> 
                 }
                 let sinf = read_sinf(&mut b)?;
                 log!("{:?} (sinf)", sinf);
-                protect_info = Some(sinf);
+                protection_info = Some(sinf);
             }
             _ => skip_box_content(&mut b)?,
         }
@@ -1539,7 +1539,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> 
             width: width,
             height: height,
             codec_specific: codec_specific,
-            protect_info: protect_info,
+            protection_info: protection_info,
         }))
         .ok_or_else(|| Error::InvalidData("malformed video sample entry"))
 }
@@ -1598,7 +1598,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> 
 
     // Skip chan/etc. for now.
     let mut codec_specific = None;
-    let mut protect_info = None;
+    let mut protection_info = None;
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
@@ -1643,7 +1643,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> 
                 let sinf = read_sinf(&mut b)?;
                 log!("{:?} (sinf)", sinf);
                 track.codec_type = CodecType::EncryptedAudio;
-                protect_info = Some(sinf);
+                protection_info = Some(sinf);
             }
             _ => skip_box_content(&mut b)?,
         }
@@ -1657,7 +1657,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> 
             samplesize: samplesize,
             samplerate: samplerate,
             codec_specific: codec_specific,
-            protect_info: protect_info,
+            protection_info: protection_info,
         }))
         .ok_or_else(|| Error::InvalidData("malformed audio sample entry"))
 }
@@ -1714,21 +1714,28 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
 fn read_sinf<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSchemeInfoBox> {
     let mut sinf = ProtectionSchemeInfoBox::default();
 
+    let mut has_frma_schi_boxes = (false, false);
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::OriginalFormatBox => {
                 let frma = read_frma(&mut b)?;
                 sinf.code_name = frma;
+                has_frma_schi_boxes.0 = true;
             },
             BoxType::SchemeInformationBox => {
                 // We only need tenc box in schi box so far.
                 let schi_tenc = read_schi(&mut b)?;
                 sinf.tenc = schi_tenc;
+                has_frma_schi_boxes.1 = true
             },
             _ => skip_box_content(&mut b)?,
         }
         check_parser_state!(b.content);
+    }
+
+    if has_frma_schi_boxes != (true, true) {
+        return Err(Error::InvalidData("malformat sinf box"));
     }
 
     Ok(sinf)

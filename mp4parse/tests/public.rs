@@ -117,7 +117,7 @@ fn public_audio_tenc() {
         assert_eq!(track.codec_type, mp4::CodecType::EncryptedAudio);
         match track.data {
             Some(mp4::SampleEntry::Audio(a)) => {
-                match a.protect_info {
+                match a.protection_info {
                     Some(p) => {
                         assert_eq!(p.code_name, "mp4a");
                         assert!(p.tenc.is_encrypted > 0);
@@ -168,7 +168,7 @@ fn public_video_cenc() {
         assert_eq!(track.codec_type, mp4::CodecType::EncryptedVideo);
         match track.data {
             Some(mp4::SampleEntry::Video(v)) => {
-                match v.protect_info {
+                match v.protection_info {
                     Some(p) => {
                         assert_eq!(p.code_name, "avc1");
                         assert!(p.tenc.is_encrypted > 0);

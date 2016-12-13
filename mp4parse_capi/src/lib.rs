@@ -513,7 +513,7 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
         }
     }
 
-    match audio.protect_info {
+    match audio.protection_info {
         Some(ref protected) => {
             (*info).protected_data.is_encrypted = protected.tenc.is_encrypted;
             (*info).protected_data.iv_size = protected.tenc.iv_size;
@@ -571,7 +571,7 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
         _ => {},
     }
 
-    match video.protect_info {
+    match video.protection_info {
         Some(ref protected) => {
             (*info).protected_data.is_encrypted = protected.tenc.is_encrypted;
             (*info).protected_data.iv_size = protected.tenc.iv_size;
