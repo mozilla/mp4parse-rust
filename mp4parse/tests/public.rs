@@ -117,22 +117,24 @@ fn public_audio_tenc() {
         assert_eq!(track.codec_type, mp4::CodecType::EncryptedAudio);
         match track.data {
             Some(mp4::SampleEntry::Audio(a)) => {
-                match a.protection_info {
-                    Some(p) => {
+                match a.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
+                    Some(ref p) => {
                         assert_eq!(p.code_name, "mp4a");
-                        assert!(p.tenc.is_encrypted > 0);
-                        assert!(p.tenc.iv_size ==  16);
-                        assert!(p.tenc.kid == kid);
+                        if let Some(ref tenc) = p.tenc {
+                            assert!(tenc.is_encrypted > 0);
+                            assert!(tenc.iv_size ==  16);
+                            assert!(tenc.kid == kid);
+                        } else {
+                            assert!(false, "Invalid test condition");
+                        }
                     },
-                    _ => {
-                        // something is wrong in your patch...
-                        assert!(false);
+                    _=> {
+                        assert!(false, "Invalid test condition");
                     },
                 }
             },
             _ => {
-                // something is wrong in your patch...
-                assert!(false);
+                assert!(false, "Invalid test condition");
             }
         }
     }
@@ -168,22 +170,24 @@ fn public_video_cenc() {
         assert_eq!(track.codec_type, mp4::CodecType::EncryptedVideo);
         match track.data {
             Some(mp4::SampleEntry::Video(v)) => {
-                match v.protection_info {
-                    Some(p) => {
+                match v.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
+                    Some(ref p) => {
                         assert_eq!(p.code_name, "avc1");
-                        assert!(p.tenc.is_encrypted > 0);
-                        assert!(p.tenc.iv_size ==  16);
-                        assert!(p.tenc.kid == kid);
+                        if let Some(ref tenc) = p.tenc {
+                            assert!(tenc.is_encrypted > 0);
+                            assert!(tenc.iv_size ==  16);
+                            assert!(tenc.kid == kid);
+                        } else {
+                            assert!(false, "Invalid test condition");
+                        }
                     },
-                    _ => {
-                        // something is wrong in your patch...
-                        assert!(false);
+                    _=> {
+                        assert!(false, "Invalid test condition");
                     },
                 }
             },
             _ => {
-                // something is wrong in your patch...
-                assert!(false);
+                assert!(false, "Invalid test condition");
             }
         }
     }
