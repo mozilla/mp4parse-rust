@@ -521,7 +521,7 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
                 (*info).protected_data.kid.set_data(&(tenc.kid));
             }
         },
-        _=> {},
+        _ => {},
     }
 
     MP4PARSE_OK
@@ -581,7 +581,7 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
                 (*info).protected_data.kid.set_data(&(tenc.kid));
             }
         },
-        _=> {},
+        _ => {},
     }
 
     MP4PARSE_OK
