@@ -125,19 +125,16 @@ fn public_audio_tenc() {
                             assert!(tenc.iv_size ==  16);
                             assert!(tenc.kid == kid);
                         } else {
-                            // something is wrong in your patch...
-                            assert!(false);
+                            assert!(false, "Invalid test condition");
                         }
                     },
                     _=> {
-                        // something is wrong in your patch...
-                        assert!(false);
+                        assert!(false, "Invalid test condition");
                     },
                 }
             },
             _ => {
-                // something is wrong in your patch...
-                assert!(false);
+                assert!(false, "Invalid test condition");
             }
         }
     }
@@ -181,19 +178,16 @@ fn public_video_cenc() {
                             assert!(tenc.iv_size ==  16);
                             assert!(tenc.kid == kid);
                         } else {
-                            // something is wrong in your patch...
-                            assert!(false);
+                            assert!(false, "Invalid test condition");
                         }
                     },
                     _=> {
-                        // something is wrong in your patch...
-                        assert!(false);
+                        assert!(false, "Invalid test condition");
                     },
                 }
             },
             _ => {
-                // something is wrong in your patch...
-                assert!(false);
+                assert!(false, "Invalid test condition");
             }
         }
     }

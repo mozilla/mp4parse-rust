@@ -1739,6 +1739,9 @@ fn read_schi<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<TrackEncryptionBox>
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::TrackEncryptionBox => {
+                if tenc.is_some() {
+                    return Err(Error::InvalidData("tenc box should be only one at most in sinf box"));
+                }
                 tenc = Some(read_tenc(&mut b)?);
             },
             _ => skip_box_content(&mut b)?,
