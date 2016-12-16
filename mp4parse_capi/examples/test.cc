@@ -48,13 +48,6 @@ void test_new_parser()
   assert(dummy_value == 42);
 }
 
-template<typename T>
-void assert_zero(T *t) {
-  T zero;
-  memset(&zero, 0, sizeof(zero));
-  assert(memcmp(t, &zero, sizeof(zero)) == 0);
-}
-
 void test_arg_validation()
 {
   mp4parse_parser *parser = mp4parse_new(nullptr);
@@ -77,22 +70,16 @@ void test_arg_validation()
   assert(rv == MP4PARSE_ERROR_BADARG);
 
   mp4parse_track_info info;
-  memset(&info, 0, sizeof(info));
   rv = mp4parse_get_track_info(nullptr, 0, &info);
   assert(rv == MP4PARSE_ERROR_BADARG);
-  assert_zero(&info);
 
   mp4parse_track_video_info video;
-  memset(&video, 0, sizeof(video));
   rv = mp4parse_get_track_video_info(nullptr, 0, &video);
   assert(rv == MP4PARSE_ERROR_BADARG);
-  assert_zero(&video);
 
   mp4parse_track_audio_info audio;
-  memset(&audio, 0, sizeof(audio));
   rv = mp4parse_get_track_audio_info(nullptr, 0, &audio);
   assert(rv == MP4PARSE_ERROR_BADARG);
-  assert_zero(&audio);
 
   assert(dummy_value == 42);
 }
@@ -137,7 +124,6 @@ void test_arg_validation_with_data(const std::string& filename)
   assert(tracks == 2);
 
   mp4parse_track_info info;
-  memset(&info, 0, sizeof(info));
   rv = mp4parse_get_track_info(parser, 0, &info);
   assert(rv == MP4PARSE_OK);
   assert(info.track_type == MP4PARSE_TRACK_TYPE_VIDEO);
@@ -145,7 +131,6 @@ void test_arg_validation_with_data(const std::string& filename)
   assert(info.duration == 40000);
   assert(info.media_time == 0);
 
-  memset(&info, 0, sizeof(info));
   rv = mp4parse_get_track_info(parser, 1, &info);
   assert(rv == MP4PARSE_OK);
   assert(info.track_type == MP4PARSE_TRACK_TYPE_AUDIO);
@@ -154,7 +139,6 @@ void test_arg_validation_with_data(const std::string& filename)
   assert(info.media_time == 21333);
 
   mp4parse_track_video_info video;
-  memset(&video, 0, sizeof(video));
   rv = mp4parse_get_track_video_info(parser, 0, &video);
   assert(rv == MP4PARSE_OK);
   assert(video.display_width == 320);
@@ -163,7 +147,6 @@ void test_arg_validation_with_data(const std::string& filename)
   assert(video.image_height == 240);
 
   mp4parse_track_audio_info audio;
-  memset(&audio, 0, sizeof(audio));
   rv = mp4parse_get_track_audio_info(parser, 1, &audio);
   assert(rv == MP4PARSE_OK);
   assert(audio.channels == 1);
@@ -171,19 +154,13 @@ void test_arg_validation_with_data(const std::string& filename)
   assert(audio.sample_rate == 48000);
 
   // Test with an invalid track number.
-  memset(&info, 0, sizeof(info));
-  memset(&video, 0, sizeof(video));
-  memset(&audio, 0, sizeof(audio));
 
   rv = mp4parse_get_track_info(parser, 3, &info);
   assert(rv == MP4PARSE_ERROR_BADARG);
-  assert_zero(&info);
   rv = mp4parse_get_track_video_info(parser, 3, &video);
   assert(rv == MP4PARSE_ERROR_BADARG);
-  assert_zero(&video);
   rv = mp4parse_get_track_audio_info(parser, 3, &audio);
   assert(rv == MP4PARSE_ERROR_BADARG);
-  assert_zero(&audio);
 
   mp4parse_free(parser);
   fclose(f);

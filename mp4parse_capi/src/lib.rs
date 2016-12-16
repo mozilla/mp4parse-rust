@@ -82,6 +82,10 @@ pub enum mp4parse_track_type {
     MP4PARSE_TRACK_TYPE_AUDIO = 1,
 }
 
+impl Default for mp4parse_track_type {
+    fn default() -> Self { mp4parse_track_type::MP4PARSE_TRACK_TYPE_VIDEO }
+}
+
 #[repr(C)]
 #[derive(PartialEq, Debug)]
 pub enum mp4parse_codec {
@@ -94,7 +98,12 @@ pub enum mp4parse_codec {
     MP4PARSE_CODEC_MP3,
 }
 
+impl Default for mp4parse_codec {
+    fn default() -> Self { mp4parse_codec::MP4PARSE_CODEC_UNKNOWN }
+}
+
 #[repr(C)]
+#[derive(Default)]
 pub struct mp4parse_track_info {
     pub track_type: mp4parse_track_type,
     pub codec: mp4parse_codec,
@@ -140,8 +149,8 @@ pub struct mp4parser_sinf_info {
     pub kid: mp4parse_byte_data,
 }
 
-#[derive(Default)]
 #[repr(C)]
+#[derive(Default)]
 pub struct mp4parse_track_audio_info {
     pub channels: u16,
     pub bit_depth: u16,
@@ -152,6 +161,7 @@ pub struct mp4parse_track_audio_info {
 }
 
 #[repr(C)]
+#[derive(Default)]
 pub struct mp4parse_track_video_info {
     pub display_width: u32,
     pub display_height: u32,
@@ -162,6 +172,7 @@ pub struct mp4parse_track_video_info {
 }
 
 #[repr(C)]
+#[derive(Default)]
 pub struct mp4parse_fragment_info {
     pub fragment_duration: u64,
     // TODO:
@@ -354,6 +365,9 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
         return MP4PARSE_ERROR_BADARG;
     }
 
+    // Initialize fields to default values to ensure all fields are always valid.
+    *info = Default::default();
+
     let context = (*parser).context_mut();
     let track_index: usize = track_index as usize;
     let info: &mut mp4parse_track_info = &mut *info;
@@ -436,6 +450,9 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
     if parser.is_null() || info.is_null() || (*parser).poisoned() {
         return MP4PARSE_ERROR_BADARG;
     }
+
+    // Initialize fields to default values to ensure all fields are always valid.
+    *info = Default::default();
 
     let context = (*parser).context_mut();
 
@@ -535,6 +552,9 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
         return MP4PARSE_ERROR_BADARG;
     }
 
+    // Initialize fields to default values to ensure all fields are always valid.
+    *info = Default::default();
+
     let context = (*parser).context_mut();
 
     if track_index as usize >= context.tracks.len() {
@@ -595,6 +615,9 @@ pub unsafe extern fn mp4parse_get_fragment_info(parser: *mut mp4parse_parser, in
         return MP4PARSE_ERROR_BADARG;
     }
 
+    // Initialize fields to default values to ensure all fields are always valid.
+    *info = Default::default();
+
     let context = (*parser).context();
     let info: &mut mp4parse_fragment_info = &mut *info;
 
@@ -652,6 +675,9 @@ pub unsafe extern fn mp4parse_get_pssh_info(parser: *mut mp4parse_parser, info: 
     if parser.is_null() || info.is_null() || (*parser).poisoned() {
         return MP4PARSE_ERROR_BADARG;
     }
+
+    // Initialize fields to default values to ensure all fields are always valid.
+    *info = Default::default();
 
     let context = (*parser).context_mut();
     let pssh_data = (*parser).pssh_data_mut();
