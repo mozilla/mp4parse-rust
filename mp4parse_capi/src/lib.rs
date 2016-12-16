@@ -365,7 +365,7 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
         return MP4PARSE_ERROR_BADARG;
     }
 
-    // Set default value due to it is allocated in gecko.
+    // Initialize fields to default values to ensure all fields are always valid.
     *info = Default::default();
 
     let context = (*parser).context_mut();
@@ -451,7 +451,7 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
         return MP4PARSE_ERROR_BADARG;
     }
 
-    // Set default value due to it is allocated in gecko.
+    // Initialize fields to default values to ensure all fields are always valid.
     *info = Default::default();
 
     let context = (*parser).context_mut();
@@ -552,7 +552,7 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
         return MP4PARSE_ERROR_BADARG;
     }
 
-    // Set default value due to it is allocated in gecko.
+    // Initialize fields to default values to ensure all fields are always valid.
     *info = Default::default();
 
     let context = (*parser).context_mut();
@@ -615,7 +615,7 @@ pub unsafe extern fn mp4parse_get_fragment_info(parser: *mut mp4parse_parser, in
         return MP4PARSE_ERROR_BADARG;
     }
 
-    // Set default value due to it is allocated in gecko.
+    // Initialize fields to default values to ensure all fields are always valid.
     *info = Default::default();
 
     let context = (*parser).context();
@@ -676,7 +676,7 @@ pub unsafe extern fn mp4parse_get_pssh_info(parser: *mut mp4parse_parser, info: 
         return MP4PARSE_ERROR_BADARG;
     }
 
-    // Set default value due to it is allocated in gecko.
+    // Initialize fields to default values to ensure all fields are always valid.
     *info = Default::default();
 
     let context = (*parser).context_mut();
