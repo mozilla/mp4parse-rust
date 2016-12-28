@@ -23,7 +23,7 @@
 //!     userdata: &mut file as *mut _ as *mut std::os::raw::c_void
 //! };
 //! unsafe {
-//!     let parser = mp4parse_capi::mp4parse_new(&io);
+//!     let parser = mp4parse_capi::mp4parse_new(&io, false);
 //!     let rv = mp4parse_capi::mp4parse_read(parser);
 //!     assert_eq!(rv, mp4parse_capi::mp4parse_error::MP4PARSE_OK);
 //!     mp4parse_capi::mp4parse_free(parser);
@@ -248,7 +248,7 @@ impl Read for mp4parse_io {
 
 /// Allocate an `mp4parse_parser*` to read from the supplied `mp4parse_io`.
 #[no_mangle]
-pub unsafe extern fn mp4parse_new(io: *const mp4parse_io) -> *mut mp4parse_parser {
+pub unsafe extern fn mp4parse_new(io: *const mp4parse_io, log: bool) -> *mut mp4parse_parser {
     if io.is_null() || (*io).userdata.is_null() {
         return std::ptr::null_mut();
     }
@@ -267,6 +267,9 @@ pub unsafe extern fn mp4parse_new(io: *const mp4parse_io) -> *mut mp4parse_parse
         opus_header: HashMap::new(),
         pssh_data: Vec::new(),
     }));
+
+    mp4parse::set_debug_mode(log);
+
     Box::into_raw(parser)
 }
 
@@ -731,7 +734,7 @@ fn new_parser() {
         userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
     };
     unsafe {
-        let parser = mp4parse_new(&io);
+        let parser = mp4parse_new(&io, false);
         assert!(!parser.is_null());
         mp4parse_free(parser);
     }
@@ -760,7 +763,7 @@ fn get_track_count_null_parser() {
 fn arg_validation() {
     unsafe {
         // Passing a null mp4parse_io is an error.
-        let parser = mp4parse_new(std::ptr::null());
+        let parser = mp4parse_new(std::ptr::null(), false);
         assert!(parser.is_null());
 
         let null_mut: *mut std::os::raw::c_void = std::ptr::null_mut();
@@ -768,12 +771,12 @@ fn arg_validation() {
         // Passing an mp4parse_io with null members is an error.
         let io = mp4parse_io { read: std::mem::transmute(null_mut),
                                userdata: null_mut };
-        let parser = mp4parse_new(&io);
+        let parser = mp4parse_new(&io, false);
         assert!(parser.is_null());
 
         let io = mp4parse_io { read: panic_read,
                                userdata: null_mut };
-        let parser = mp4parse_new(&io);
+        let parser = mp4parse_new(&io, false);
         assert!(parser.is_null());
 
         let mut dummy_value = 42;
@@ -781,7 +784,7 @@ fn arg_validation() {
             read: std::mem::transmute(null_mut),
             userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
         };
-        let parser = mp4parse_new(&io);
+        let parser = mp4parse_new(&io, false);
         assert!(parser.is_null());
 
         // Passing a null mp4parse_parser is an error.
@@ -819,7 +822,7 @@ fn arg_validation_with_parser() {
             read: error_read,
             userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
         };
-        let parser = mp4parse_new(&io);
+        let parser = mp4parse_new(&io, false);
         assert!(!parser.is_null());
 
         // Our mp4parse_io read should simply fail with an error.
@@ -867,7 +870,7 @@ fn get_track_count_poisoned_parser() {
             read: error_read,
             userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
         };
-        let parser = mp4parse_new(&io);
+        let parser = mp4parse_new(&io, false);
         assert!(!parser.is_null());
 
         // Our mp4parse_io read should simply fail with an error.
@@ -885,7 +888,7 @@ fn arg_validation_with_data() {
         let mut file = std::fs::File::open("../mp4parse/tests/minimal.mp4").unwrap();
         let io = mp4parse_io { read: valid_read,
                                userdata: &mut file as *mut _ as *mut std::os::raw::c_void };
-        let parser = mp4parse_new(&io);
+        let parser = mp4parse_new(&io, false);
         assert!(!parser.is_null());
 
         assert_eq!(MP4PARSE_OK, mp4parse_read(parser));

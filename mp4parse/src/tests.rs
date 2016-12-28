@@ -130,11 +130,11 @@ fn read_ftyp() {
     assert_eq!(stream.head.name, BoxType::FileTypeBox);
     assert_eq!(stream.head.size, 24);
     let parsed = super::read_ftyp(&mut stream).unwrap();
-    assert_eq!(parsed.major_brand, 0x6d703432); // mp42
+    assert_eq!(parsed.major_brand, "mp42"); // mp42
     assert_eq!(parsed.minor_version, 0);
     assert_eq!(parsed.compatible_brands.len(), 2);
-    assert_eq!(parsed.compatible_brands[0], 0x69736f6d); // isom
-    assert_eq!(parsed.compatible_brands[1], 0x6d703432); // mp42
+    assert_eq!(parsed.compatible_brands[0], "isom"); // isom
+    assert_eq!(parsed.compatible_brands[1], "mp42"); // mp42
 }
 
 #[test]
@@ -172,11 +172,11 @@ fn read_ftyp_case() {
     assert_eq!(stream.head.name, BoxType::FileTypeBox);
     assert_eq!(stream.head.size, 24);
     let parsed = super::read_ftyp(&mut stream).unwrap();
-    assert_eq!(parsed.major_brand, 0x4d503432);
+    assert_eq!(parsed.major_brand, "MP42");
     assert_eq!(parsed.minor_version, 0);
     assert_eq!(parsed.compatible_brands.len(), 2);
-    assert_eq!(parsed.compatible_brands[0], 0x49534f4d); // ISOM
-    assert_eq!(parsed.compatible_brands[1], 0x4d503432); // MP42
+    assert_eq!(parsed.compatible_brands[0], "ISOM"); // ISOM
+    assert_eq!(parsed.compatible_brands[1], "MP42"); // MP42
 }
 
 #[test]

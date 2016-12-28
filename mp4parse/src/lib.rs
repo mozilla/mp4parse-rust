@@ -17,7 +17,7 @@ use std::io::Cursor;
 use std::cmp;
 
 mod boxes;
-use boxes::BoxType;
+use boxes::{BoxType, convert_to_fourcc};
 
 // Unit tests.
 #[cfg(test)]
@@ -106,9 +106,9 @@ struct BoxHeader {
 /// File type box 'ftyp'.
 #[derive(Debug)]
 struct FileTypeBox {
-    major_brand: u32,
+    major_brand: String,
     minor_version: u32,
-    compatible_brands: Vec<u32>,
+    compatible_brands: Vec<String>,
 }
 
 /// Movie header box 'mvhd'.
@@ -473,6 +473,15 @@ impl<'a, T: Read> BMFFBox<'a, T> {
 
     fn box_iter<'b>(&'b mut self) -> BoxIter<BMFFBox<'a, T>> {
         BoxIter::new(self)
+    }
+}
+
+impl<'a, T: Read> Drop for BMFFBox<'a, T> {
+    fn drop(&mut self) {
+        if self.content.limit() > 0 {
+            let name = convert_to_fourcc(Into::into(self.head.name));
+            log!("Dropping {} bytes in '{}'", self.content.limit(), name);
+        }
     }
 }
 
@@ -874,10 +883,10 @@ fn read_ftyp<T: Read>(src: &mut BMFFBox<T>) -> Result<FileTypeBox> {
     let brand_count = bytes_left / 4;
     let mut brands = Vec::new();
     for _ in 0..brand_count {
-        brands.push(be_u32(src)?);
+        brands.push(convert_to_fourcc(be_u32(src)?));
     }
     Ok(FileTypeBox {
-        major_brand: major,
+        major_brand: convert_to_fourcc(major),
         minor_version: minor,
         compatible_brands: brands,
     })

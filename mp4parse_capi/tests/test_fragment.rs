@@ -20,7 +20,7 @@ fn parse_fragment() {
     };
 
     unsafe {
-        let parser = mp4parse_new(&io);
+        let parser = mp4parse_new(&io, false);
 
         let mut rv = mp4parse_read(parser);
         assert_eq!(rv, mp4parse_error::MP4PARSE_OK);

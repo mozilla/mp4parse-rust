@@ -1,10 +1,11 @@
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
+use std::fmt;
 
 macro_rules! box_database {
     ($($boxenum:ident $boxtype:expr),*,) => {
-        #[derive(Debug, Clone, Copy, PartialEq)]
+        #[derive(Clone, Copy, PartialEq)]
         pub enum BoxType {
             $($boxenum),*,
             UnknownBox(u32),
@@ -19,7 +20,40 @@ macro_rules! box_database {
                 }
             }
         }
+
+        impl Into<u32> for BoxType {
+            fn into(self) -> u32 {
+                use self::BoxType::*;
+                match self {
+                    $($boxenum => $boxtype),*,
+                    UnknownBox(t) => t,
+                }
+            }
+        }
+
+        impl fmt::Debug for BoxType {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                let box_num: u32 = Into::into(self.clone());
+                write!(f, "{}", convert_to_fourcc(box_num))
+            }
+        }
     }
+}
+
+pub fn convert_to_fourcc(number: u32) -> String {
+    let mut box_chars = Vec::new(); 
+    for x in 0..4 {
+        let c = (number >> x * 8 & 0x000000FF) as u8;
+        box_chars.push(c);
+    }
+    box_chars.reverse();
+
+    let box_string = match String::from_utf8(box_chars) {
+        Ok(t) => t,
+        _ => String::from("error to get 4CC"),
+    };
+
+    box_string
 }
 
 box_database!(
