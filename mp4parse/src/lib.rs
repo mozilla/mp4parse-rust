@@ -1286,7 +1286,71 @@ fn read_ds_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
         },
     };
 
-    let channel_counts: u16 = ReadInto::read(bit_reader, 4)?;
+    let mut channel_counts: u16 = ReadInto::read(bit_reader, 4)?;
+
+    // parsing GASpecificConfig
+    bit_reader.skip(1)?;        // frameLengthFlag
+    let depend_on_core_order: u8 = ReadInto::read(bit_reader, 1)?;
+    if depend_on_core_order > 0 {
+        bit_reader.skip(14)?;   // codeCoderDelay
+    }
+    bit_reader.skip(1)?;        // extensionFlag
+
+    // When channel_counts is 0, we need to parse the program_config_element
+    // to calculate the channel counts.
+    if channel_counts == 0 {
+        log!("Parsing program_config_element for channel counts");
+
+        bit_reader.skip(4)?;    // element_instance_tag
+        bit_reader.skip(2)?;    // object_type
+        bit_reader.skip(4)?;    // sampling_frequency_index
+        let num_front_channel: u8 = ReadInto::read(bit_reader, 4)?;
+        let num_side_channel: u8 = ReadInto::read(bit_reader, 4)?;
+        let num_back_channel:u8 = ReadInto::read(bit_reader, 4)?;
+        let num_lfe_channel: u8 = ReadInto::read(bit_reader, 2)?;
+        bit_reader.skip(3)?;    // num_assoc_data
+        bit_reader.skip(4)?;    // num_valid_cc
+
+        let mono_mixdown_present: u8 = ReadInto::read(bit_reader, 1)?;
+        if mono_mixdown_present > 0 {
+            bit_reader.skip(4)?;    // mono_mixdown_element_number
+        }
+
+        let stereo_mixdown_present: u8 = ReadInto::read(bit_reader, 1)?;
+        if stereo_mixdown_present > 0 {
+            bit_reader.skip(4)?;    // stereo_mixdown_element_number
+        }
+
+        let matrix_mixdown_idx_present: u8 = ReadInto::read(bit_reader, 1)?;
+        if matrix_mixdown_idx_present > 0 {
+            bit_reader.skip(2)?;    // matrix_mixdown_idx
+            bit_reader.skip(1)?;    // pseudo_surround_enable
+        }
+
+        for _ in 0..num_front_channel {
+            let front_element_is_cpe: u8 = ReadInto::read(bit_reader, 1)?;
+            channel_counts += if front_element_is_cpe > 0 { 2 } else { 1 };
+            bit_reader.skip(4)?;    // front_element_tag_select
+        }
+
+        for _ in 0..num_side_channel {
+            let side_element_is_cpe: u8 = ReadInto::read(bit_reader, 1)?;
+            channel_counts += if side_element_is_cpe > 0 { 2 } else { 1 };
+            bit_reader.skip(4)?;    // side_element_tag_select
+        }
+
+        for _ in 0..num_back_channel {
+            let back_element_is_cpe: u8 = ReadInto::read(bit_reader, 1)?;
+            channel_counts += if back_element_is_cpe > 0 { 2 } else { 1 };
+            bit_reader.skip(4)?;    // back_element_tag_select
+        }
+
+        for _ in 0..num_lfe_channel {
+            let lft_element_is_cpe: u8 = ReadInto::read(bit_reader, 1)?;
+            channel_counts += if lft_element_is_cpe > 0 { 2 } else { 1 };
+            bit_reader.skip(4)?;    // lft_element_tag_select
+        }
+    }
 
     esds.audio_object_type = Some(audio_object_type);
     esds.audio_sample_rate = sample_frequency;
