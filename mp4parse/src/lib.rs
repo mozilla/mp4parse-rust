@@ -17,7 +17,7 @@ use std::io::Cursor;
 use std::cmp;
 
 mod boxes;
-use boxes::{BoxType, convert_to_fourcc};
+use boxes::{BoxType, FourCC};
 
 // Unit tests.
 #[cfg(test)]
@@ -106,9 +106,9 @@ struct BoxHeader {
 /// File type box 'ftyp'.
 #[derive(Debug)]
 struct FileTypeBox {
-    major_brand: String,
+    major_brand: FourCC,
     minor_version: u32,
-    compatible_brands: Vec<String>,
+    compatible_brands: Vec<FourCC>,
 }
 
 /// Movie header box 'mvhd'.
@@ -196,7 +196,7 @@ struct Sample {
 // Handler reference box 'hdlr'
 #[derive(Debug)]
 struct HandlerBox {
-    handler_type: u32,
+    handler_type: FourCC,
 }
 
 // Sample description box 'stsd'
@@ -479,7 +479,7 @@ impl<'a, T: Read> BMFFBox<'a, T> {
 impl<'a, T: Read> Drop for BMFFBox<'a, T> {
     fn drop(&mut self) {
         if self.content.limit() > 0 {
-            let name = convert_to_fourcc(Into::into(self.head.name));
+            let name: FourCC = From::from(self.head.name);
             log!("Dropping {} bytes in '{}'", self.content.limit(), name);
         }
     }
@@ -802,9 +802,10 @@ fn read_mdia<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
             }
             BoxType::HandlerBox => {
                 let hdlr = read_hdlr(&mut b)?;
-                match hdlr.handler_type {
-                    0x76696465 /* 'vide' */ => track.track_type = TrackType::Video,
-                    0x736f756e /* 'soun' */ => track.track_type = TrackType::Audio,
+
+                match hdlr.handler_type.value.as_ref() {
+                    "vide" => track.track_type = TrackType::Video,
+                    "soun" => track.track_type = TrackType::Audio,
                     _ => (),
                 }
                 log!("{:?}", hdlr);
@@ -883,10 +884,10 @@ fn read_ftyp<T: Read>(src: &mut BMFFBox<T>) -> Result<FileTypeBox> {
     let brand_count = bytes_left / 4;
     let mut brands = Vec::new();
     for _ in 0..brand_count {
-        brands.push(convert_to_fourcc(be_u32(src)?));
+        brands.push(From::from(be_u32(src)?));
     }
     Ok(FileTypeBox {
-        major_brand: convert_to_fourcc(major),
+        major_brand: From::from(major),
         minor_version: minor,
         compatible_brands: brands,
     })
@@ -1479,7 +1480,7 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>) -> Result<HandlerBox> {
     // Skip uninteresting fields.
     skip(src, 4)?;
 
-    let handler_type = be_u32(src)?;
+    let handler_type = FourCC::from(be_u32(src)?);
 
     // Skip uninteresting fields.
     skip(src, 12)?;

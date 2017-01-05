@@ -24,7 +24,7 @@ fn doit() {
     let mut cursor = std::io::Cursor::new(input);
     let io = mp4parse_io { read: vec_read, userdata: &mut cursor as *mut _ as *mut std::os::raw::c_void };
     unsafe {
-        let context = mp4parse_new(&io, false);
+        let context = mp4parse_new(&io);
         let rv = mp4parse_read(context);
         if rv == mp4parse_error::MP4PARSE_OK {
             let count = {

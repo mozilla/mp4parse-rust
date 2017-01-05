@@ -42,7 +42,7 @@ void test_new_parser()
 {
   int dummy_value = 42;
   mp4parse_io io = { abort_read, &dummy_value };
-  mp4parse_parser *parser = mp4parse_new(&io, false);
+  mp4parse_parser *parser = mp4parse_new(&io);
   assert(parser != nullptr);
   mp4parse_free(parser);
   assert(dummy_value == 42);
@@ -50,20 +50,20 @@ void test_new_parser()
 
 void test_arg_validation()
 {
-  mp4parse_parser *parser = mp4parse_new(nullptr, false);
+  mp4parse_parser *parser = mp4parse_new(nullptr);
   assert(parser == nullptr);
 
   mp4parse_io io = { nullptr, nullptr };
-  parser = mp4parse_new(&io, false);
+  parser = mp4parse_new(&io);
   assert(parser == nullptr);
 
   io = { abort_read, nullptr };
-  parser = mp4parse_new(&io, false);
+  parser = mp4parse_new(&io);
   assert(parser == nullptr);
 
   int dummy_value = 42;
   io = { nullptr, &dummy_value };
-  parser = mp4parse_new(&io, false);
+  parser = mp4parse_new(&io);
   assert(parser == nullptr);
 
   int32_t rv = mp4parse_read(nullptr);
@@ -88,7 +88,7 @@ void test_arg_validation_with_parser()
 {
   int dummy_value = 42;
   mp4parse_io io = { error_read, &dummy_value };
-  mp4parse_parser *parser = mp4parse_new(&io, false);
+  mp4parse_parser *parser = mp4parse_new(&io);
   assert(parser != nullptr);
 
   int32_t rv = mp4parse_read(parser);
@@ -112,7 +112,7 @@ void test_arg_validation_with_data(const std::string& filename)
   FILE* f = fopen(filename.c_str(), "rb");
   assert(f != nullptr);
   mp4parse_io io = { io_read, f };
-  mp4parse_parser *parser = mp4parse_new(&io, false);
+  mp4parse_parser *parser = mp4parse_new(&io);
   assert(parser != nullptr);
 
   mp4parse_error rv = mp4parse_read(parser);
@@ -194,7 +194,7 @@ int32_t read_file(const char* filename)
   assert(f != nullptr);
 
   mp4parse_io io = { io_read, f };
-  mp4parse_parser *parser = mp4parse_new(&io, false);
+  mp4parse_parser *parser = mp4parse_new(&io);
   assert(parser != nullptr);
 
   fprintf(stderr, "Parsing file '%s'.\n", filename);

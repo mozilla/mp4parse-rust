@@ -33,27 +33,63 @@ macro_rules! box_database {
 
         impl fmt::Debug for BoxType {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                let box_num: u32 = Into::into(self.clone());
-                write!(f, "{}", convert_to_fourcc(box_num))
+                let fourcc: FourCC = From::from(self.clone());
+                write!(f, "{}", fourcc)
             }
         }
     }
 }
 
-pub fn convert_to_fourcc(number: u32) -> String {
-    let mut box_chars = Vec::new(); 
-    for x in 0..4 {
-        let c = (number >> x * 8 & 0x000000FF) as u8;
-        box_chars.push(c);
+#[derive(Default, PartialEq)]
+pub struct FourCC {
+    pub value: String
+}
+
+impl From<u32> for FourCC {
+    fn from(number: u32) -> FourCC {
+        let mut box_chars = Vec::new();
+        for x in 0..4 {
+            let c = (number >> x * 8 & 0x000000FF) as u8;
+            box_chars.push(c);
+        }
+        box_chars.reverse();
+
+        let box_string = match String::from_utf8(box_chars) {
+            Ok(t) => t,
+            _ => String::from("null"), // error to retrieve fourcc
+        };
+
+        FourCC {
+            value: box_string
+        }
     }
-    box_chars.reverse();
+}
 
-    let box_string = match String::from_utf8(box_chars) {
-        Ok(t) => t,
-        _ => String::from("error to get 4CC"),
-    };
+impl From<BoxType> for FourCC {
+    fn from(t: BoxType) -> FourCC {
+        let box_num: u32 = Into::into(t);
+        From::from(box_num)
+    }
+}
 
-    box_string
+impl<'a> From<&'a str> for FourCC {
+    fn from(v: &'a str) -> FourCC {
+        FourCC {
+            value: v.to_owned()
+        }
+    }
+}
+
+impl fmt::Debug for FourCC {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+impl fmt::Display for FourCC {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
 }
 
 box_database!(
