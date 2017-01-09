@@ -858,3 +858,29 @@ fn read_qt_wave_atom() {
           .expect("fail to read qt wave atom");
     assert_eq!(track.codec_type, super::CodecType::MP3);
 }
+
+#[test]
+fn read_esds() {
+    let aac_esds =
+        vec![
+            0x03, 0x24, 0x00, 0x00, 0x00, 0x04, 0x1c, 0x40,
+            0x15, 0x00, 0x12, 0x00, 0x00, 0x01, 0xf4, 0x00,
+            0x00, 0x01, 0xf4, 0x00, 0x05, 0x0d, 0x13, 0x00,
+            0x05, 0x88, 0x05, 0x00, 0x48, 0x21, 0x10, 0x00,
+            0x56, 0xe5, 0x98, 0x06, 0x01, 0x02,
+        ];
+    let mut stream = make_box(BoxSize::Auto, b"esds", |s| {
+        s.B32(0) // reserved
+         .append_bytes(aac_esds.as_slice())
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+
+    let es = super::read_esds(&mut stream).unwrap();
+
+    assert_eq!(es.audio_codec, super::CodecType::AAC);
+    assert_eq!(es.audio_object_type, Some(2));
+    assert_eq!(es.audio_sample_rate, Some(24000));
+    assert_eq!(es.audio_channel_count, Some(6));
+    assert_eq!(es.codec_esds, aac_esds);
+}
