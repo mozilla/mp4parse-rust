@@ -116,7 +116,7 @@ pub struct mp4parse_track_info {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub struct mp4parser_indice {
+pub struct mp4parse_indice {
     pub start_offset: u64,
     pub end_offset: u64,
     pub start_composition: u64,
@@ -128,17 +128,17 @@ pub struct mp4parser_indice {
 #[repr(C)]
 pub struct mp4parse_byte_data {
     pub length: u32,
-    // cheddar can't handle gereric type, so it needs to be multiple data types here.
+    // cheddar can't handle generic type, so it needs to be multiple data types here.
     pub data: *const u8,
-    pub indices: *const mp4parser_indice,
+    pub indices: *const mp4parse_indice,
 }
 
 impl Default for mp4parse_byte_data {
     fn default() -> Self {
         mp4parse_byte_data {
             length: 0,
-            data: std::ptr::null_mut(),
-            indices: std::ptr::null_mut(),
+            data: std::ptr::null(),
+            indices: std::ptr::null(),
         }
     }
 }
@@ -148,7 +148,7 @@ impl mp4parse_byte_data {
         self.length = data.len() as u32;
         self.data = data.as_ptr();
     }
-    fn set_indices(&mut self, data: &Vec<mp4parser_indice>) {
+    fn set_indices(&mut self, data: &Vec<mp4parse_indice>) {
         self.length = data.len() as u32;
         self.indices = data.as_ptr();
     }
@@ -162,7 +162,7 @@ pub struct mp4parse_pssh_info {
 
 #[repr(C)]
 #[derive(Default)]
-pub struct mp4parser_sinf_info {
+pub struct mp4parse_sinf_info {
     pub is_encrypted: u32,
     pub iv_size: u8,
     pub kid: mp4parse_byte_data,
@@ -176,7 +176,7 @@ pub struct mp4parse_track_audio_info {
     pub sample_rate: u32,
     pub profile: u16,
     pub codec_specific_config: mp4parse_byte_data,
-    pub protected_data: mp4parser_sinf_info,
+    pub protected_data: mp4parse_sinf_info,
 }
 
 #[repr(C)]
@@ -187,7 +187,7 @@ pub struct mp4parse_track_video_info {
     pub image_width: u16,
     pub image_height: u16,
     pub extra_data: mp4parse_byte_data,
-    pub protected_data: mp4parser_sinf_info,
+    pub protected_data: mp4parse_sinf_info,
 }
 
 #[repr(C)]
@@ -206,7 +206,7 @@ struct Wrap {
     poisoned: bool,
     opus_header: HashMap<u32, Vec<u8>>,
     pssh_data: Vec<u8>,
-    sample_table: HashMap<u32, Vec<mp4parser_indice>>,
+    sample_table: HashMap<u32, Vec<mp4parse_indice>>,
 }
 
 #[repr(C)]
@@ -242,7 +242,7 @@ impl mp4parse_parser {
         &mut self.0.pssh_data
     }
 
-    fn sample_table_mut(&mut self) -> &mut HashMap<u32, Vec<mp4parser_indice>> {
+    fn sample_table_mut(&mut self) -> &mut HashMap<u32, Vec<mp4parse_indice>> {
         &mut self.0.sample_table
     }
 }
@@ -677,7 +677,7 @@ pub unsafe extern fn mp4parse_get_indice_table(parser: *mut mp4parse_parser, tra
     MP4PARSE_ERROR_INVALID
 }
 
-fn create_sample_table(track: &Track) -> Option<Vec<mp4parser_indice>> {
+fn create_sample_table(track: &Track) -> Option<Vec<mp4parse_indice>> {
     let timescale = match track.timescale {
         Some(t) => t,
         _ => return None,
@@ -700,7 +700,7 @@ fn create_sample_table(track: &Track) -> Option<Vec<mp4parser_indice>> {
     let mut sample_size_iter = stsz.sample_sizes.iter();
     let mut start_chunk = 0;
     let mut end_chunk = 0;
-    let ret = stsc.samples.iter()
+    stsc.samples.iter()
         .map(|sample_chunk| {
                 // Convert the compact table to chunk range and samples per trunk.
                 start_chunk = end_chunk;
@@ -728,7 +728,7 @@ fn create_sample_table(track: &Track) -> Option<Vec<mp4parser_indice>> {
                         cur_position = end_offset;
 
                         sample_table.push(
-                            mp4parser_indice {
+                            mp4parse_indice {
                                 start_offset: start_offset,
                                 end_offset: end_offset,
                                 start_composition: 0,
@@ -741,13 +741,12 @@ fn create_sample_table(track: &Track) -> Option<Vec<mp4parser_indice>> {
                 }
             true
         });
-    if !ret {
+    if sample_table.is_empty() {
         return None;
     }
 
     // Mark the sync sample in sample_table according to 'stss'.
-    let stss_iter = stss.samples.iter();
-    for iter in stss_iter {
+    for iter in &stss.samples {
         sample_table[(iter - 1) as usize].sync = true;
     }
 
