@@ -700,49 +700,46 @@ fn create_sample_table(track: &Track) -> Option<Vec<mp4parse_indice>> {
     let mut sample_size_iter = stsz.sample_sizes.iter();
     let mut start_chunk = 0;
     let mut end_chunk = 0;
-    stsc.samples.iter()
+    let chunk_iter = stsc.samples.iter()
         .map(|sample_chunk| {
                 // Convert the compact table to chunk range and samples per trunk.
                 start_chunk = end_chunk;
                 end_chunk += sample_chunk.first_chunk;
                 ((start_chunk .. end_chunk), sample_chunk.samples_per_chunk)
-            })
-        .all(|chunks| {
-                // Chunks in the chunk range have the same sample number.
-                let chunks_range = chunks.0;
-                let samples_per_chunk = chunks.1;
-                for chunk_id in chunks_range {
-                    let mut cur_position: u64 = stco.offsets[chunk_id as usize];
-                    // Create sample according to sample number of each trunk and calculate
-                    // sample offset.
-                    for _ in 0 .. samples_per_chunk {
-                        let start_offset = cur_position;
-                        let end_offset = match (stsz.sample_size, sample_size_iter.next()) {
-                            (_, Some(t)) => start_offset + *t as u64,
-                            (t, _) if t > 0 => start_offset + t as u64,
-                            _ => 0,
-                        };
-                        if end_offset == 0 {
-                            return false;
-                        }
-                        cur_position = end_offset;
+            });
 
-                        sample_table.push(
-                            mp4parse_indice {
-                                start_offset: start_offset,
-                                end_offset: end_offset,
-                                start_composition: 0,
-                                end_composition: 0,
-                                start_decode: 0,
-                                sync: !has_sync_table,
-                            }
-                        );
-                    }
+    for chunks in chunk_iter {
+        // Chunks in the chunk range have the same sample number.
+        let chunks_range = chunks.0;
+        let samples_per_chunk = chunks.1;
+        for chunk_id in chunks_range {
+            let mut cur_position: u64 = stco.offsets[chunk_id as usize];
+            // Create sample according to sample number of each trunk and calculate
+            // sample offset.
+            for _ in 0 .. samples_per_chunk {
+                let start_offset = cur_position;
+                let end_offset = match (stsz.sample_size, sample_size_iter.next()) {
+                    (_, Some(t)) => start_offset + *t as u64,
+                    (t, _) if t > 0 => start_offset + t as u64,
+                    _ => 0,
+                };
+                if end_offset == 0 {
+                    return None;
                 }
-            true
-        });
-    if sample_table.is_empty() {
-        return None;
+                cur_position = end_offset;
+
+                sample_table.push(
+                    mp4parse_indice {
+                        start_offset: start_offset,
+                        end_offset: end_offset,
+                        start_composition: 0,
+                        end_composition: 0,
+                        start_decode: 0,
+                        sync: !has_sync_table,
+                    }
+                );
+            }
+        }
     }
 
     // Mark the sync sample in sample_table according to 'stss'.
