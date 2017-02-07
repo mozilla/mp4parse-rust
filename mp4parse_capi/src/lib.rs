@@ -55,6 +55,7 @@ use mp4parse::TrackTimeScale;
 use mp4parse::TrackScaledTime;
 use mp4parse::serialize_opus_header;
 use mp4parse::CodecType;
+use mp4parse::Track;
 
 // rusty-cheddar's C enum generation doesn't namespace enum members by
 // prefixing them, so we're forced to do it in our member names until
@@ -114,16 +115,30 @@ pub struct mp4parse_track_info {
 }
 
 #[repr(C)]
+#[derive(Default, Debug)]
+pub struct mp4parse_indice {
+    pub start_offset: u64,
+    pub end_offset: u64,
+    pub start_composition: u64,
+    pub end_composition: u64,
+    pub start_decode: u64,
+    pub sync: bool,
+}
+
+#[repr(C)]
 pub struct mp4parse_byte_data {
     pub length: u32,
+    // cheddar can't handle generic type, so it needs to be multiple data types here.
     pub data: *const u8,
+    pub indices: *const mp4parse_indice,
 }
 
 impl Default for mp4parse_byte_data {
     fn default() -> Self {
         mp4parse_byte_data {
             length: 0,
-            data: std::ptr::null_mut(),
+            data: std::ptr::null(),
+            indices: std::ptr::null(),
         }
     }
 }
@@ -132,6 +147,10 @@ impl mp4parse_byte_data {
     fn set_data(&mut self, data: &Vec<u8>) {
         self.length = data.len() as u32;
         self.data = data.as_ptr();
+    }
+    fn set_indices(&mut self, data: &Vec<mp4parse_indice>) {
+        self.length = data.len() as u32;
+        self.indices = data.as_ptr();
     }
 }
 
@@ -143,7 +162,7 @@ pub struct mp4parse_pssh_info {
 
 #[repr(C)]
 #[derive(Default)]
-pub struct mp4parser_sinf_info {
+pub struct mp4parse_sinf_info {
     pub is_encrypted: u32,
     pub iv_size: u8,
     pub kid: mp4parse_byte_data,
@@ -157,7 +176,7 @@ pub struct mp4parse_track_audio_info {
     pub sample_rate: u32,
     pub profile: u16,
     pub codec_specific_config: mp4parse_byte_data,
-    pub protected_data: mp4parser_sinf_info,
+    pub protected_data: mp4parse_sinf_info,
 }
 
 #[repr(C)]
@@ -168,7 +187,7 @@ pub struct mp4parse_track_video_info {
     pub image_width: u16,
     pub image_height: u16,
     pub extra_data: mp4parse_byte_data,
-    pub protected_data: mp4parser_sinf_info,
+    pub protected_data: mp4parse_sinf_info,
 }
 
 #[repr(C)]
@@ -187,6 +206,7 @@ struct Wrap {
     poisoned: bool,
     opus_header: HashMap<u32, Vec<u8>>,
     pssh_data: Vec<u8>,
+    sample_table: HashMap<u32, Vec<mp4parse_indice>>,
 }
 
 #[repr(C)]
@@ -220,6 +240,10 @@ impl mp4parse_parser {
 
     fn pssh_data_mut(&mut self) -> &mut Vec<u8> {
         &mut self.0.pssh_data
+    }
+
+    fn sample_table_mut(&mut self) -> &mut HashMap<u32, Vec<mp4parse_indice>> {
+        &mut self.0.sample_table
     }
 }
 
@@ -266,6 +290,7 @@ pub unsafe extern fn mp4parse_new(io: *const mp4parse_io) -> *mut mp4parse_parse
         poisoned: false,
         opus_header: HashMap::new(),
         pssh_data: Vec::new(),
+        sample_table: HashMap::new(),
     }));
 
     Box::into_raw(parser)
@@ -613,6 +638,145 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
     }
 
     MP4PARSE_OK
+}
+
+#[no_mangle]
+pub unsafe extern fn mp4parse_get_indice_table(parser: *mut mp4parse_parser, track_id: u32, indices: *mut mp4parse_byte_data) -> mp4parse_error {
+    if parser.is_null() || (*parser).poisoned() {
+        return MP4PARSE_ERROR_BADARG;
+    }
+
+    // Initialize fields to default values to ensure all fields are always valid.
+    *indices = Default::default();
+
+    let context = (*parser).context();
+    let tracks = &context.tracks;
+    let track = match tracks.iter().find(|track| track.track_id == Some(track_id)) {
+        Some(t) => t,
+        _ => return MP4PARSE_ERROR_INVALID,
+    };
+
+    let index_table = (*parser).sample_table_mut();
+    match index_table.get(&track_id) {
+        Some(v) => {
+            (*indices).set_indices(v);
+            return MP4PARSE_OK;
+        },
+        _ => {},
+    }
+
+    match create_sample_table(track) {
+        Some(v) => {
+            (*indices).set_indices(&v);
+            index_table.insert(track_id, v);
+            return MP4PARSE_OK;
+        },
+        _ => {},
+    }
+
+    MP4PARSE_ERROR_INVALID
+}
+
+fn create_sample_table(track: &Track) -> Option<Vec<mp4parse_indice>> {
+    let timescale = match track.timescale {
+        Some(t) => t,
+        _ => return None,
+    };
+
+    let (stsc, stco, stsz, stss, stts) =
+        match (&track.stsc, &track.stco, &track.stsz, &track.stss, &track.stts) {
+            (&Some(ref a), &Some(ref b), &Some(ref c), &Some(ref d), &Some(ref e)) => (a, b, c, d, e),
+            _ => return None,
+        };
+
+    // According to spec, no sync table means every sample is sync sample.
+    let has_sync_table = match track.stss {
+        Some(_) => true,
+        _ => false,
+    };
+
+    // Create sample table and calculate sample offset.
+    let mut sample_table = Vec::new();
+    let mut sample_size_iter = stsz.sample_sizes.iter();
+    let mut start_chunk = 0;
+    let mut end_chunk = 0;
+    let chunk_iter = stsc.samples.iter()
+        .map(|sample_chunk| {
+                // Convert the compact table to chunk range and samples per trunk.
+                start_chunk = end_chunk;
+                end_chunk += sample_chunk.first_chunk;
+                ((start_chunk .. end_chunk), sample_chunk.samples_per_chunk)
+            });
+
+    for chunks in chunk_iter {
+        // Chunks in the chunk range have the same sample number.
+        let chunks_range = chunks.0;
+        let samples_per_chunk = chunks.1;
+        for chunk_id in chunks_range {
+            let mut cur_position: u64 = stco.offsets[chunk_id as usize];
+            // Create sample according to sample number of each trunk and calculate
+            // sample offset.
+            for _ in 0 .. samples_per_chunk {
+                let start_offset = cur_position;
+                let end_offset = match (stsz.sample_size, sample_size_iter.next()) {
+                    (_, Some(t)) => start_offset + *t as u64,
+                    (t, _) if t > 0 => start_offset + t as u64,
+                    _ => 0,
+                };
+                if end_offset == 0 {
+                    return None;
+                }
+                cur_position = end_offset;
+
+                sample_table.push(
+                    mp4parse_indice {
+                        start_offset: start_offset,
+                        end_offset: end_offset,
+                        start_composition: 0,
+                        end_composition: 0,
+                        start_decode: 0,
+                        sync: !has_sync_table,
+                    }
+                );
+            }
+        }
+    }
+
+    // Mark the sync sample in sample_table according to 'stss'.
+    for iter in &stss.samples {
+        sample_table[(iter - 1) as usize].sync = true;
+    }
+
+    // Calculate the decode/composition time from 'stts'.
+    {
+        let mut accum_delta_time: u64 = 0;
+        let mut sample_iter = sample_table.iter_mut();
+        for time_slot in stts.samples.iter() {
+            for _ in 0 .. time_slot.sample_count {
+                let start_track_time = TrackScaledTime(accum_delta_time, 0);
+                let end_track_time = TrackScaledTime(accum_delta_time + time_slot.sample_delta as u64, 0);
+                match (sample_iter.next(),
+                       track_time_to_us(start_track_time, timescale),
+                       track_time_to_us(end_track_time, timescale)) {
+                    (Some(sample), Some(decode_time), Some(end_composition)) => {
+                        accum_delta_time += time_slot.sample_delta as u64;
+                        // TODO: 'elst' is optional box, we need to check 'elst' for start composition time
+                        //       if it exists.
+                        sample.start_decode = decode_time;
+                        sample.start_composition = decode_time;
+                        sample.end_composition = end_composition;
+                        // TODO: 'ctts' is optional box, we need to check ctts for composition time
+                        //       if it exists.
+                    },
+                    _ => {
+                        return None;
+                    }
+                }
+            }
+        }
+    }
+
+    Some(sample_table)
 }
 
 /// Fill the supplied `mp4parse_fragment_info` with metadata from fragmented file.
