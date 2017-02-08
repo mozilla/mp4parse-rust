@@ -20,6 +20,9 @@ exclude = [
 
 build = "build.rs"
 
+[badges]
+travis-ci = { repository = "https://github.com/mozilla/mp4parse-rust" }
+
 [dependencies]
 byteorder = "1.0.0"
 "mp4parse" = {version = "0.6.0", path = "../mp4parse"}
