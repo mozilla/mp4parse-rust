@@ -115,7 +115,7 @@ pub struct mp4parse_track_info {
 }
 
 #[repr(C)]
-#[derive(Default, Debug)]
+#[derive(Default, Debug, PartialEq)]
 pub struct mp4parse_indice {
     pub start_offset: u64,
     pub end_offset: u64,
@@ -683,9 +683,9 @@ fn create_sample_table(track: &Track) -> Option<Vec<mp4parse_indice>> {
         _ => return None,
     };
 
-    let (stsc, stco, stsz, stss, stts) =
-        match (&track.stsc, &track.stco, &track.stsz, &track.stss, &track.stts) {
-            (&Some(ref a), &Some(ref b), &Some(ref c), &Some(ref d), &Some(ref e)) => (a, b, c, d, e),
+    let (stsc, stco, stsz, stts) =
+        match (&track.stsc, &track.stco, &track.stsz, &track.stts) {
+            (&Some(ref a), &Some(ref b), &Some(ref c), &Some(ref d)) => (a, b, c, d),
             _ => return None,
         };
 
@@ -698,17 +698,22 @@ fn create_sample_table(track: &Track) -> Option<Vec<mp4parse_indice>> {
     // Create sample table and calculate sample offset.
     let mut sample_table = Vec::new();
     let mut sample_size_iter = stsz.sample_sizes.iter();
-    let mut start_chunk = 0;
-    let mut end_chunk = 0;
-    let chunk_iter = stsc.samples.iter()
-        .map(|sample_chunk| {
-                // Convert the compact table to chunk range and samples per trunk.
-                start_chunk = end_chunk;
-                end_chunk += sample_chunk.first_chunk;
-                ((start_chunk .. end_chunk), sample_chunk.samples_per_chunk)
-            });
+    let mut chunk_compact_table = Vec::new();
+    let mut next_end_chunk = 0;
 
-    for chunks in chunk_iter {
+    for sample_chunk in stsc.samples.iter().rev() {
+        let end_chunk = if next_end_chunk == 0 {
+                            sample_chunk.first_chunk + 1
+                        } else {
+                            next_end_chunk
+                        };
+
+        next_end_chunk = sample_chunk.first_chunk;
+        chunk_compact_table.push(((sample_chunk.first_chunk - 1 .. end_chunk - 1), sample_chunk.samples_per_chunk));
+    }
+    chunk_compact_table.reverse();
+
+    for chunks in chunk_compact_table {
         // Chunks in the chunk range have the same sample number.
         let chunks_range = chunks.0;
         let samples_per_chunk = chunks.1;
@@ -743,8 +748,13 @@ fn create_sample_table(track: &Track) -> Option<Vec<mp4parse_indice>> {
     }
 
     // Mark the sync sample in sample_table according to 'stss'.
-    for iter in &stss.samples {
-        sample_table[(iter - 1) as usize].sync = true;
+    match &track.stss {
+        &Some(ref v) => {
+            for iter in &v.samples {
+                sample_table[(iter - 1) as usize].sync = true;
+            }
+        },
+        _ => {}
     }
 
     // Calculate the decode/composition time from 'stts'.
@@ -753,8 +763,8 @@ fn create_sample_table(track: &Track) -> Option<Vec<mp4parse_indice>> {
         let mut sample_iter = sample_table.iter_mut();
         for time_slot in stts.samples.iter() {
             for _ in 0 .. time_slot.sample_count {
-                let start_track_time = TrackScaledTime(accum_delta_time, 0);
-                let end_track_time = TrackScaledTime(accum_delta_time + time_slot.sample_delta as u64, 0);
+                let start_track_time = TrackScaledTime(accum_delta_time, timescale.1);
+                let end_track_time = TrackScaledTime(accum_delta_time + time_slot.sample_delta as u64, timescale.1);
                 match (sample_iter.next(),
                        track_time_to_us(start_track_time, timescale),
                        track_time_to_us(end_track_time, timescale)) {
