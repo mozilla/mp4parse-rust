@@ -134,4 +134,5 @@ box_database!(
     TrackEncryptionBox                0x74656e63, // "tenc"
     ProtectionSchemeInformationBox    0x73696e66, // "sinf"
     OriginalFormatBox                 0x66726d61, // "frma"
+    CompositionOffsetBox              0x63747473, // "ctts"
 );
