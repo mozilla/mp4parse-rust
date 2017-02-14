@@ -1902,16 +1902,18 @@ fn read_buf<T: ReadBytesExt>(src: &mut T, size: usize) -> Result<Vec<u8>> {
 // - zero or more byte strings, with a single null terminating the string.
 // - zero byte strings with no null terminator (i.e. zero space in the box for the string)
 // - length-prefixed strings with no null terminator (e.g. bear_rotate_0.mp4)
+// - multiple byte strings where more than one byte is a null.
 fn read_null_terminated_string<T: ReadBytesExt>(src: &mut T, mut size: usize) -> Result<String> {
     let mut buf = Vec::new();
     while size > 0 {
         let c = src.read_u8()?;
+        size -= 1;
         if c == 0 {
             break;
         }
         buf.push(c);
-        size -= 1;
     }
+    skip(src, size)?;
     String::from_utf8(buf).map_err(From::from)
 }
 
