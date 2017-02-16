@@ -668,20 +668,19 @@ pub unsafe extern fn mp4parse_get_indice_table(parser: *mut mp4parse_parser, tra
     // Find the track start offset time from 'elst'.
     // 'media_time' maps start time onward, 'empty_duration' adds time offset
     // before first frame is displayed.
-    let (mut offset_time, scale) =
+    let offset_time =
         match (&track.empty_duration, &track.media_time, &context.timescale) {
             (&Some(empty_duration), &Some(media_time), &Some(scale)) => {
-                ((empty_duration.0 - media_time.0) as i64, scale.0 as i64)
+                (empty_duration.0 - media_time.0) as i64 * scale.0 as i64
             },
             (&Some(empty_duration), _, &Some(scale)) => {
-                (empty_duration.0 as i64, scale.0 as i64)
+                empty_duration.0 as i64 * scale.0 as i64
             },
             (_, &Some(media_time), &Some(scale)) => {
-                ((0 - media_time.0) as i64, scale.0 as i64)
+                (0 - media_time.0) as i64 * scale.0 as i64
             },
-            _ => (0, 0)
+            _ => 0,
         };
-    offset_time *= scale;
 
     match create_sample_table(track, offset_time) {
         Some(v) => {
@@ -695,21 +694,21 @@ pub unsafe extern fn mp4parse_get_indice_table(parser: *mut mp4parse_parser, tra
     MP4PARSE_ERROR_INVALID
 }
 
-// Convert a 'ctt' compact table to full table by iterator,
+// Convert a 'ctts' compact table to full table by iterator,
 // (sample_with_the_same_offset_count, offset) => (offset), (offset), (offset) ...
 //
 // For example:
 // (2, 10), (4, 9) into (10, 10, 9, 9, 9, 9) by calling next_offset_time().
-struct TimeOffsetIteraor<'a> {
+struct TimeOffsetIterator<'a> {
     cur_sample_range: std::ops::Range<u32>,
-    cur_offset: i32,
+    cur_offset: i64,
     ctts_iter: Option<std::slice::Iter<'a, mp4parse::TimeOffset>>,
 }
 
-impl<'a> Iterator for TimeOffsetIteraor<'a> {
-    type Item = i32;
+impl<'a> Iterator for TimeOffsetIterator<'a> {
+    type Item = i64;
 
-    fn next(&mut self) -> Option<i32> {
+    fn next(&mut self) -> Option<i64> {
         let has_sample = self.cur_sample_range.next()
             .or_else(|| {
                 // At end of current TimeOffset, find the next TimeOffset.
@@ -717,12 +716,21 @@ impl<'a> Iterator for TimeOffsetIteraor<'a> {
                     Some(ref mut v) => v,
                     _ => return None,
                 };
+                let offset_version;
                 self.cur_sample_range = match iter.next() {
                     Some(v) => {
-                        self.cur_offset = v.time_offset;
+                        offset_version = v.time_offset;
                         (0 .. v.sample_count)
                     },
-                    _ => (0 .. 0),
+                    _ => {
+                        offset_version = mp4parse::TimeOffsetVersion::Version0(0);
+                        (0 .. 0)
+                    },
+                };
+
+                self.cur_offset = match offset_version {
+                    mp4parse::TimeOffsetVersion::Version0(i) => i as i64,
+                    mp4parse::TimeOffsetVersion::Version1(i) => i as i64,
                 };
 
                 self.cur_sample_range.next()
@@ -735,7 +743,7 @@ impl<'a> Iterator for TimeOffsetIteraor<'a> {
     }
 }
 
-impl<'a> TimeOffsetIteraor<'a> {
+impl<'a> TimeOffsetIterator<'a> {
     fn next_offset_time(&mut self) -> i64 {
         match self.next() {
             Some(v) => v as i64,
@@ -790,11 +798,16 @@ impl<'a> TimeToSampleIteraor<'a> {
 }
 
 // Convert 'stco' compact table to full table by iterator.
-// (start_chunk_num, sample_number) => (sample_number), (sample_number) .. repeat
-// (next start_chunk_num - current start_chunk_num).
+// (start_chunk_num, sample_number) => (start_chunk_num, sample_number),
+//                                     (start_chunk_num + 1, sample_number),
+//                                     (start_chunk_num + 2, sample_number),
+//                                     ...
+//                                     (next start_chunk_num, next sample_number),
+//                                     ...
 //
 // For example:
-// (1, 5), (5, 10), (9, 2) => (5, 5, 5, 5, 10, 10, 10, 10, 2)
+// (1, 5), (5, 10), (9, 2) => (1, 5), (2, 5), (3, 5), (4, 5), (5, 10), (6, 10),
+// (7, 10), (8, 10), (9, 2)
 struct SampleToChunkIterator<'a> {
     chunks: std::ops::Range<u32>,
     sample_count: u32,
@@ -925,7 +938,7 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
         _ => None,
     };
 
-    let mut ctts_offset_iter = TimeOffsetIteraor {
+    let mut ctts_offset_iter = TimeOffsetIterator {
         cur_sample_range: (0 .. 0),
         cur_offset: 0,
         ctts_iter: ctts_iter,

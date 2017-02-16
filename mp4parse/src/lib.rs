@@ -194,10 +194,16 @@ pub struct Sample {
     pub sample_delta: u32,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum TimeOffsetVersion {
+    Version0(u32),
+    Version1(i32),
+}
+
 #[derive(Debug, Clone)]
 pub struct TimeOffset {
     pub sample_count: u32,
-    pub time_offset: i32,
+    pub time_offset: TimeOffsetVersion,
 }
 
 #[derive(Debug)]
@@ -1151,17 +1157,23 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
     let counts = be_u32(src)?;
     let mut offsets = Vec::new();
     for _ in 0..counts {
+        if src.bytes_left() == 0 {
+            return Err(Error::InvalidData("invalid data in 'ctts' box"));
+        }
         let (sample_count, time_offset) = match version {
             0 => {
                 let count = be_u32(src)?;
-                let offset = be_u32(src)? as i32;
+                let offset = TimeOffsetVersion::Version0(be_u32(src)?);
+                (count, offset)
+            },
+            1 => {
+                let count = be_u32(src)?;
+                let offset = TimeOffsetVersion::Version1(be_i32(src)?);
                 (count, offset)
             },
             _ => {
-                let count = be_u32(src)?;
-                let offset = be_i32(src)?;
-                (count, offset)
-            },
+                return Err(Error::InvalidData("unsupported version in 'ctts' box"));
+            }
         };
         offsets.push(TimeOffset {
             sample_count: sample_count,
