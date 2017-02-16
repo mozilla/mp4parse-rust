@@ -753,8 +753,8 @@ impl<'a> TimeOffsetIterator<'a> {
 }
 
 // Convert 'stts' compact table to full table by iterator,
-// (smaple_count_with_the_same_time, time) => (time, time, time) ... repeats
-// smaple_count_with_the_same_time.
+// (sample_count_with_the_same_time, time) => (time, time, time) ... repeats
+// sample_count_with_the_same_time.
 //
 // For example:
 // (2, 3000), (1, 2999) to (3000, 3000, 2999).
