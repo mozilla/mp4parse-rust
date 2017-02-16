@@ -426,6 +426,8 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
                 mp4parse_codec::MP4PARSE_CODEC_MP3,
             AudioCodecSpecific::ES_Descriptor(_) =>
                 mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,
+            AudioCodecSpecific::MP3 =>
+                mp4parse_codec::MP4PARSE_CODEC_MP3,
         },
         Some(SampleEntry::Video(ref video)) => match video.codec_specific {
             VideoCodecSpecific::VPxConfig(_) =>
@@ -561,6 +563,7 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
                 }
             }
         }
+        AudioCodecSpecific::MP3 => (),
     }
 
     match audio.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {

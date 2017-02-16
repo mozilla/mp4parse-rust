@@ -229,6 +229,7 @@ pub enum AudioCodecSpecific {
     ES_Descriptor(ES_Descriptor),
     FLACSpecificBox(FLACSpecificBox),
     OpusSpecificBox(OpusSpecificBox),
+    MP3,
 }
 
 #[derive(Debug, Clone)]
@@ -1446,7 +1447,6 @@ fn read_dfla<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACSpecificBox> {
     if blocks.is_empty() {
         return Err(Error::InvalidData("FLACSpecificBox missing metadata"));
     } else if blocks[0].block_type != 0 {
-        println!("flac metadata block:\n  {:?}", blocks[0]);
         return Err(Error::InvalidData(
                 "FLACSpecificBox must have STREAMINFO metadata first"));
     } else if blocks[0].data.len() != 34 {
@@ -1700,6 +1700,9 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> 
 
     // Skip chan/etc. for now.
     let mut codec_specific = None;
+    if name == BoxType::MP3AudioSampleEntry {
+        codec_specific = Some(AudioCodecSpecific::MP3);
+    }
     let mut protection_info = Vec::new();
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
