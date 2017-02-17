@@ -1156,7 +1156,7 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
 
     let counts = be_u32(src)?;
 
-    if src.bytes_left() < (counts as usize * std::mem::size_of::<TimeOffsetVersion>()) {
+    if src.bytes_left() < (counts as usize * 8) {
         return Err(Error::InvalidData("insufficient data in 'ctts' box"));
     }
 
