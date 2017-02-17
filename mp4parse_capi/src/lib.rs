@@ -806,6 +806,7 @@ struct SampleToChunkIterator<'a> {
     chunks: std::ops::Range<u32>,
     sample_count: u32,
     stsc_peek_iter: std::iter::Peekable<std::slice::Iter<'a, mp4parse::SampleToChunk>>,
+    remain_chunk_count: u32, // total chunk number from 'stco'.
 }
 
 impl<'a> Iterator for SampleToChunkIterator<'a> {
@@ -821,11 +822,13 @@ impl<'a> Iterator for SampleToChunkIterator<'a> {
                     },
                     (Some(next), None) => {
                         self.sample_count = next.samples_per_chunk;
-                        ((next.first_chunk - 1) .. next.first_chunk)
+                        // Total chunk number in 'stsc' could be different to 'stco',
+                        // there could be more chunks at the last 'stsc' record.
+                        ((next.first_chunk - 1) .. next.first_chunk + self.remain_chunk_count -1)
                     },
                     _ => (0 .. 0),
                 };
-
+                self.remain_chunk_count -= self.chunks.len() as u32;
                 self.chunks.next()
             });
 
@@ -883,6 +886,7 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
         chunks: (0 .. 0),
         sample_count: 0,
         stsc_peek_iter: stsc.samples.as_slice().iter().peekable(),
+        remain_chunk_count: stco.offsets.len() as u32,
     };
 
     for i in stsc_iter {
