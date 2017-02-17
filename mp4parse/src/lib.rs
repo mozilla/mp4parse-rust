@@ -1155,11 +1155,13 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
     let (version, _) = read_fullbox_extra(src)?;
 
     let counts = be_u32(src)?;
+
+    if src.bytes_left() < (counts as usize * std::mem::size_of::<TimeOffsetVersion>()) {
+        return Err(Error::InvalidData("insufficient data in 'ctts' box"));
+    }
+
     let mut offsets = Vec::new();
     for _ in 0..counts {
-        if src.bytes_left() == 0 {
-            return Err(Error::InvalidData("invalid data in 'ctts' box"));
-        }
         let (sample_count, time_offset) = match version {
             0 => {
                 let count = be_u32(src)?;

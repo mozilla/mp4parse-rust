@@ -736,10 +736,7 @@ impl<'a> Iterator for TimeOffsetIterator<'a> {
                 self.cur_sample_range.next()
             });
 
-        match has_sample {
-            Some(_) => Some(self.cur_offset),
-            _ => None,
-        }
+        has_sample.and(Some(self.cur_offset))
     }
 }
 
@@ -781,10 +778,7 @@ impl<'a> Iterator for TimeToSampleIteraor<'a> {
                 self.cur_sample_count.next()
             });
 
-        match has_sample {
-            Some(_) => Some(self.cur_sample_delta),
-            _ => None,
-        }
+        has_sample.and(Some(self.cur_sample_delta))
     }
 }
 
@@ -835,10 +829,7 @@ impl<'a> Iterator for SampleToChunkIterator<'a> {
                 self.chunks.next()
             });
 
-        match has_chunk {
-            Some(id) => Some((id, self.sample_count)),
-            _ => None,
-        }
+        has_chunk.map_or(None, |id| { Some((id, self.sample_count)) })
     }
 }
 
@@ -993,7 +984,7 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
             }
         });
 
-        let iter = sort_table.iter().peekable();
+        let iter = sort_table.iter();
         for i in 0 .. (iter.len() - 1) {
             let current_index = sort_table[i] as usize;
             let peek_index = sort_table[i + 1] as usize;
