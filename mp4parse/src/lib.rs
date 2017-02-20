@@ -194,6 +194,23 @@ pub struct Sample {
     pub sample_delta: u32,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum TimeOffsetVersion {
+    Version0(u32),
+    Version1(i32),
+}
+
+#[derive(Debug, Clone)]
+pub struct TimeOffset {
+    pub sample_count: u32,
+    pub time_offset: TimeOffsetVersion,
+}
+
+#[derive(Debug)]
+pub struct CompositionOffsetBox {
+    pub samples: Vec<TimeOffset>,
+}
+
 // Handler reference box 'hdlr'
 #[derive(Debug)]
 struct HandlerBox {
@@ -429,6 +446,7 @@ pub struct Track {
     pub stsz: Option<SampleSizeBox>,
     pub stco: Option<ChunkOffsetBox>,   // It is for stco or co64.
     pub stss: Option<SyncSampleBox>,
+    pub ctts: Option<CompositionOffsetBox>,
 }
 
 impl Track {
@@ -879,6 +897,11 @@ fn read_stbl<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
                 log!("{:?}", stss);
                 track.stss = Some(stss);
             }
+            BoxType::CompositionOffsetBox => {
+                let ctts = read_ctts(&mut b)?;
+                log!("{:?}", ctts);
+                track.ctts = Some(ctts);
+            }
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
@@ -1126,6 +1149,45 @@ fn read_stsc<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleToChunkBox> {
 
     Ok(SampleToChunkBox {
         samples: samples,
+    })
+}
+
+fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
+    let (version, _) = read_fullbox_extra(src)?;
+
+    let counts = be_u32(src)?;
+
+    if src.bytes_left() < (counts as usize * 8) {
+        return Err(Error::InvalidData("insufficient data in 'ctts' box"));
+    }
+
+    let mut offsets = Vec::new();
+    for _ in 0..counts {
+        let (sample_count, time_offset) = match version {
+            0 => {
+                let count = be_u32(src)?;
+                let offset = TimeOffsetVersion::Version0(be_u32(src)?);
+                (count, offset)
+            },
+            1 => {
+                let count = be_u32(src)?;
+                let offset = TimeOffsetVersion::Version1(be_i32(src)?);
+                (count, offset)
+            },
+            _ => {
+                return Err(Error::InvalidData("unsupported version in 'ctts' box"));
+            }
+        };
+        offsets.push(TimeOffset {
+            sample_count: sample_count,
+            time_offset: time_offset,
+        });
+    }
+
+    skip_box_remain(src)?;
+
+    Ok(CompositionOffsetBox {
+        samples: offsets,
     })
 }
 

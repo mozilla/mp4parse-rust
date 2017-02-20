@@ -135,4 +135,5 @@ box_database!(
     ProtectionSchemeInformationBox    0x73696e66, // "sinf"
     OriginalFormatBox                 0x66726d61, // "frma"
     MP3AudioSampleEntry               0x2e6d7033, // ".mp3" - from F4V.
+    CompositionOffsetBox              0x63747473, // "ctts"
 );
