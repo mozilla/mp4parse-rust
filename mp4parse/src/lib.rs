@@ -1677,7 +1677,8 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> 
             }
             BoxType::VPCodecConfigurationBox => { // vpcC
                 if (name != BoxType::VP8SampleEntry &&
-                    name != BoxType::VP9SampleEntry) ||
+                    name != BoxType::VP9SampleEntry &&
+                    name != BoxType::ProtectedVisualSampleEntry) ||
                     codec_specific.is_some() {
                         return Err(Error::InvalidData("malformed video sample entry"));
                     }
