@@ -900,3 +900,24 @@ fn read_null_terminated_string() {
         assert_eq!(c.position(), v.len() as u64);
     }
 }
+
+#[test]
+fn read_f4v_stsd() {
+    let mut stream = make_box(BoxSize::Auto, b".mp3", |s| {
+        s.append_repeated(0, 6)
+         .B16(1)
+         .B16(0)
+         .append_repeated(0, 6)
+         .B16(2)
+         .B16(16)
+         .append_repeated(0, 4)
+         .B32(48000 << 16)
+    });
+
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    let mut track = super::Track::new(0);
+    super::read_audio_sample_entry(&mut stream, &mut track)
+          .expect("failed to read f4v stsd atom");
+    assert_eq!(track.codec_type, super::CodecType::MP3);
+}
