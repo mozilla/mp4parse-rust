@@ -470,9 +470,8 @@ fn read_flac() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
-    let mut track = super::Track::new(0);
-    let r = super::read_audio_sample_entry(&mut stream, &mut track);
-    r.unwrap();
+    let r = super::read_audio_sample_entry(&mut stream);
+    assert!(r.is_ok());
 }
 
 #[derive(Clone, Copy)]
@@ -554,8 +553,7 @@ fn read_opus() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
-    let mut track = super::Track::new(0);
-    let r = super::read_audio_sample_entry(&mut stream, &mut track);
+    let r = super::read_audio_sample_entry(&mut stream);
     assert!(r.is_ok());
 }
 
@@ -642,8 +640,7 @@ fn avcc_limit() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
-    let mut track = super::Track::new(0);
-    match super::read_video_sample_entry(&mut stream, &mut track) {
+    match super::read_video_sample_entry(&mut stream) {
         Err(Error::InvalidData(s)) => assert_eq!(s, "avcC box exceeds BUF_SIZE_LIMIT"),
         Ok(_) => panic!("expected an error result"),
         _ => panic!("expected a different error result"),
@@ -668,8 +665,7 @@ fn esds_limit() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
-    let mut track = super::Track::new(0);
-    match super::read_audio_sample_entry(&mut stream, &mut track) {
+    match super::read_audio_sample_entry(&mut stream) {
         Err(Error::InvalidData(s)) => assert_eq!(s, "esds box exceeds BUF_SIZE_LIMIT"),
         Ok(_) => panic!("expected an error result"),
         _ => panic!("expected a different error result"),
@@ -694,8 +690,7 @@ fn esds_limit_2() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
-    let mut track = super::Track::new(0);
-    match super::read_audio_sample_entry(&mut stream, &mut track) {
+    match super::read_audio_sample_entry(&mut stream) {
         Err(Error::UnexpectedEOF) => (),
         Ok(_) => panic!("expected an error result"),
         _ => panic!("expected a different error result"),
@@ -853,10 +848,9 @@ fn read_qt_wave_atom() {
 
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
-    let mut track = super::Track::new(0);
-    super::read_audio_sample_entry(&mut stream, &mut track)
+    let (codec_type, _) = super::read_audio_sample_entry(&mut stream)
           .expect("fail to read qt wave atom");
-    assert_eq!(track.codec_type, super::CodecType::MP3);
+    assert_eq!(codec_type, super::CodecType::MP3);
 }
 
 #[test]
@@ -916,8 +910,7 @@ fn read_f4v_stsd() {
 
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
-    let mut track = super::Track::new(0);
-    super::read_audio_sample_entry(&mut stream, &mut track)
+    let (codec_type, _) = super::read_audio_sample_entry(&mut stream)
           .expect("failed to read f4v stsd atom");
-    assert_eq!(track.codec_type, super::CodecType::MP3);
+    assert_eq!(codec_type, super::CodecType::MP3);
 }
