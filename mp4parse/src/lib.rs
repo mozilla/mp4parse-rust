@@ -1764,6 +1764,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> 
     // Skip chan/etc. for now.
     let mut codec_specific = None;
     if name == BoxType::MP3AudioSampleEntry {
+        track.codec_type = CodecType::MP3;
         codec_specific = Some(AudioCodecSpecific::MP3);
     }
     let mut protection_info = Vec::new();
