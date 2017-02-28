@@ -13,10 +13,13 @@ addons:
 env:
   global:
     - CXX=g++-5
+  matrix:
+    - RELEASE=
+    - RELEASE=--release
 
 script:
-  - (cd mp4parse && cargo test --verbose)
-  - (cd mp4parse_capi && cargo test --verbose)
+  - (cd mp4parse && cargo test $RELEASE --verbose)
+  - (cd mp4parse_capi && cargo test $RELEASE --verbose)
   - make -C mp4parse_capi/examples check
   - (cd mp4parse_capi && cargo doc)
 
