@@ -742,18 +742,6 @@ fn read_edts_bogus() {
 }
 
 #[test]
-fn invalid_pascal_string() {
-    // String claims to be 32 bytes long (we provide 33 bytes to account for
-    // the 1 byte length prefix).
-    let pstr = "\x20xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
-    let mut stream = Cursor::new(pstr);
-    // Reader wants to limit the total read length to 32 bytes, so any
-    // returned string must be no longer than 31 bytes.
-    let s = super::read_fixed_length_pascal_string(&mut stream, 32).unwrap();
-    assert_eq!(s.len(), 31);
-}
-
-#[test]
 fn skip_padding_in_boxes() {
     // Padding data could be added in the end of these boxes. Parser needs to skip
     // them instead of returning error.
@@ -880,22 +868,6 @@ fn read_esds() {
     assert_eq!(es.audio_channel_count, Some(6));
     assert_eq!(es.codec_esds, aac_esds);
     assert_eq!(es.decoder_specific_data, aac_dc_descriptor);
-}
-
-#[test]
-fn read_null_terminated_string() {
-    let tests = vec![
-        vec![0u8],                         // Short null-terminated string.
-        vec![65u8, 0u8],                   // Normal null-terminated string.
-        vec![],                            // Empty string (no data).
-        vec![4u8, 65u8, 66u8, 67u8, 68u8], // Length-prefixed string, not null-terminated.
-        vec![0u8, 0u8],                    // Doubly null-terminated string.
-    ];
-    for v in tests.iter() {
-        let mut c = Cursor::new(v);
-        super::read_null_terminated_string(&mut c, v.len()).expect("string read failed");
-        assert_eq!(c.position(), v.len() as u64);
-    }
 }
 
 #[test]
