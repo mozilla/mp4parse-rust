@@ -1,6 +1,6 @@
 [package]
 name = "mp4parse_capi"
-version = "0.6.0"
+version = "0.7.0"
 authors = [
   "Ralph Giles <giles@mozilla.com>",
   "Matthew Gregan <kinetik@flim.org>",
@@ -25,7 +25,7 @@ travis-ci = { repository = "https://github.com/mozilla/mp4parse-rust" }
 
 [dependencies]
 byteorder = "1.0.0"
-"mp4parse" = {version = "0.6.0", path = "../mp4parse"}
+mp4parse = {version = "0.7.0", path = "../mp4parse"}
 
 [build-dependencies]
 rusty-cheddar = "0.3.2"
