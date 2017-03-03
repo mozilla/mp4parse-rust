@@ -95,3 +95,59 @@ fn parse_sample_table() {
         mp4parse_free(parser);
     }
 }
+
+#[test]
+fn parse_sample_table_with_elst() {
+    let mut file = std::fs::File::open("tests/short-cenc.mp4").expect("Unknown file");
+    let io = mp4parse_io {
+        read: buf_read,
+        userdata: &mut file as *mut _ as *mut std::os::raw::c_void
+    };
+
+    unsafe {
+        let parser = mp4parse_new(&io);
+
+        let mut rv = mp4parse_read(parser);
+        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+
+        let mut counts: u32 = 0;
+        rv = mp4parse_get_track_count(parser, &mut counts);
+        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+        assert_eq!(counts, 2);
+
+        let mut track_info = mp4parse_track_info {
+            track_type: mp4parse_track_type::MP4PARSE_TRACK_TYPE_AUDIO,
+            codec: mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,
+            track_id: 0,
+            duration: 0,
+            media_time: 0,
+        };
+        rv = mp4parse_get_track_info(parser, 1, &mut track_info);
+        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+        assert_eq!(track_info.track_type, mp4parse_track_type::MP4PARSE_TRACK_TYPE_AUDIO);
+        assert_eq!(track_info.codec, mp4parse_codec::MP4PARSE_CODEC_AAC);
+
+        // Check audio smaple table
+        let mut is_fragmented_file: u8 = 0;
+        rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);
+        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+        assert_eq!(is_fragmented_file, 0);
+
+        let mut indice = mp4parse_byte_data::default();
+        rv = mp4parse_get_indice_table(parser, track_info.track_id, &mut indice);
+        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+
+        // Compare the value from stagefright.
+        // Due to 'elst', the start_composition and end_composition are negative
+        // at first two samples.
+        let audio_indice_0 =  mp4parse_indice { start_offset: 6992, end_offset: 7363, start_composition: -36281, end_composition: -13062, start_decode: 0, sync: true };
+        let audio_indice_1 =  mp4parse_indice { start_offset: 7363, end_offset: 7735, start_composition: -13062, end_composition: 10158, start_decode: 23219, sync: true };
+        let audio_indice_2 =  mp4parse_indice { start_offset: 7735, end_offset: 8106, start_composition: 10158, end_composition: 33378, start_decode: 46439, sync: true };
+        assert_eq!(indice.length, 21);
+        assert_eq!(*indice.indices.offset(0), audio_indice_0);
+        assert_eq!(*indice.indices.offset(1), audio_indice_1);
+        assert_eq!(*indice.indices.offset(2), audio_indice_2);
+
+        mp4parse_free(parser);
+    }
+}
