@@ -671,8 +671,8 @@ pub unsafe extern fn mp4parse_get_indice_table(parser: *mut mp4parse_parser, tra
     // track.media_time is track based time unit.
     let media_time = match (&track.media_time, &track.timescale) {
         (&Some(t), &Some(s)) => {
-            let time_us = PresentationTime::new(t.0 as i64, s);
-            Some(time_us.to_us())
+            let time = PresentationTime::new(t.0 as i64, s);
+            Some(time.to_us())
         },
         _ => None,
     };

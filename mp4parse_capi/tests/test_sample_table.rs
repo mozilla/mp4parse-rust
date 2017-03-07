@@ -127,8 +127,8 @@ fn parse_sample_table_with_elst() {
         assert_eq!(track_info.track_type, mp4parse_track_type::MP4PARSE_TRACK_TYPE_AUDIO);
         assert_eq!(track_info.codec, mp4parse_codec::MP4PARSE_CODEC_AAC);
 
-        // Check audio smaple table
-        let mut is_fragmented_file: u8 = 0;
+        // Check audio sample table
+        let mut is_fragmented_file: u8 = std::u8::MAX;
         rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);
         assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
         assert_eq!(is_fragmented_file, 0);
