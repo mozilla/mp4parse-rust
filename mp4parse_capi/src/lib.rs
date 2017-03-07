@@ -668,31 +668,29 @@ pub unsafe extern fn mp4parse_get_indice_table(parser: *mut mp4parse_parser, tra
         _ => {},
     }
 
-    // track.media_time is track based time unit.
     let media_time = match (&track.media_time, &track.timescale) {
         (&Some(t), &Some(s)) => {
-            let time = PresentationTime::new(t.0 as i64, s);
-            Some(time.to_us())
+            track_time_to_us(t, s).map(|v| v as i64)
         },
         _ => None,
+    };
+
+    let empty_duration = match (&track.empty_duration, &context.timescale) {
+        (&Some(e), &Some(s)) => {
+            media_time_to_us(e, s).map(|v| v as i64)
+        },
+        _ => None
     };
 
     // Find the track start offset time from 'elst'.
     // 'media_time' maps start time onward, 'empty_duration' adds time offset
     // before first frame is displayed.
-    let offset_time =
-        match (&track.empty_duration, &context.timescale, media_time) {
-            (&Some(empty_duration), &Some(scale), Some(media_time)) => {
-                (empty_duration.0 * scale.0) as i64 - media_time
-            },
-            (&Some(empty_duration), &Some(scale), _) => {
-                (empty_duration.0 * scale.0) as i64
-            },
-            (_, _, Some(media_time)) => {
-                media_time
-            },
-            _ => 0,
-        };
+    let offset_time = match (empty_duration, media_time) {
+        (Some(e), Some(m)) => e - m,
+        (Some(e), None) => e,
+        (None, Some(m)) => m,
+        _ => 0,
+    };
 
     match create_sample_table(track, offset_time) {
         Some(v) => {
