@@ -65,6 +65,7 @@ use mp4parse::Track;
 use mp4parse_error::*;
 use mp4parse_track_type::*;
 
+#[allow(non_camel_case_types)]
 #[repr(C)]
 #[derive(PartialEq, Debug)]
 pub enum mp4parse_error {
@@ -76,6 +77,7 @@ pub enum mp4parse_error {
     MP4PARSE_ERROR_IO = 5,
 }
 
+#[allow(non_camel_case_types)]
 #[repr(C)]
 #[derive(PartialEq, Debug)]
 pub enum mp4parse_track_type {
@@ -87,6 +89,7 @@ impl Default for mp4parse_track_type {
     fn default() -> Self { mp4parse_track_type::MP4PARSE_TRACK_TYPE_VIDEO }
 }
 
+#[allow(non_camel_case_types)]
 #[repr(C)]
 #[derive(PartialEq, Debug)]
 pub enum mp4parse_codec {
