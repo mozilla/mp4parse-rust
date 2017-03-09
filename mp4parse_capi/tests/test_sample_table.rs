@@ -151,3 +151,58 @@ fn parse_sample_table_with_elst() {
         mp4parse_free(parser);
     }
 }
+
+#[test]
+fn parse_sample_table_with_negative_ctts() {
+    let mut file = std::fs::File::open("tests/white.mp4").expect("Unknown file");
+    let io = mp4parse_io {
+        read: buf_read,
+        userdata: &mut file as *mut _ as *mut std::os::raw::c_void
+    };
+
+    unsafe {
+        let parser = mp4parse_new(&io);
+
+        let mut rv = mp4parse_read(parser);
+        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+
+        let mut counts: u32 = 0;
+        rv = mp4parse_get_track_count(parser, &mut counts);
+        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+        assert_eq!(counts, 1);
+
+        let mut track_info = mp4parse_track_info {
+            track_type: mp4parse_track_type::MP4PARSE_TRACK_TYPE_AUDIO,
+            codec: mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,
+            track_id: 0,
+            duration: 0,
+            media_time: 0,
+        };
+        rv = mp4parse_get_track_info(parser, 0, &mut track_info);
+        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+        assert_eq!(track_info.track_type, mp4parse_track_type::MP4PARSE_TRACK_TYPE_VIDEO);
+        assert_eq!(track_info.codec, mp4parse_codec::MP4PARSE_CODEC_AVC);
+
+        let mut is_fragmented_file: u8 = std::u8::MAX;
+        rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);
+        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+        assert_eq!(is_fragmented_file, 0);
+
+        let mut indice = mp4parse_byte_data::default();
+        rv = mp4parse_get_indice_table(parser, track_info.track_id, &mut indice);
+        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+
+        // There are negative value in 'ctts' table.
+        let video_indice_0 = mp4parse_indice { start_offset: 48, end_offset: 890, start_composition: 0, end_composition: 33333, start_decode: 0, sync: true };
+        let video_indice_1 = mp4parse_indice { start_offset: 890, end_offset: 913, start_composition: 133333, end_composition: 166666, start_decode: 33333, sync: false };
+        let video_indice_2 = mp4parse_indice { start_offset: 913, end_offset: 934, start_composition: 66666, end_composition: 100000, start_decode: 66666, sync: false };
+        let video_indice_3 = mp4parse_indice { start_offset: 934, end_offset: 955, start_composition: 33333, end_composition: 66666, start_decode: 100000, sync: false };
+        assert_eq!(indice.length, 300);
+        assert_eq!(*indice.indices.offset(0), video_indice_0);
+        assert_eq!(*indice.indices.offset(1), video_indice_1);
+        assert_eq!(*indice.indices.offset(2), video_indice_2);
+        assert_eq!(*indice.indices.offset(3), video_indice_3);
+
+        mp4parse_free(parser);
+    }
+}

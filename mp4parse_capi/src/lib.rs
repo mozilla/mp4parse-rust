@@ -398,6 +398,15 @@ fn track_time_to_us(time: TrackScaledTime, scale: TrackTimeScale) -> Option<u64>
     rational_scale(time.0, scale.0, microseconds_per_second)
 }
 
+fn get_track_time_to_us(time: i64, scale: TrackTimeScale) -> i64 {
+    assert!(time >= 0);
+    let track_time = TrackScaledTime(time as u64, scale.1);
+    match track_time_to_us(track_time, scale) {
+        Some(v) => v as i64,
+        _ => 0,
+    }
+}
+
 /// Fill the supplied `mp4parse_track_info` with metadata for `track`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track_index: u32, info: *mut mp4parse_track_info) -> mp4parse_error {
@@ -856,29 +865,6 @@ impl<'a> Iterator for SampleToChunkIterator<'a> {
     }
 }
 
-// A helper struct to convert track time to us.
-struct PresentationTime {
-    time: i64,
-    scale: TrackTimeScale
-}
-
-impl PresentationTime {
-    fn new(time: i64, scale: TrackTimeScale) -> PresentationTime {
-        PresentationTime {
-            time: time,
-            scale: scale,
-        }
-    }
-
-    fn to_us(&self) -> i64 {
-        let track_time = TrackScaledTime(self.time as u64, self.scale.1);
-        match track_time_to_us(track_time, self.scale) {
-            Some(v) => v as i64,
-            _ => 0,
-        }
-    }
-}
-
 fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4parse_indice>> {
     let timescale = match track.timescale {
         Some(t) => t,
@@ -971,18 +957,22 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
     //      composition time => CT(n) = DT(n) + CTTS(n)
     // Note:
     //      composition time needs to add the track offset time from 'elst' table.
-    let mut sum_delta = PresentationTime::new(0, timescale);
+    let mut sum_delta = 0;
     for sample in sample_table.as_mut_slice() {
-        let decode_time = sum_delta.to_us();
-        sum_delta.time += stts_iter.next_delta() as i64;
+        let decode_time = sum_delta;
+        sum_delta += stts_iter.next_delta() as i64;
 
         // ctts_offset is the current sample offset time.
-        let ctts_offset = PresentationTime::new(ctts_offset_iter.next_offset_time(), timescale);
+        let ctts_offset = ctts_offset_iter.next_offset_time();
 
-        let start_composition = decode_time + ctts_offset.to_us() + track_offset_time;
-        let end_composition = sum_delta.to_us() + ctts_offset.to_us() + track_offset_time;
+        // ctts_offset could be negative but (decode_time + ctts_offset) should always be positive
+        // value.
+        let start_composition = get_track_time_to_us(decode_time + ctts_offset, timescale) + track_offset_time;
+        // ctts_offset could be negative but (sum_delta + ctts_offset) should always be positive
+        // value.
+        let end_composition = get_track_time_to_us(sum_delta + ctts_offset, timescale) + track_offset_time;
 
-        sample.start_decode = decode_time;
+        sample.start_decode = get_track_time_to_us(decode_time, timescale);;
         sample.start_composition = start_composition;
         sample.end_composition = end_composition;
     }
