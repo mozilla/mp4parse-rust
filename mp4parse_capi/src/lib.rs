@@ -1104,7 +1104,7 @@ pub unsafe extern fn mp4parse_get_pssh_info(parser: *mut mp4parse_parser, info: 
         pssh_data.extend_from_slice(pssh.box_content.as_slice());
     }
 
-    info.data.set_data(&pssh_data);
+    info.data.set_data(pssh_data);
 
     MP4PARSE_OK
 }
