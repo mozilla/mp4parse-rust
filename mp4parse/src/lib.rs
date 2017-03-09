@@ -1165,12 +1165,10 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
     let mut offsets = Vec::new();
     for _ in 0..counts {
         let (sample_count, time_offset) = match version {
-            0 => {
-                let count = be_u32(src)?;
-                let offset = TimeOffsetVersion::Version0(be_u32(src)?);
-                (count, offset)
-            },
-            1 => {
+            // According to spec, Version0 shoule be used when version == 0;
+            // however, some buggy contents have negative value when version == 0.
+            // So we always use Version1 here.
+            0...1 => {
                 let count = be_u32(src)?;
                 let offset = TimeOffsetVersion::Version1(be_i32(src)?);
                 (count, offset)
