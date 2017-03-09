@@ -570,7 +570,7 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
     }
 
     match audio.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
-        Some(ref p) => {
+        Some(p) => {
             if let Some(ref tenc) = p.tenc {
                 (*info).protected_data.is_encrypted = tenc.is_encrypted;
                 (*info).protected_data.iv_size = tenc.iv_size;
@@ -633,7 +633,7 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
     }
 
     match video.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
-        Some(ref p) => {
+        Some(p) => {
             if let Some(ref tenc) = p.tenc {
                 (*info).protected_data.is_encrypted = tenc.is_encrypted;
                 (*info).protected_data.iv_size = tenc.iv_size;
