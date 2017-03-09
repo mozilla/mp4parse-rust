@@ -932,8 +932,8 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
     }
 
     // Mark the sync sample in sample_table according to 'stss'.
-    match &track.stss {
-        &Some(ref v) => {
+    match track.stss {
+        Some(ref v) => {
             for iter in &v.samples {
                 sample_table[(iter - 1) as usize].sync = true;
             }
@@ -941,8 +941,8 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
         _ => {}
     }
 
-    let ctts_iter = match &track.ctts {
-        &Some(ref v) => Some(v.samples.as_slice().iter()),
+    let ctts_iter = match track.ctts {
+        Some(ref v) => Some(v.samples.as_slice().iter()),
         _ => None,
     };
 
