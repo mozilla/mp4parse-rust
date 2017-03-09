@@ -147,11 +147,11 @@ impl Default for mp4parse_byte_data {
 }
 
 impl mp4parse_byte_data {
-    fn set_data(&mut self, data: &Vec<u8>) {
+    fn set_data(&mut self, data: &[u8]) {
         self.length = data.len() as u32;
         self.data = data.as_ptr();
     }
-    fn set_indices(&mut self, data: &Vec<mp4parse_indice>) {
+    fn set_indices(&mut self, data: &[mp4parse_indice]) {
         self.length = data.len() as u32;
         self.indices = data.as_ptr();
     }
