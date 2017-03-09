@@ -306,7 +306,7 @@ pub unsafe extern fn mp4parse_free(parser: *mut mp4parse_parser) {
     let _ = Box::from_raw(parser);
 }
 
-/// Enable mp4_parser log.
+/// Enable `mp4_parser` log.
 #[no_mangle]
 pub unsafe extern fn mp4parse_log(enable: bool) {
     mp4parse::set_debug_mode(enable);
@@ -1072,10 +1072,11 @@ pub unsafe extern fn mp4parse_is_fragmented(parser: *mut mp4parse_parser, track_
 
 /// Get 'pssh' system id and 'pssh' box content for eme playback.
 ///
-/// The data format in 'info' passing to gecko is:
-///   system_id
-///   pssh box size (in native endian)
-///   pssh box content (including header)
+/// The data format of the `info` struct passed to gecko is:
+///
+/// - system id (16 byte uuid)
+/// - pssh box size (32-bit native endian)
+/// - pssh box content (including header)
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_pssh_info(parser: *mut mp4parse_parser, info: *mut mp4parse_pssh_info) -> mp4parse_error {
     if parser.is_null() || info.is_null() || (*parser).poisoned() {
