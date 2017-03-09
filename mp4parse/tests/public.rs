@@ -126,8 +126,8 @@ fn public_audio_tenc() {
                         assert_eq!(p.code_name, "mp4a");
                         if let Some(ref tenc) = p.tenc {
                             assert!(tenc.is_encrypted > 0);
-                            assert!(tenc.iv_size ==  16);
-                            assert!(tenc.kid == kid);
+                            assert_eq!(tenc.iv_size, 16);
+                            assert_eq!(tenc.kid, kid);
                         } else {
                             assert!(false, "Invalid test condition");
                         }
@@ -179,8 +179,8 @@ fn public_video_cenc() {
                         assert_eq!(p.code_name, "avc1");
                         if let Some(ref tenc) = p.tenc {
                             assert!(tenc.is_encrypted > 0);
-                            assert!(tenc.iv_size ==  16);
-                            assert!(tenc.kid == kid);
+                            assert_eq!(tenc.iv_size, 16);
+                            assert_eq!(tenc.kid, kid);
                         } else {
                             assert!(false, "Invalid test condition");
                         }
