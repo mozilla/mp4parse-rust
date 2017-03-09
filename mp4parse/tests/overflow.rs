@@ -11,5 +11,5 @@ fn overflow_protection() {
     assert_eq!(0u32, edge + 1);
 
     let edge = u64::max_value();
-    assert_eq!(064, edge + 1);
+    assert_eq!(0u64, edge + 1);
 }
