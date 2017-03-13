@@ -26,6 +26,7 @@ travis-ci = { repository = "https://github.com/mozilla/mp4parse-rust" }
 [dependencies]
 byteorder = "1.0.0"
 mp4parse = {version = "0.7.1", path = "../mp4parse"}
+num-traits = "0.1.37"
 
 [build-dependencies]
 rusty-cheddar = "0.3.2"
