@@ -36,10 +36,12 @@
 
 extern crate mp4parse;
 extern crate byteorder;
+extern crate num_traits;
 
 use std::io::Read;
 use std::collections::HashMap;
 use byteorder::WriteBytesExt;
+use num_traits::{PrimInt, Zero};
 
 // Symbols we need from our rust api.
 use mp4parse::MediaContext;
@@ -374,37 +376,33 @@ pub unsafe extern fn mp4parse_get_track_count(parser: *const mp4parse_parser, co
 /// (n * s) / d is split into floor(n / d) * s + (n % d) * s / d.
 ///
 /// Return None on overflow or if the denominator is zero.
-fn rational_scale(numerator: u64, denominator: u64, scale: u64) -> Option<u64> {
-    if denominator == 0 {
+fn rational_scale<T, S>(numerator: T, denominator: T, scale2: S) -> Option<T>
+    where T: PrimInt + Zero, S: PrimInt {
+    if denominator.is_zero() {
         return None;
     }
+
     let integer = numerator / denominator;
     let remainder = numerator % denominator;
-    match integer.checked_mul(scale) {
-        Some(integer) => remainder.checked_mul(scale)
-            .and_then(|remainder| (remainder/denominator).checked_add(integer)),
-        None => None,
-    }
+    num_traits::cast(scale2).and_then(|s| {
+        match integer.checked_mul(&s) {
+            Some(integer) => remainder.checked_mul(&s)
+                .and_then(|remainder| (remainder/denominator).checked_add(&integer)),
+            None => None,
+        }
+    })
 }
 
 fn media_time_to_us(time: MediaScaledTime, scale: MediaTimeScale) -> Option<u64> {
     let microseconds_per_second = 1000000;
-    rational_scale(time.0, scale.0, microseconds_per_second)
+    rational_scale::<u64, u64>(time.0, scale.0, microseconds_per_second)
 }
 
-fn track_time_to_us(time: TrackScaledTime, scale: TrackTimeScale) -> Option<u64> {
+fn track_time_to_us<T>(time: TrackScaledTime<T>, scale: TrackTimeScale<T>) -> Option<T>
+    where T: PrimInt + Zero {
     assert_eq!(time.1, scale.1);
     let microseconds_per_second = 1000000;
-    rational_scale(time.0, scale.0, microseconds_per_second)
-}
-
-fn get_track_time_to_us(time: i64, scale: TrackTimeScale) -> i64 {
-    assert!(time >= 0);
-    let track_time = TrackScaledTime(time as u64, scale.1);
-    match track_time_to_us(track_time, scale) {
-        Some(v) => v as i64,
-        _ => 0,
-    }
+    rational_scale::<T, u64>(time.0, scale.0, microseconds_per_second)
 }
 
 /// Fill the supplied `mp4parse_track_info` with metadata for `track`.
@@ -732,6 +730,7 @@ struct TimeOffsetIterator<'a> {
     cur_sample_range: std::ops::Range<u32>,
     cur_offset: i64,
     ctts_iter: Option<std::slice::Iter<'a, mp4parse::TimeOffset>>,
+    track_id: usize,
 }
 
 impl<'a> Iterator for TimeOffsetIterator<'a> {
@@ -770,10 +769,10 @@ impl<'a> Iterator for TimeOffsetIterator<'a> {
 }
 
 impl<'a> TimeOffsetIterator<'a> {
-    fn next_offset_time(&mut self) -> i64 {
+    fn next_offset_time(&mut self) -> TrackScaledTime<i64> {
         match self.next() {
-            Some(v) => v as i64,
-            _ => 0,
+            Some(v) => TrackScaledTime::<i64>(v as i64, self.track_id),
+            _ => TrackScaledTime::<i64>(0, self.track_id),
         }
     }
 }
@@ -788,6 +787,7 @@ struct TimeToSampleIteraor<'a> {
     cur_sample_count: std::ops::Range<u32>,
     cur_sample_delta: u32,
     stts_iter: std::slice::Iter<'a, mp4parse::Sample>,
+    track_id: usize,
 }
 
 impl<'a> Iterator for TimeToSampleIteraor<'a> {
@@ -812,10 +812,10 @@ impl<'a> Iterator for TimeToSampleIteraor<'a> {
 }
 
 impl<'a> TimeToSampleIteraor<'a> {
-    fn next_delta(&mut self) -> u32 {
+    fn next_delta(&mut self) -> TrackScaledTime<i64> {
         match self.next() {
-            Some(v) => v,
-            _ => 0,
+            Some(v) => TrackScaledTime::<i64>(v as i64, self.track_id),
+            _ => TrackScaledTime::<i64>(0, self.track_id),
         }
     }
 }
@@ -867,8 +867,8 @@ impl<'a> Iterator for SampleToChunkIterator<'a> {
 
 fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4parse_indice>> {
     let timescale = match track.timescale {
-        Some(t) => t,
-        _ => return None,
+        Some(ref t) => TrackTimeScale::<i64>(t.0 as i64, t.1),
+        _ => TrackTimeScale::<i64>(0, 0),
     };
 
     let (stsc, stco, stsz, stts) =
@@ -943,12 +943,14 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
         cur_sample_range: (0 .. 0),
         cur_offset: 0,
         ctts_iter: ctts_iter,
+        track_id: track.id,
     };
 
     let mut stts_iter = TimeToSampleIteraor {
         cur_sample_count: (0 .. 0),
         cur_sample_delta: 0,
         stts_iter: stts.samples.as_slice().iter(),
+        track_id: track.id,
     };
 
     // sum_delta is the sum of stts_iter delta.
@@ -957,24 +959,38 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
     //      composition time => CT(n) = DT(n) + CTTS(n)
     // Note:
     //      composition time needs to add the track offset time from 'elst' table.
-    let mut sum_delta = 0;
+    let mut sum_delta = TrackScaledTime::<i64>(0, track.id);
     for sample in sample_table.as_mut_slice() {
         let decode_time = sum_delta;
-        sum_delta += stts_iter.next_delta() as i64;
+        sum_delta = sum_delta + stts_iter.next_delta();
 
         // ctts_offset is the current sample offset time.
         let ctts_offset = ctts_offset_iter.next_offset_time();
 
         // ctts_offset could be negative but (decode_time + ctts_offset) should always be positive
         // value.
-        let start_composition = get_track_time_to_us(decode_time + ctts_offset, timescale) + track_offset_time;
+        let start_composition = track_time_to_us(decode_time + ctts_offset, timescale).and_then(|t| {
+            if t < 0 { return None; }
+            Some(t)
+        });
+
         // ctts_offset could be negative but (sum_delta + ctts_offset) should always be positive
         // value.
-        let end_composition = get_track_time_to_us(sum_delta + ctts_offset, timescale) + track_offset_time;
+        let end_composition = track_time_to_us(sum_delta + ctts_offset, timescale).and_then(|t| {
+            if t < 0 { return None; }
+            Some(t)
+        });
 
-        sample.start_decode = get_track_time_to_us(decode_time, timescale);;
-        sample.start_composition = start_composition;
-        sample.end_composition = end_composition;
+        let start_decode = track_time_to_us(decode_time, timescale);
+
+        match (start_composition, end_composition, start_decode) {
+            (Some(s_c), Some(e_c), Some(s_d)) => {
+                sample.start_composition = s_c + track_offset_time;
+                sample.end_composition = e_c + track_offset_time;
+                sample.start_decode = s_d;
+            },
+            _ => return None,
+        }
     }
 
     // Correct composition end time due to 'ctts' causes composition time re-ordering.
@@ -1379,14 +1395,14 @@ fn arg_validation_with_data() {
 
 #[test]
 fn rational_scale_overflow() {
-    assert_eq!(rational_scale(17, 3, 1000), Some(5666));
+    assert_eq!(rational_scale::<u64, u64>(17, 3, 1000), Some(5666));
     let large = 0x4000_0000_0000_0000;
-    assert_eq!(rational_scale(large, 2, 2), Some(large));
-    assert_eq!(rational_scale(large, 4, 4), Some(large));
-    assert_eq!(rational_scale(large, 2, 8), None);
-    assert_eq!(rational_scale(large, 8, 4), Some(large/2));
-    assert_eq!(rational_scale(large + 1, 4, 4), Some(large+1));
-    assert_eq!(rational_scale(large, 40, 1000), None);
+    assert_eq!(rational_scale::<u64, u64>(large, 2, 2), Some(large));
+    assert_eq!(rational_scale::<u64, u64>(large, 4, 4), Some(large));
+    assert_eq!(rational_scale::<u64, u64>(large, 2, 8), None);
+    assert_eq!(rational_scale::<u64, u64>(large, 8, 4), Some(large/2));
+    assert_eq!(rational_scale::<u64, u64>(large + 1, 4, 4), Some(large+1));
+    assert_eq!(rational_scale::<u64, u64>(large, 40, 1000), None);
 }
 
 #[test]
@@ -1398,7 +1414,7 @@ fn media_time_overflow() {
 
 #[test]
 fn track_time_overflow() {
-  let scale = TrackTimeScale(44100, 0);
-  let duration = TrackScaledTime(4413527634807900, 0);
+  let scale = TrackTimeScale(44100 as u64, 0);
+  let duration = TrackScaledTime(4413527634807900 as u64, 0);
   assert_eq!(track_time_to_us(duration, scale), Some(100079991719000000));
 }
