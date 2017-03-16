@@ -178,6 +178,11 @@ pub struct mp4parse_track_audio_info {
     pub bit_depth: u16,
     pub sample_rate: u32,
     pub profile: u16,
+    // TODO:
+    //  codec_specific_data is AudioInfo.mCodecSpecificConfig,
+    //  codec_specific_config is AudioInfo.mExtraData.
+    //  It'd be better to change name same as AudioInfo.
+    pub codec_specific_data: mp4parse_byte_data,
     pub codec_specific_config: mp4parse_byte_data,
     pub protected_data: mp4parse_sinf_info,
 }
@@ -525,6 +530,8 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
             }
             (*info).codec_specific_config.length = v.codec_esds.len() as u32;
             (*info).codec_specific_config.data = v.codec_esds.as_ptr();
+            (*info).codec_specific_data.length = v.decoder_specific_data.len() as u32;
+            (*info).codec_specific_data.data = v.decoder_specific_data.as_ptr();
             if let Some(rate) = v.audio_sample_rate {
                 (*info).sample_rate = rate;
             }
