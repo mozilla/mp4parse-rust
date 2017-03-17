@@ -1413,6 +1413,7 @@ fn read_ds_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
     esds.audio_object_type = Some(audio_object_type);
     esds.audio_sample_rate = sample_frequency;
     esds.audio_channel_count = Some(channel_counts);
+    assert!(esds.decoder_specific_data.is_empty());
     esds.decoder_specific_data.extend(data.iter());
 
     Ok(())
