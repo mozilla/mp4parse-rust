@@ -1415,6 +1415,6 @@ fn media_time_overflow() {
 #[test]
 fn track_time_overflow() {
   let scale = TrackTimeScale(44100u64, 0);
-  let duration = TrackScaledTime(4413527634807900 as u64, 0);
+  let duration = TrackScaledTime(4413527634807900u64, 0);
   assert_eq!(track_time_to_us(duration, scale), Some(100079991719000000));
 }
