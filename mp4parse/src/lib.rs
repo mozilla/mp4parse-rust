@@ -120,6 +120,19 @@ struct MovieHeaderBox {
     duration: u64,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Matrix {
+    pub a: i32, // 16.16 fix point
+    pub b: i32, // 16.16 fix point
+    pub u: i32, // 2.30 fix point
+    pub c: i32, // 16.16 fix point
+    pub d: i32, // 16.16 fix point
+    pub v: i32, // 2.30 fix point
+    pub x: i32, // 16.16 fix point
+    pub y: i32, // 16.16 fix point
+    pub w: i32, // 2.30 fix point
+}
+
 /// Track header box 'tkhd'
 #[derive(Debug, Clone)]
 pub struct TrackHeaderBox {
@@ -128,6 +141,7 @@ pub struct TrackHeaderBox {
     pub duration: u64,
     pub width: u32,
     pub height: u32,
+    pub matrix: Matrix,
 }
 
 /// Edit list box 'elst'
@@ -999,7 +1013,14 @@ fn read_tkhd<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackHeaderBox> {
         _ => return Err(Error::InvalidData("unhandled tkhd version")),
     };
     // Skip uninteresting fields.
-    skip(src, 52)?;
+    skip(src, 16)?;
+
+    let matrix = Matrix{
+        a: be_i32(src)?, b: be_i32(src)?, u: be_i32(src)?,
+        c: be_i32(src)?, d: be_i32(src)?, v: be_i32(src)?,
+        x: be_i32(src)?, y: be_i32(src)?, w: be_i32(src)?,
+    };
+
     let width = be_u32(src)?;
     let height = be_u32(src)?;
     Ok(TrackHeaderBox {
@@ -1008,6 +1029,7 @@ fn read_tkhd<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackHeaderBox> {
         duration: duration,
         width: width,
         height: height,
+        matrix: matrix,
     })
 }
 

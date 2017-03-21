@@ -52,6 +52,7 @@ fn doit() {
                                 display_height: 0,
                                 image_width: 0,
                                 image_height: 0,
+                                rotation: 0,
                                 extra_data: mp4parse_byte_data::default(), 
                                 protected_data: Default::default(),
                             };

@@ -196,6 +196,7 @@ pub struct mp4parse_track_video_info {
     pub display_height: u32,
     pub image_width: u16,
     pub image_height: u16,
+    pub rotation: u16,
     pub extra_data: mp4parse_byte_data,
     pub protected_data: mp4parse_sinf_info,
 }
@@ -633,6 +634,14 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
     if let Some(ref tkhd) = track.tkhd {
         (*info).display_width = tkhd.width >> 16; // 16.16 fixed point
         (*info).display_height = tkhd.height >> 16; // 16.16 fixed point
+        let matrix = (tkhd.matrix.a >> 16, tkhd.matrix.b >> 16,
+                      tkhd.matrix.c >> 16, tkhd.matrix.d >> 16);
+        (*info).rotation = match matrix {
+            ( 0,  1, -1,  0) => 90, // rotate 90 degrees
+            (-1,  0,  0, -1) => 180, // rotate 180 degrees
+            ( 0, -1,  1,  0) => 270, // rotate 270 degrees
+            _ => 0,
+        };
     } else {
         return MP4PARSE_ERROR_INVALID;
     }
@@ -1221,6 +1230,7 @@ fn arg_validation() {
             display_height: 0,
             image_width: 0,
             image_height: 0,
+            rotation: 0,
             extra_data: mp4parse_byte_data::default(),
             protected_data: Default::default(),
         };
@@ -1267,6 +1277,7 @@ fn arg_validation_with_parser() {
             display_height: 0,
             image_width: 0,
             image_height: 0,
+            rotation: 0,
             extra_data: mp4parse_byte_data::default(),
             protected_data: Default::default(),
         };
@@ -1340,6 +1351,7 @@ fn arg_validation_with_data() {
             display_height: 0,
             image_width: 0,
             image_height: 0,
+            rotation: 0,
             extra_data: mp4parse_byte_data::default(),
             protected_data: Default::default(),
         };
@@ -1374,6 +1386,7 @@ fn arg_validation_with_data() {
                                                     display_height: 0,
                                                     image_width: 0,
                                                     image_height: 0,
+                                                    rotation: 0,
                                                     extra_data: mp4parse_byte_data::default(),
                                                     protected_data: Default::default(),
         };
