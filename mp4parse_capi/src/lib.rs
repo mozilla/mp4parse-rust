@@ -783,14 +783,14 @@ impl<'a> TimeOffsetIterator<'a> {
 //
 // For example:
 // (2, 3000), (1, 2999) to (3000, 3000, 2999).
-struct TimeToSampleIteraor<'a> {
+struct TimeToSampleIterator<'a> {
     cur_sample_count: std::ops::Range<u32>,
     cur_sample_delta: u32,
     stts_iter: std::slice::Iter<'a, mp4parse::Sample>,
     track_id: usize,
 }
 
-impl<'a> Iterator for TimeToSampleIteraor<'a> {
+impl<'a> Iterator for TimeToSampleIterator<'a> {
     type Item = u32;
 
     fn next(&mut self) -> Option<u32> {
@@ -811,7 +811,7 @@ impl<'a> Iterator for TimeToSampleIteraor<'a> {
     }
 }
 
-impl<'a> TimeToSampleIteraor<'a> {
+impl<'a> TimeToSampleIterator<'a> {
     fn next_delta(&mut self) -> TrackScaledTime<i64> {
         match self.next() {
             Some(v) => TrackScaledTime::<i64>(v as i64, self.track_id),
@@ -946,7 +946,7 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
         track_id: track.id,
     };
 
-    let mut stts_iter = TimeToSampleIteraor {
+    let mut stts_iter = TimeToSampleIterator {
         cur_sample_count: (0 .. 0),
         cur_sample_delta: 0,
         stts_iter: stts.samples.as_slice().iter(),
@@ -1414,7 +1414,7 @@ fn media_time_overflow() {
 
 #[test]
 fn track_time_overflow() {
-  let scale = TrackTimeScale(44100 as u64, 0);
+  let scale = TrackTimeScale(44100u64, 0);
   let duration = TrackScaledTime(4413527634807900 as u64, 0);
   assert_eq!(track_time_to_us(duration, scale), Some(100079991719000000));
 }
