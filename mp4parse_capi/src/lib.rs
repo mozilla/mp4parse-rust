@@ -568,15 +568,12 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
                 Ok(_) => {
                     let header = (*parser).opus_header_mut();
                     header.insert(track_index, v);
-                    match header.get(&track_index) {
-                        None => {}
-                        Some(v) => {
-                            if v.len() > std::u32::MAX as usize {
-                                return MP4PARSE_ERROR_INVALID;
-                            }
-                            (*info).codec_specific_config.length = v.len() as u32;
-                            (*info).codec_specific_config.data = v.as_ptr();
+                    if let Some(v) = header.get(&track_index) {
+                        if v.len() > std::u32::MAX as usize {
+                            return MP4PARSE_ERROR_INVALID;
                         }
+                        (*info).codec_specific_config.length = v.len() as u32;
+                        (*info).codec_specific_config.data = v.as_ptr();
                     }
                 }
             }
@@ -584,15 +581,12 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut mp4parse_parser,
         AudioCodecSpecific::MP3 => (),
     }
 
-    match audio.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
-        Some(p) => {
-            if let Some(ref tenc) = p.tenc {
-                (*info).protected_data.is_encrypted = tenc.is_encrypted;
-                (*info).protected_data.iv_size = tenc.iv_size;
-                (*info).protected_data.kid.set_data(&(tenc.kid));
-            }
-        },
-        _ => {},
+    if let Some(p) = audio.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
+        if let Some(ref tenc) = p.tenc {
+            (*info).protected_data.is_encrypted = tenc.is_encrypted;
+            (*info).protected_data.iv_size = tenc.iv_size;
+            (*info).protected_data.kid.set_data(&(tenc.kid));
+        }
     }
 
     MP4PARSE_OK
@@ -648,22 +642,16 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut mp4parse_parser,
     (*info).image_width = video.width;
     (*info).image_height = video.height;
 
-    match video.codec_specific {
-        VideoCodecSpecific::AVCConfig(ref avc) => {
-            (*info).extra_data.set_data(avc);
-        },
-        _ => {},
+    if let VideoCodecSpecific::AVCConfig(ref avc) = video.codec_specific {
+        (*info).extra_data.set_data(avc);
     }
 
-    match video.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
-        Some(p) => {
-            if let Some(ref tenc) = p.tenc {
-                (*info).protected_data.is_encrypted = tenc.is_encrypted;
-                (*info).protected_data.iv_size = tenc.iv_size;
-                (*info).protected_data.kid.set_data(&(tenc.kid));
-            }
-        },
-        _ => {},
+    if let Some(p) = video.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
+        if let Some(ref tenc) = p.tenc {
+            (*info).protected_data.is_encrypted = tenc.is_encrypted;
+            (*info).protected_data.iv_size = tenc.iv_size;
+            (*info).protected_data.kid.set_data(&(tenc.kid));
+        }
     }
 
     MP4PARSE_OK
@@ -686,12 +674,9 @@ pub unsafe extern fn mp4parse_get_indice_table(parser: *mut mp4parse_parser, tra
     };
 
     let index_table = (*parser).sample_table_mut();
-    match index_table.get(&track_id) {
-        Some(v) => {
-            (*indices).set_indices(v);
-            return MP4PARSE_OK;
-        },
-        _ => {},
+    if let Some(v) = index_table.get(&track_id) {
+        (*indices).set_indices(v);
+        return MP4PARSE_OK;
     }
 
     let media_time = match (&track.media_time, &track.timescale) {
@@ -718,13 +703,10 @@ pub unsafe extern fn mp4parse_get_indice_table(parser: *mut mp4parse_parser, tra
         _ => 0,
     };
 
-    match create_sample_table(track, offset_time) {
-        Some(v) => {
-            (*indices).set_indices(&v);
-            index_table.insert(track_id, v);
-            return MP4PARSE_OK;
-        },
-        _ => {},
+    if let Some(v) = create_sample_table(track, offset_time) {
+        (*indices).set_indices(&v);
+        index_table.insert(track_id, v);
+        return MP4PARSE_OK;
     }
 
     MP4PARSE_ERROR_INVALID
@@ -934,13 +916,10 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
     }
 
     // Mark the sync sample in sample_table according to 'stss'.
-    match track.stss {
-        Some(ref v) => {
-            for iter in &v.samples {
-                sample_table[(iter - 1) as usize].sync = true;
-            }
-        },
-        _ => {}
+    if let Some(ref v) = track.stss {
+        for iter in &v.samples {
+            sample_table[(iter - 1) as usize].sync = true;
+        }
     }
 
     let ctts_iter = match track.ctts {
@@ -1114,12 +1093,13 @@ pub unsafe extern fn mp4parse_get_pssh_info(parser: *mut mp4parse_parser, info: 
 
     pssh_data.clear();
     for pssh in &context.psshs {
+        let content_len = pssh.box_content.len();
+        if content_len > std::u32::MAX as usize {
+            return MP4PARSE_ERROR_INVALID;
+        }
         let mut data_len = Vec::new();
-        match data_len.write_u32::<byteorder::NativeEndian>(pssh.box_content.len() as u32) {
-            Err(_) => {
-                return MP4PARSE_ERROR_IO;
-            },
-            _ => (),
+        if data_len.write_u32::<byteorder::NativeEndian>(content_len as u32).is_err() {
+            return MP4PARSE_ERROR_IO;
         }
         pssh_data.extend_from_slice(pssh.system_id.as_slice());
         pssh_data.extend_from_slice(data_len.as_slice());
