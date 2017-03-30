@@ -19,7 +19,7 @@
 //!
 //! let mut file = std::fs::File::open("../mp4parse/tests/minimal.mp4").unwrap();
 //! let io = mp4parse_capi::mp4parse_io {
-//!     read: buf_read,
+//!     read: Some(buf_read),
 //!     userdata: &mut file as *mut _ as *mut std::os::raw::c_void
 //! };
 //! unsafe {
@@ -261,7 +261,7 @@ impl mp4parse_parser {
 #[repr(C)]
 #[derive(Clone)]
 pub struct mp4parse_io {
-    pub read: extern fn(buffer: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize,
+    pub read: Option<extern fn(buffer: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize>,
     pub userdata: *mut std::os::raw::c_void,
 }
 
@@ -270,7 +270,7 @@ impl Read for mp4parse_io {
         if buf.len() > isize::max_value() as usize {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "buf length overflow in mp4parse_io Read impl"));
         }
-        let rv = (self.read)(buf.as_mut_ptr(), buf.len(), self.userdata);
+        let rv = self.read.unwrap()(buf.as_mut_ptr(), buf.len(), self.userdata);
         if rv >= 0 {
             Ok(rv as usize)
         } else {
@@ -287,12 +287,7 @@ pub unsafe extern fn mp4parse_new(io: *const mp4parse_io) -> *mut mp4parse_parse
     if io.is_null() || (*io).userdata.is_null() {
         return std::ptr::null_mut();
     }
-    // is_null() isn't available on a fn type because it can't be null (in
-    // Rust) by definition.  But since this value is coming from the C API,
-    // it *could* be null.  Ideally, we'd wrap it in an Option to represent
-    // reality, but this causes rusty-cheddar to emit the wrong type
-    // (https://github.com/Sean1708/rusty-cheddar/issues/30).
-    if ((*io).read as *mut std::os::raw::c_void).is_null() {
+    if (*io).read.is_none() {
         return std::ptr::null_mut();
     }
     let parser = Box::new(mp4parse_parser(Wrap {
@@ -1156,7 +1151,7 @@ extern fn valid_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_v
 fn new_parser() {
     let mut dummy_value: u32 = 42;
     let io = mp4parse_io {
-        read: panic_read,
+        read: Some(panic_read),
         userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
     };
     unsafe {
@@ -1195,19 +1190,19 @@ fn arg_validation() {
         let null_mut: *mut std::os::raw::c_void = std::ptr::null_mut();
 
         // Passing an mp4parse_io with null members is an error.
-        let io = mp4parse_io { read: std::mem::transmute(null_mut),
+        let io = mp4parse_io { read: None,
                                userdata: null_mut };
         let parser = mp4parse_new(&io);
         assert!(parser.is_null());
 
-        let io = mp4parse_io { read: panic_read,
+        let io = mp4parse_io { read: Some(panic_read),
                                userdata: null_mut };
         let parser = mp4parse_new(&io);
         assert!(parser.is_null());
 
         let mut dummy_value = 42;
         let io = mp4parse_io {
-            read: std::mem::transmute(null_mut),
+            read: None,
             userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
         };
         let parser = mp4parse_new(&io);
@@ -1246,7 +1241,7 @@ fn arg_validation_with_parser() {
     unsafe {
         let mut dummy_value = 42;
         let io = mp4parse_io {
-            read: error_read,
+            read: Some(error_read),
             userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
         };
         let parser = mp4parse_new(&io);
@@ -1295,7 +1290,7 @@ fn get_track_count_poisoned_parser() {
     unsafe {
         let mut dummy_value = 42;
         let io = mp4parse_io {
-            read: error_read,
+            read: Some(error_read),
             userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
         };
         let parser = mp4parse_new(&io);
@@ -1314,7 +1309,7 @@ fn get_track_count_poisoned_parser() {
 fn arg_validation_with_data() {
     unsafe {
         let mut file = std::fs::File::open("../mp4parse/tests/minimal.mp4").unwrap();
-        let io = mp4parse_io { read: valid_read,
+        let io = mp4parse_io { read: Some(valid_read),
                                userdata: &mut file as *mut _ as *mut std::os::raw::c_void };
         let parser = mp4parse_new(&io);
         assert!(!parser.is_null());
