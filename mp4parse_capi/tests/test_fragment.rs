@@ -15,7 +15,7 @@ extern fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_voi
 fn parse_fragment() {
     let mut file = std::fs::File::open("tests/bipbop_audioinit.mp4").expect("Unknown file");
     let io = mp4parse_io {
-        read: buf_read,
+        read: Some(buf_read),
         userdata: &mut file as *mut _ as *mut std::os::raw::c_void
     };
 

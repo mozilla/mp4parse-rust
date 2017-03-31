@@ -22,7 +22,7 @@ fn doit() {
     let mut input = Vec::new();
     std::io::stdin().read_to_end(&mut input).unwrap();
     let mut cursor = std::io::Cursor::new(input);
-    let io = mp4parse_io { read: vec_read, userdata: &mut cursor as *mut _ as *mut std::os::raw::c_void };
+    let io = mp4parse_io { read: Some(vec_read), userdata: &mut cursor as *mut _ as *mut std::os::raw::c_void };
     unsafe {
         let context = mp4parse_new(&io);
         let rv = mp4parse_read(context);
