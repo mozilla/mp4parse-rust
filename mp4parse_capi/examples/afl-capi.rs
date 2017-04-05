@@ -26,27 +26,27 @@ fn doit() {
     unsafe {
         let context = mp4parse_new(&io);
         let rv = mp4parse_read(context);
-        if rv == mp4parse_error::MP4PARSE_OK {
+        if rv == MP4PARSE::OK {
             let count = {
                 let mut count = 0;
                 let rv = mp4parse_get_track_count(context, &mut count);
-                assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+                assert_eq!(rv, MP4PARSE::OK);
                 count
             };
             for track in 0..count {
                 let mut info = mp4parse_track_info {
-                    track_type: mp4parse_track_type::MP4PARSE_TRACK_TYPE_VIDEO,
-                    codec: mp4parse_codec::MP4PARSE_CODEC_UNKNOWN,
+                    track_type: MP4PARSE_TRACK_TYPE::VIDEO,
+                    codec: MP4PARSE_CODEC::UNKNOWN,
                     track_id: 0,
                     duration: 0,
                     media_time: 0,
                 };
                 let rv = mp4parse_get_track_info(context, track, &mut info);
-                if rv == mp4parse_error::MP4PARSE_OK {
+                if rv == MP4PARSE::OK {
                     println!("track {}: id={} duration={} media_time={}",
                              track, info.track_id, info.duration, info.media_time);
                     match info.track_type {
-                        mp4parse_track_type::MP4PARSE_TRACK_TYPE_VIDEO => {
+                        MP4PARSE_TRACK_TYPE::VIDEO => {
                             let mut video = mp4parse_track_video_info {
                                 display_width: 0,
                                 display_height: 0,
@@ -57,16 +57,16 @@ fn doit() {
                                 protected_data: Default::default(),
                             };
                             let rv = mp4parse_get_track_video_info(context, track, &mut video);
-                            if rv == mp4parse_error::MP4PARSE_OK {
+                            if rv == MP4PARSE::OK {
                                 println!("  video: display={}x{} image={}x{}",
                                          video.display_width, video.display_height,
                                          video.image_width, video.image_height);
                             }
                         }
-                        mp4parse_track_type::MP4PARSE_TRACK_TYPE_AUDIO => {
+                        MP4PARSE_TRACK_TYPE::AUDIO => {
                             let mut audio = Default::default();
                             let rv = mp4parse_get_track_audio_info(context, track, &mut audio);
-                            if rv == mp4parse_error::MP4PARSE_OK {
+                            if rv == MP4PARSE::OK {
                                 println!("  audio: channels={} bit_depth={} sample_rate={}",
                                          audio.channels, audio.bit_depth, audio.sample_rate);
                             }
