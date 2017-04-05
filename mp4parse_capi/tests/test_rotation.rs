@@ -23,11 +23,11 @@ fn parse_rotation() {
         let parser = mp4parse_new(&io);
 
         let mut rv = mp4parse_read(parser);
-        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+        assert_eq!(rv, MP4PARSE::OK);
 
         let mut counts: u32 = 0;
         rv = mp4parse_get_track_count(parser, &mut counts);
-        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+        assert_eq!(rv, MP4PARSE::OK);
         assert_eq!(counts, 1);
 
         let mut video = mp4parse_track_video_info {
@@ -41,7 +41,7 @@ fn parse_rotation() {
         };
 
         let rv = mp4parse_get_track_video_info(parser, 0, &mut video);
-        assert_eq!(rv, mp4parse_error::MP4PARSE_OK);
+        assert_eq!(rv, MP4PARSE::OK);
         assert_eq!(video.rotation, 90);
 
         mp4parse_free(parser);

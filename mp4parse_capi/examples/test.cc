@@ -115,7 +115,7 @@ void test_arg_validation_with_data(const std::string& filename)
   mp4parse_parser *parser = mp4parse_new(&io);
   assert(parser != nullptr);
 
-  mp4parse_error rv = mp4parse_read(parser);
+  MP4PARSE rv = mp4parse_read(parser);
   assert(rv == MP4PARSE_OK);
 
   uint32_t tracks;
@@ -166,7 +166,7 @@ void test_arg_validation_with_data(const std::string& filename)
   fclose(f);
 }
 
-const char * tracktype2str(mp4parse_track_type type)
+const char * tracktype2str(MP4PARSE_TRACK_TYPE type)
 {
   switch (type) {
     case MP4PARSE_TRACK_TYPE_VIDEO: return "video";
@@ -175,7 +175,7 @@ const char * tracktype2str(mp4parse_track_type type)
   return "unknown";
 }
 
-const char * errorstring(mp4parse_error error)
+const char * errorstring(MP4PARSE error)
 {
   switch (error) {
     case MP4PARSE_OK: return "Ok";
@@ -198,7 +198,7 @@ int32_t read_file(const char* filename)
   assert(parser != nullptr);
 
   fprintf(stderr, "Parsing file '%s'.\n", filename);
-  mp4parse_error rv = mp4parse_read(parser);
+  MP4PARSE rv = mp4parse_read(parser);
   if (rv != MP4PARSE_OK) {
     mp4parse_free(parser);
     fclose(f);
