@@ -67,19 +67,19 @@ void test_arg_validation()
   assert(parser == nullptr);
 
   int32_t rv = mp4parse_read(nullptr);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert(rv == mp4parse_status_BAD_ARG);
 
   mp4parse_track_info info;
   rv = mp4parse_get_track_info(nullptr, 0, &info);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert(rv == mp4parse_status_BAD_ARG);
 
   mp4parse_track_video_info video;
   rv = mp4parse_get_track_video_info(nullptr, 0, &video);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert(rv == mp4parse_status_BAD_ARG);
 
   mp4parse_track_audio_info audio;
   rv = mp4parse_get_track_audio_info(nullptr, 0, &audio);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert(rv == mp4parse_status_BAD_ARG);
 
   assert(dummy_value == 42);
 }
@@ -92,16 +92,16 @@ void test_arg_validation_with_parser()
   assert(parser != nullptr);
 
   int32_t rv = mp4parse_read(parser);
-  assert(rv == MP4PARSE_ERROR_IO);
+  assert(rv == mp4parse_status_IO);
 
   rv = mp4parse_get_track_info(parser, 0, nullptr);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert(rv == mp4parse_status_BAD_ARG);
 
   rv = mp4parse_get_track_video_info(parser, 0, nullptr);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert(rv == mp4parse_status_BAD_ARG);
 
   rv = mp4parse_get_track_audio_info(parser, 0, nullptr);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert(rv == mp4parse_status_BAD_ARG);
 
   mp4parse_free(parser);
   assert(dummy_value == 42);
@@ -115,32 +115,32 @@ void test_arg_validation_with_data(const std::string& filename)
   mp4parse_parser *parser = mp4parse_new(&io);
   assert(parser != nullptr);
 
-  MP4PARSE rv = mp4parse_read(parser);
-  assert(rv == MP4PARSE_OK);
+  mp4parse_status rv = mp4parse_read(parser);
+  assert(rv == mp4parse_status_OK);
 
   uint32_t tracks;
   rv = mp4parse_get_track_count(parser, &tracks);
-  assert(rv == MP4PARSE_OK);
+  assert(rv == mp4parse_status_OK);
   assert(tracks == 2);
 
   mp4parse_track_info info;
   rv = mp4parse_get_track_info(parser, 0, &info);
-  assert(rv == MP4PARSE_OK);
-  assert(info.track_type == MP4PARSE_TRACK_TYPE_VIDEO);
+  assert(rv == mp4parse_status_OK);
+  assert(info.track_type == mp4parse_track_type_VIDEO);
   assert(info.track_id == 1);
   assert(info.duration == 40000);
   assert(info.media_time == 0);
 
   rv = mp4parse_get_track_info(parser, 1, &info);
-  assert(rv == MP4PARSE_OK);
-  assert(info.track_type == MP4PARSE_TRACK_TYPE_AUDIO);
+  assert(rv == mp4parse_status_OK);
+  assert(info.track_type == mp4parse_track_type_AUDIO);
   assert(info.track_id == 2);
   assert(info.duration == 61333);
   assert(info.media_time == 21333);
 
   mp4parse_track_video_info video;
   rv = mp4parse_get_track_video_info(parser, 0, &video);
-  assert(rv == MP4PARSE_OK);
+  assert(rv == mp4parse_status_OK);
   assert(video.display_width == 320);
   assert(video.display_height == 240);
   assert(video.image_width == 320);
@@ -148,7 +148,7 @@ void test_arg_validation_with_data(const std::string& filename)
 
   mp4parse_track_audio_info audio;
   rv = mp4parse_get_track_audio_info(parser, 1, &audio);
-  assert(rv == MP4PARSE_OK);
+  assert(rv == mp4parse_status_OK);
   assert(audio.channels == 1);
   assert(audio.bit_depth == 16);
   assert(audio.sample_rate == 48000);
@@ -156,34 +156,34 @@ void test_arg_validation_with_data(const std::string& filename)
   // Test with an invalid track number.
 
   rv = mp4parse_get_track_info(parser, 3, &info);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert(rv == mp4parse_status_BAD_ARG);
   rv = mp4parse_get_track_video_info(parser, 3, &video);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert(rv == mp4parse_status_BAD_ARG);
   rv = mp4parse_get_track_audio_info(parser, 3, &audio);
-  assert(rv == MP4PARSE_ERROR_BADARG);
+  assert(rv == mp4parse_status_BAD_ARG);
 
   mp4parse_free(parser);
   fclose(f);
 }
 
-const char * tracktype2str(MP4PARSE_TRACK_TYPE type)
+const char * tracktype2str(mp4parse_track_type type)
 {
   switch (type) {
-    case MP4PARSE_TRACK_TYPE_VIDEO: return "video";
-    case MP4PARSE_TRACK_TYPE_AUDIO: return "audio";
+    case mp4parse_track_type_VIDEO: return "video";
+    case mp4parse_track_type_AUDIO: return "audio";
   }
   return "unknown";
 }
 
-const char * errorstring(MP4PARSE error)
+const char * errorstring(mp4parse_status error)
 {
   switch (error) {
-    case MP4PARSE_OK: return "Ok";
-    case MP4PARSE_ERROR_BADARG: return "Invalid argument";
-    case MP4PARSE_ERROR_INVALID: return "Invalid data";
-    case MP4PARSE_ERROR_UNSUPPORTED: return "Feature unsupported";
-    case MP4PARSE_ERROR_EOF: return "Unexpected end-of-file";
-    case MP4PARSE_ERROR_IO: return "I/O error";
+    case mp4parse_status_OK: return "Ok";
+    case mp4parse_status_BAD_ARG: return "Invalid argument";
+    case mp4parse_status_INVALID: return "Invalid data";
+    case mp4parse_status_UNSUPPORTED: return "Feature unsupported";
+    case mp4parse_status_EOF: return "Unexpected end-of-file";
+    case mp4parse_status_IO: return "I/O error";
   }
   return "Unknown error";
 }
@@ -198,8 +198,8 @@ int32_t read_file(const char* filename)
   assert(parser != nullptr);
 
   fprintf(stderr, "Parsing file '%s'.\n", filename);
-  MP4PARSE rv = mp4parse_read(parser);
-  if (rv != MP4PARSE_OK) {
+  mp4parse_status rv = mp4parse_read(parser);
+  if (rv != mp4parse_status_OK) {
     mp4parse_free(parser);
     fclose(f);
     fprintf(stderr, "Parsing failed: %s\n", errorstring(rv));
@@ -207,13 +207,13 @@ int32_t read_file(const char* filename)
   }
   uint32_t tracks;
   rv = mp4parse_get_track_count(parser, &tracks);
-  assert(rv == MP4PARSE_OK);
+  assert(rv == mp4parse_status_OK);
   fprintf(stderr, "%u tracks returned to C code.\n", tracks);
 
   for (uint32_t i = 0; i < tracks; ++i) {
     mp4parse_track_info track_info;
     int32_t rv2 = mp4parse_get_track_info(parser, i, &track_info);
-    assert(rv2 == MP4PARSE_OK);
+    assert(rv2 == mp4parse_status_OK);
     fprintf(stderr, "Track %d: type=%s duration=%" PRId64 " media_time=%" PRId64 " track_id=%d\n",
             i, tracktype2str(track_info.track_type), track_info.duration, track_info.media_time, track_info.track_id);
   }
@@ -221,7 +221,7 @@ int32_t read_file(const char* filename)
   mp4parse_free(parser);
   fclose(f);
 
-  return MP4PARSE_OK;
+  return mp4parse_status_OK;
 }
 
 int main(int argc, char* argv[])
