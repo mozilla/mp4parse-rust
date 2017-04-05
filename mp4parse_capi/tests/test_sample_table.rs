@@ -23,34 +23,34 @@ fn parse_sample_table() {
         let parser = mp4parse_new(&io);
 
         let mut rv = mp4parse_read(parser);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
 
         let mut counts: u32 = 0;
         rv = mp4parse_get_track_count(parser, &mut counts);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
         assert_eq!(counts, 2);
 
         let mut track_info = mp4parse_track_info {
-            track_type: MP4PARSE_TRACK_TYPE::AUDIO,
-            codec: MP4PARSE_CODEC::UNKNOWN,
+            track_type: mp4parse_track_type::AUDIO,
+            codec: mp4parse_codec::UNKNOWN,
             track_id: 0,
             duration: 0,
             media_time: 0,
         };
         rv = mp4parse_get_track_info(parser, 1, &mut track_info);
-        assert_eq!(rv, MP4PARSE::OK);
-        assert_eq!(track_info.track_type, MP4PARSE_TRACK_TYPE::AUDIO);
-        assert_eq!(track_info.codec, MP4PARSE_CODEC::AAC);
+        assert_eq!(rv, mp4parse_status::OK);
+        assert_eq!(track_info.track_type, mp4parse_track_type::AUDIO);
+        assert_eq!(track_info.codec, mp4parse_codec::AAC);
 
         // Check audio smaple table
         let mut is_fragmented_file: u8 = 0;
         rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
         assert_eq!(is_fragmented_file, 0);
 
         let mut indice = mp4parse_byte_data::default();
         rv = mp4parse_get_indice_table(parser, track_info.track_id, &mut indice);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
 
         // Compare the value from stagefright.
         let audio_indice_0 =  mp4parse_indice { start_offset: 27046, end_offset: 27052, start_composition: 0, end_composition: 46439, start_decode: 0, sync: true };
@@ -61,18 +61,18 @@ fn parse_sample_table() {
 
         // Check video smaple table
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
-        assert_eq!(rv, MP4PARSE::OK);
-        assert_eq!(track_info.track_type, MP4PARSE_TRACK_TYPE::VIDEO);
-        assert_eq!(track_info.codec, MP4PARSE_CODEC::AVC);
+        assert_eq!(rv, mp4parse_status::OK);
+        assert_eq!(track_info.track_type, mp4parse_track_type::VIDEO);
+        assert_eq!(track_info.codec, mp4parse_codec::AVC);
 
         let mut is_fragmented_file: u8 = 0;
         rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
         assert_eq!(is_fragmented_file, 0);
 
         let mut indice = mp4parse_byte_data::default();
         rv = mp4parse_get_indice_table(parser, track_info.track_id, &mut indice);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
 
         // Compare the last few data from stagefright.
         let video_indice_291 = mp4parse_indice { start_offset: 280226, end_offset: 280855, start_composition: 9838333, end_composition: 9871677, start_decode: 9710000, sync: false };
@@ -108,34 +108,34 @@ fn parse_sample_table_with_elst() {
         let parser = mp4parse_new(&io);
 
         let mut rv = mp4parse_read(parser);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
 
         let mut counts: u32 = 0;
         rv = mp4parse_get_track_count(parser, &mut counts);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
         assert_eq!(counts, 2);
 
         let mut track_info = mp4parse_track_info {
-            track_type: MP4PARSE_TRACK_TYPE::AUDIO,
-            codec: MP4PARSE_CODEC::UNKNOWN,
+            track_type: mp4parse_track_type::AUDIO,
+            codec: mp4parse_codec::UNKNOWN,
             track_id: 0,
             duration: 0,
             media_time: 0,
         };
         rv = mp4parse_get_track_info(parser, 1, &mut track_info);
-        assert_eq!(rv, MP4PARSE::OK);
-        assert_eq!(track_info.track_type, MP4PARSE_TRACK_TYPE::AUDIO);
-        assert_eq!(track_info.codec, MP4PARSE_CODEC::AAC);
+        assert_eq!(rv, mp4parse_status::OK);
+        assert_eq!(track_info.track_type, mp4parse_track_type::AUDIO);
+        assert_eq!(track_info.codec, mp4parse_codec::AAC);
 
         // Check audio sample table
         let mut is_fragmented_file: u8 = std::u8::MAX;
         rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
         assert_eq!(is_fragmented_file, 0);
 
         let mut indice = mp4parse_byte_data::default();
         rv = mp4parse_get_indice_table(parser, track_info.track_id, &mut indice);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
 
         // Compare the value from stagefright.
         // Due to 'elst', the start_composition and end_composition are negative
@@ -164,33 +164,33 @@ fn parse_sample_table_with_negative_ctts() {
         let parser = mp4parse_new(&io);
 
         let mut rv = mp4parse_read(parser);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
 
         let mut counts: u32 = 0;
         rv = mp4parse_get_track_count(parser, &mut counts);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
         assert_eq!(counts, 1);
 
         let mut track_info = mp4parse_track_info {
-            track_type: MP4PARSE_TRACK_TYPE::AUDIO,
-            codec: MP4PARSE_CODEC::UNKNOWN,
+            track_type: mp4parse_track_type::AUDIO,
+            codec: mp4parse_codec::UNKNOWN,
             track_id: 0,
             duration: 0,
             media_time: 0,
         };
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
-        assert_eq!(rv, MP4PARSE::OK);
-        assert_eq!(track_info.track_type, MP4PARSE_TRACK_TYPE::VIDEO);
-        assert_eq!(track_info.codec, MP4PARSE_CODEC::AVC);
+        assert_eq!(rv, mp4parse_status::OK);
+        assert_eq!(track_info.track_type, mp4parse_track_type::VIDEO);
+        assert_eq!(track_info.codec, mp4parse_codec::AVC);
 
         let mut is_fragmented_file: u8 = std::u8::MAX;
         rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
         assert_eq!(is_fragmented_file, 0);
 
         let mut indice = mp4parse_byte_data::default();
         rv = mp4parse_get_indice_table(parser, track_info.track_id, &mut indice);
-        assert_eq!(rv, MP4PARSE::OK);
+        assert_eq!(rv, mp4parse_status::OK);
 
         // There are negative value in 'ctts' table.
         let video_indice_0 = mp4parse_indice { start_offset: 48, end_offset: 890, start_composition: 0, end_composition: 33333, start_decode: 0, sync: true };
