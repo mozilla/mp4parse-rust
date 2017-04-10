@@ -991,8 +991,8 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
 
         let iter = sort_table.iter();
         for i in 0 .. (iter.len() - 1) {
-            let current_index = sort_table[i] as usize;
-            let peek_index = sort_table[i + 1] as usize;
+            let current_index = sort_table[i];
+            let peek_index = sort_table[i + 1];
             let next_start_composition_time = sample_table[peek_index].start_composition;
             let sample = &mut sample_table[current_index];
             sample.end_composition = next_start_composition_time;
