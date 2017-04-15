@@ -1326,14 +1326,16 @@ fn find_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
         let des = &mut Cursor::new(remains);
         let tag = des.read_u8()?;
 
-        let extend_or_len = des.read_u8()?;
-        // extension tag start from 0x80.
-        let end = if extend_or_len >= 0x80 {
-            // Extension found, skip remaining extension.
-            skip(des, 2)?;
-            des.read_u8()? as u64 + des.position()
-        } else {
-            extend_or_len as u64 + des.position()
+        let mut end = 0;
+        // Extension descriptor could be variable size from 0x80 to
+        // 0x80 0x80 0x80, the descriptor length is the byte after that,
+        // so it loops four times.
+        for _ in 0..4 {
+            let extend_or_len = des.read_u8()?;
+            if extend_or_len < 0x80 {
+                end = extend_or_len + des.position() as u8;
+                break;
+            }
         };
 
         if end as usize > remains.len() {

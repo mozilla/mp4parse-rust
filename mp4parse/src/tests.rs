@@ -871,6 +871,31 @@ fn read_esds() {
 }
 
 #[test]
+fn read_esds_one_byte_extension_descriptor() {
+    let esds =
+        vec![
+            0x00, 0x03, 0x80, 0x1b, 0x00, 0x00, 0x00, 0x04,
+            0x80, 0x12, 0x40, 0x15, 0x00, 0x06, 0x00, 0x00,
+            0x01, 0xfe, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x05,
+            0x80, 0x02, 0x11, 0x90, 0x06, 0x01, 0x02,
+        ];
+
+    let mut stream = make_box(BoxSize::Auto, b"esds", |s| {
+        s.B32(0) // reserved
+         .append_bytes(esds.as_slice())
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+
+    let es = super::read_esds(&mut stream).unwrap();
+
+    assert_eq!(es.audio_codec, super::CodecType::AAC);
+    assert_eq!(es.audio_object_type, Some(2));
+    assert_eq!(es.audio_sample_rate, Some(48000));
+    assert_eq!(es.audio_channel_count, Some(2));
+}
+
+#[test]
 fn read_f4v_stsd() {
     let mut stream = make_box(BoxSize::Auto, b".mp3", |s| {
         s.append_repeated(0, 6)
