@@ -437,22 +437,6 @@ impl <T> std::ops::Add for TrackScaledTime<T> where T: Num {
     }
 }
 
-/// A fragmented file contains no sample data in stts, stsc, and stco.
-#[derive(Debug, Default)]
-pub struct EmptySampleTableBoxes {
-    // TODO: Track has stts, stsc and stco, this structure can be discarded.
-    pub empty_stts: bool,
-    pub empty_stsc: bool,
-    pub empty_stco: bool,
-}
-
-/// Check boxes contain data.
-impl EmptySampleTableBoxes {
-    pub fn all_empty(&self) -> bool {
-        self.empty_stts & self.empty_stsc & self.empty_stco
-    }
-}
-
 #[derive(Debug, Default)]
 pub struct Track {
     pub id: usize,
@@ -463,7 +447,6 @@ pub struct Track {
     pub duration: Option<TrackScaledTime<u64>>,
     pub track_id: Option<u32>,
     pub codec_type: CodecType,
-    pub empty_sample_boxes: EmptySampleTableBoxes,
     pub data: Option<SampleEntry>,
     pub tkhd: Option<TrackHeaderBox>, // TODO(kinetik): find a nicer way to export this.
     pub stts: Option<TimeToSampleBox>,
@@ -892,13 +875,11 @@ fn read_stbl<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
             BoxType::TimeToSampleBox => {
                 let stts = read_stts(&mut b)?;
                 log!("{:?}", stts);
-                track.empty_sample_boxes.empty_stts = stts.samples.is_empty();
                 track.stts = Some(stts);
             }
             BoxType::SampleToChunkBox => {
                 let stsc = read_stsc(&mut b)?;
                 log!("{:?}", stsc);
-                track.empty_sample_boxes.empty_stsc = stsc.samples.is_empty();
                 track.stsc = Some(stsc);
             }
             BoxType::SampleSizeBox => {
@@ -908,7 +889,6 @@ fn read_stbl<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
             }
             BoxType::ChunkOffsetBox => {
                 let stco = read_stco(&mut b)?;
-                track.empty_sample_boxes.empty_stco = stco.offsets.is_empty();
                 log!("{:?}", stco);
                 track.stco = Some(stco);
             }

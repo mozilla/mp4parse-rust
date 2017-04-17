@@ -1049,13 +1049,14 @@ pub unsafe extern fn mp4parse_is_fragmented(parser: *mut mp4parse_parser, track_
 
     // check sample tables.
     let mut iter = tracks.iter();
-    match iter.find(|track| track.track_id == Some(track_id)) {
-        Some(track) if track.empty_sample_boxes.all_empty() => (*fragmented) = true as u8,
-        Some(_) => {},
-        None => return mp4parse_status::BAD_ARG,
-    }
-
-    mp4parse_status::OK
+    iter.find(|track| track.track_id == Some(track_id)).map_or(mp4parse_status::BAD_ARG, |track| {
+        match (&track.stsc, &track.stco, &track.stts) {
+            (&Some(ref stsc), &Some(ref stco), &Some(ref stts))
+                if stsc.samples.is_empty() && stco.offsets.is_empty() && stts.samples.is_empty() => (*fragmented) = true as u8,
+            _ => {},
+        };
+        mp4parse_status::OK
+    })
 }
 
 /// Get 'pssh' system id and 'pssh' box content for eme playback.
