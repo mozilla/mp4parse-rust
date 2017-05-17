@@ -94,6 +94,7 @@ pub enum mp4parse_codec {
     AVC,
     VP9,
     MP3,
+    MP4V,
 }
 
 impl Default for mp4parse_codec {
@@ -433,6 +434,8 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
                 mp4parse_codec::VP9,
             VideoCodecSpecific::AVCConfig(_) =>
                 mp4parse_codec::AVC,
+            VideoCodecSpecific::ESDSConfig(_) =>
+                mp4parse_codec::MP4V,
         },
         _ => mp4parse_codec::UNKNOWN,
     };
