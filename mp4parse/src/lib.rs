@@ -280,6 +280,7 @@ pub struct AudioSampleEntry {
 pub enum VideoCodecSpecific {
     AVCConfig(Vec<u8>),
     VPxConfig(VPxConfigBox),
+    ESDSConfig(Vec<u8>),
 }
 
 #[derive(Debug, Clone)]
@@ -400,7 +401,8 @@ pub enum CodecType {
     AAC,
     FLAC,
     Opus,
-    H264,
+    H264,   // 14496-10
+    MP4V,   // 14496-2
     VP9,
     VP8,
     EncryptedVideo,
@@ -1640,6 +1642,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<(CodecType, 
     let name = src.get_header().name;
     let codec_type = match name {
         BoxType::AVCSampleEntry | BoxType::AVC3SampleEntry => CodecType::H264,
+        BoxType::MP4VideoSampleEntry => CodecType::MP4V,
         BoxType::VP8SampleEntry => CodecType::VP8,
         BoxType::VP9SampleEntry => CodecType::VP9,
         BoxType::ProtectedVisualSampleEntry => CodecType::EncryptedVideo,
@@ -1688,6 +1691,14 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<(CodecType, 
                     }
                 let vpcc = read_vpcc(&mut b)?;
                 codec_specific = Some(VideoCodecSpecific::VPxConfig(vpcc));
+            }
+            BoxType::ESDBox => {
+                if name != BoxType::MP4VideoSampleEntry || codec_specific.is_some() {
+                    return Err(Error::InvalidData("malformed video sample entry"));
+                }
+                let esds_size = b.head.size - b.head.offset;
+                let esds = read_buf(&mut b.content, esds_size as usize)?;
+                codec_specific = Some(VideoCodecSpecific::ESDSConfig(esds));
             }
             BoxType::ProtectionSchemeInformationBox => {
                 if name != BoxType::ProtectedVisualSampleEntry {
