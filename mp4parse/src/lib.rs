@@ -301,6 +301,7 @@ pub struct VPxConfigBox {
     pub color_space: u8, // Really an enum
     pub chroma_subsampling: u8,
     transfer_function: u8,
+    matrix: Option<u8>, // Available in 'VP Codec ISO Media File Format' version 1 only.
     video_full_range: bool,
     pub codec_init: Vec<u8>, // Empty for vp8/vp9.
 }
@@ -403,6 +404,7 @@ pub enum CodecType {
     Opus,
     H264,   // 14496-10
     MP4V,   // 14496-2
+    VP10,
     VP9,
     VP8,
     EncryptedVideo,
@@ -1250,20 +1252,35 @@ fn read_stts<T: Read>(src: &mut BMFFBox<T>) -> Result<TimeToSampleBox> {
 /// Parse a VPx Config Box.
 fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
     let (version, _) = read_fullbox_extra(src)?;
-    if version != 0 {
+    let supported_versions = [0, 1];
+    if ! supported_versions.contains(&version) {
         return Err(Error::Unsupported("unknown vpcC version"));
     }
 
     let profile = src.read_u8()?;
     let level = src.read_u8()?;
-    let (bit_depth, color_space) = {
-        let byte = src.read_u8()?;
-        ((byte >> 4) & 0x0f, byte & 0x0f)
-    };
-    let (chroma_subsampling, transfer_function, video_full_range) = {
-        let byte = src.read_u8()?;
-        ((byte >> 4) & 0x0f, (byte >> 1) & 0x07, (byte & 1) == 1)
-    };
+    let (bit_depth, color_space, chroma_subsampling, transfer_function, matrix, video_full_range) =
+        if version == 0 {
+            let (bit_depth, color_space) = {
+                let byte = src.read_u8()?;
+                ((byte >> 4) & 0x0f, byte & 0x0f)
+            };
+            let (chroma_subsampling, transfer_function, video_full_range) = {
+                let byte = src.read_u8()?;
+                ((byte >> 4) & 0x0f, (byte >> 1) & 0x07, (byte & 1) == 1)
+            };
+            (bit_depth, color_space, chroma_subsampling, transfer_function, None, video_full_range)
+        } else {
+            let (bit_depth, chroma_subsampling, video_full_range) = {
+                let byte = src.read_u8()?;
+                ((byte >> 4) & 0x0f, (byte >> 1) & 0x07, (byte & 1) == 1)
+            };
+            let color_space = src.read_u8()?;
+            let transfer_function = src.read_u8()?;
+            let matrix = src.read_u8()?;
+
+            (bit_depth, color_space, chroma_subsampling, transfer_function, Some(matrix), video_full_range)
+        };
 
     let codec_init_size = be_u16(src)?;
     let codec_init = read_buf(src, codec_init_size as usize)?;
@@ -1276,6 +1293,7 @@ fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
         color_space: color_space,
         chroma_subsampling: chroma_subsampling,
         transfer_function: transfer_function,
+        matrix: matrix,
         video_full_range: video_full_range,
         codec_init: codec_init,
     })
