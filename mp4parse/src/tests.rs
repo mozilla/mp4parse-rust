@@ -371,7 +371,7 @@ fn read_mvhd_unknown_duration() {
 }
 
 #[test]
-fn read_vpcc() {
+fn read_vpcc_version_0() {
     let data_length = 12u16;
     let mut stream = make_fullbox(BoxSize::Auto, b"vpcC", 0, |s| {
         s.B8(2)
@@ -386,6 +386,36 @@ fn read_vpcc() {
     assert_eq!(stream.head.name, BoxType::VPCodecConfigurationBox);
     let r = super::read_vpcc(&mut stream);
     assert!(r.is_ok());
+}
+
+// TODO: it'd be better to find a real sample here.
+#[test]
+fn read_vpcc_version_1() {
+    let data_length = 12u16;
+    let mut stream = make_fullbox(BoxSize::Auto, b"vpcC", 1, |s| {
+        s.B8(2)     // profile
+         .B8(0)     // level
+         .B8(0b1000_011_0)  // bitdepth (4 bits), chroma (3 bits), video full range (1 bit)
+         .B8(1)     // color primaries
+         .B8(1)     // transfer characteristics
+         .B8(1)     // matrix
+         .B16(data_length)
+         .append_repeated(42, data_length as usize)
+    });
+
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    assert_eq!(stream.head.name, BoxType::VPCodecConfigurationBox);
+    let r = super::read_vpcc(&mut stream);
+    match r {
+        Ok(vpcc) => {
+            assert_eq!(vpcc.bit_depth, 8);
+            assert_eq!(vpcc.chroma_subsampling, 3);
+            assert_eq!(vpcc.video_full_range, false);
+            assert_eq!(vpcc.matrix.unwrap(), 1);
+        },
+        _ => panic!("vpcc parsing error"),
+    }
 }
 
 #[test]
