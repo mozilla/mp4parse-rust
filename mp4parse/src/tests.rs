@@ -1011,3 +1011,38 @@ fn max_table_limit() {
         _ => panic!("expected a different error result"),
     }
 }
+
+#[test]
+fn jpeg_video_sample_entry() {
+    let jpeg = make_box(BoxSize::Auto, b"jpeg", |s| {
+        s.append_repeated(0, 6)
+         .B16(1)
+         .append_repeated(0, 16)
+         .B16(1024)
+         .B16(1024)
+         .append_repeated(0, 14)
+         .append_repeated(0, 32)
+         .append_repeated(0, 4)
+    }).into_inner();
+    let mut stream = make_fullbox(BoxSize::Auto, b"stsd", 0, |s| {
+        s.B32(1)
+         .append_bytes(jpeg.as_slice())
+    });
+
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    let mut track = super::Track::new(0);
+    match super::read_stsd(&mut stream, &mut track) {
+        Ok(sample_description) => {
+            match sample_description.descriptions[0] {
+                super::SampleEntry::Video(ref jpeg) => {
+                    assert_eq!(track.codec_type, super::CodecType::JPEG);
+                    assert_eq!(jpeg.height, 1024);
+                    assert_eq!(jpeg.width, 1024);
+                } ,
+                _ => {},
+            }
+        },
+        _ => panic!("failed to parse a jpeg atom"),
+    }
+}

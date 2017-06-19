@@ -95,6 +95,7 @@ pub enum mp4parse_codec {
     VP9,
     MP3,
     MP4V,
+    JPEG,   // for QT JPEG atom in video track
 }
 
 impl Default for mp4parse_codec {
@@ -436,6 +437,8 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut mp4parse_parser, track
                 mp4parse_codec::AVC,
             VideoCodecSpecific::ESDSConfig(_) =>
                 mp4parse_codec::MP4V,
+            VideoCodecSpecific::JPEG =>
+                mp4parse_codec::JPEG,
         },
         _ => mp4parse_codec::UNKNOWN,
     };
