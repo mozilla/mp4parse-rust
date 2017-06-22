@@ -102,6 +102,12 @@ fn public_api() {
                     mp4::AudioCodecSpecific::MP3 => {
                         "MP3"
                     }
+                    mp4::AudioCodecSpecific::AC3SpecificBox => {
+                        "AC3"
+                    }
+                    mp4::AudioCodecSpecific::EC3SpecificBox => {
+                        "EC3"
+                    }
                 }, "ES");
                 assert!(a.samplesize > 0);
                 assert!(a.samplerate > 0);

@@ -267,6 +267,8 @@ pub enum AudioCodecSpecific {
     ES_Descriptor(ES_Descriptor),
     FLACSpecificBox(FLACSpecificBox),
     OpusSpecificBox(OpusSpecificBox),
+    AC3SpecificBox,
+    EC3SpecificBox,
     MP3,
 }
 
@@ -415,6 +417,8 @@ pub enum CodecType {
     EncryptedVideo,
     EncryptedAudio,
     JPEG,   // QT JPEG atom
+    AC3,    // Digital Audio Compression (AC-3, Enhanced AC-3) Standard, ETSI TS 102 366.
+    EC3,    // Digital Audio Compression (AC-3, Enhanced AC-3) Standard, ETSI TS 102 366.
 }
 
 impl Default for CodecType {
@@ -1864,6 +1868,26 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<(CodecType, 
                 log!("{:?} (sinf)", sinf);
                 codec_type = CodecType::EncryptedAudio;
                 protection_info.push(sinf);
+            }
+            BoxType::AC3SpecificBox => {
+                if name != BoxType::AC3SampleEntry {
+                    return Err(Error::InvalidData("malformed AC3 sample entry"));
+                }
+                // TODO: AC3SpecificBox needs to be parsed for detail information.
+                skip_box_remain(&mut b)?;
+                log!("(ac3)");
+                codec_type = CodecType::AC3;
+                codec_specific = Some(AudioCodecSpecific::AC3SpecificBox);
+            }
+            BoxType::EC3SpecificBox => {
+                if name != BoxType::EC3SpecificBox {
+                    return Err(Error::InvalidData("malformed EC3 sample entry"));
+                }
+                // TODO: EC3SpecificBox needs to be parsed for detail information.
+                skip_box_remain(&mut b)?;
+                log!("(ec3)");
+                codec_type = CodecType::EC3;
+                codec_specific = Some(AudioCodecSpecific::EC3SpecificBox);
             }
             _ => skip_box_content(&mut b)?,
         }
