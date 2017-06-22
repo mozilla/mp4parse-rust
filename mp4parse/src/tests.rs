@@ -901,6 +901,31 @@ fn read_esds() {
 }
 
 #[test]
+fn read_ac3_sample_entry() {
+    let ac3 =
+        vec![
+            0x00, 0x00, 0x00, 0x0b, 0x64, 0x61, 0x63, 0x33, 0x10, 0x11, 0x60
+        ];
+
+    let mut stream = make_box(BoxSize::Auto, b"ac-3", |s| {
+        s.append_repeated(0, 6)
+         .B16(1)    // data_reference_count
+         .B16(0)
+         .append_repeated(0, 6)
+         .B16(2)
+         .B16(16)
+         .append_repeated(0, 4)
+         .B32(48000 << 16)
+         .append_bytes(ac3.as_slice())
+    });
+
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    let (codec_type, _) = super::read_audio_sample_entry(&mut stream)
+          .expect("fail to read ac3 atom");
+    assert_eq!(codec_type, super::CodecType::AC3);
+}
+#[test]
 fn read_stsd_mp4v() {
     let mp4v =
         vec![
