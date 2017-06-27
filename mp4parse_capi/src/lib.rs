@@ -944,19 +944,9 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
         // ctts_offset is the current sample offset time.
         let ctts_offset = ctts_offset_iter.next_offset_time();
 
-        // ctts_offset could be negative but (decode_time + ctts_offset) should always be positive
-        // value.
-        let start_composition = track_time_to_us(decode_time + ctts_offset, timescale).and_then(|t| {
-            if t < 0 { return None; }
-            Some(t)
-        });
+        let start_composition = track_time_to_us(decode_time + ctts_offset, timescale);
 
-        // ctts_offset could be negative but (sum_delta + ctts_offset) should always be positive
-        // value.
-        let end_composition = track_time_to_us(sum_delta + ctts_offset, timescale).and_then(|t| {
-            if t < 0 { return None; }
-            Some(t)
-        });
+        let end_composition = track_time_to_us(sum_delta + ctts_offset, timescale);
 
         let start_decode = track_time_to_us(decode_time, timescale);
 
