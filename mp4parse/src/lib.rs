@@ -1333,13 +1333,12 @@ fn find_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
         let tag = des.read_u8()?;
 
         let mut end = 0;
-        // Extension descriptor could be variable size from 0x80 to
-        // 0x80 0x80 0x80, the descriptor length is the byte after that,
-        // so it loops four times.
+        // MSB of extend_or_len indicates more bytes, up to 4 bytes.
         for _ in 0..4 {
             let extend_or_len = des.read_u8()?;
-            if extend_or_len < 0x80 {
-                end = extend_or_len + des.position() as u8;
+            end = (end << 7) + (extend_or_len & 0x7F);
+            if (extend_or_len & 0x80) == 0 {
+                end += des.position() as u8;
                 break;
             }
         };
