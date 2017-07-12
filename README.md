@@ -7,6 +7,3 @@ Our primary interest is writing a pure-rust replacement for the
 track metadata parser needed by Firefox.
 
 [API documentation](https://docs.rs/mp4parse/)
-
-To enable it on Firefox builds, add `ac_add_options --enable-rust`
-to your `mozconfig`.
