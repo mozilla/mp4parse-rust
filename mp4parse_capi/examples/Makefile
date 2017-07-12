@@ -9,7 +9,7 @@ check: all
 HEADER := ../include/mp4parse.h
 CXXFLAGS = -g -Wall -std=c++11 -I$(dir $(HEADER))
 
-CRATE_DIR := ../target/debug/deps
+CRATE_DIR := ../../target/debug/deps
 
 libmp4parse.a libmp4parse.a.out : ../src/lib.rs
 	rustc -g --crate-type staticlib --crate-name mp4parse \

@@ -34,6 +34,3 @@ moz-cheddar = "0.4.0"
 [features]
 fuzz = ["mp4parse/fuzz"]
 
-# Somewhat heavy-handed, but we want at least -Z force-overflow-checks=on.
-[profile.release]
-debug-assertions = true
