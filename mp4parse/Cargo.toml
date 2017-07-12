@@ -8,7 +8,7 @@ authors = [
 ]
 
 description = "Parser for ISO base media file format (mp4)"
-documentation = "https://mp4parse-docs.surge.sh/mp4parse/"
+documentation = "https://docs.rs/mp4parse/"
 license = "MPL-2.0"
 categories = ["multimedia::video"]
 
