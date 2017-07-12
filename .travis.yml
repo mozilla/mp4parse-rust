@@ -17,9 +17,3 @@ env:
 script:
   - cargo test --all --verbose
   - cargo doc --package mp4parse_capi
-
-deploy:
-  provider: surge
-  project: ./target/doc/
-  domain: mp4parse-docs.surge.sh
-  skip_cleanup: true
