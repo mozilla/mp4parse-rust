@@ -15,12 +15,11 @@ env:
     - CXX=g++-5
 
 script:
-  - (cd mp4parse && cargo test --verbose)
-  - (cd mp4parse_capi && cargo test --verbose)
-  - (cd mp4parse_capi && cargo doc)
+  - cargo test --all --verbose
+  - cargo doc --package mp4parse_capi
 
 deploy:
   provider: surge
-  project: ./mp4parse_capi/target/doc/
+  project: ./target/doc/
   domain: mp4parse-docs.surge.sh
   skip_cleanup: true

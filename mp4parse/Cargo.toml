@@ -36,6 +36,3 @@ test-assembler = "0.1.2"
 [features]
 fuzz = ["afl", "afl-plugin", "abort_on_panic"]
 
-# Somewhat heavy-handed, but we want at least -Z force-overflow-checks=on.
-[profile.release]
-debug-assertions = true
