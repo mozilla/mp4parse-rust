@@ -67,6 +67,8 @@ pub enum Error {
     Io(std::io::Error),
     /// read_mp4 terminated without detecting a moov box.
     NoMoov,
+    /// Parse error caused by table size is over limitation.
+    TableTooLarge,
 }
 
 impl From<bitreader::BitReaderError> for Error {
@@ -1156,7 +1158,7 @@ fn read_stsc<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleToChunkBox> {
     let mut samples = Vec::new();
     for _ in 0..sample_count {
         let first_chunk = be_u32(src)?;
-        let samples_per_chunk = be_u32(src)?;
+        let samples_per_chunk = be_u32_with_limit(src)?;
         let sample_description_index = be_u32(src)?;
         samples.push(SampleToChunk {
             first_chunk: first_chunk,
@@ -1189,7 +1191,7 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
             // however, some buggy contents have negative value when version == 0.
             // So we always use Version1 here.
             0...1 => {
-                let count = be_u32(src)?;
+                let count = be_u32_with_limit(src)?;
                 let offset = TimeOffsetVersion::Version1(be_i32(src)?);
                 (count, offset)
             },
@@ -1237,7 +1239,7 @@ fn read_stts<T: Read>(src: &mut BMFFBox<T>) -> Result<TimeToSampleBox> {
     let sample_count = be_u32_with_limit(src)?;
     let mut samples = Vec::new();
     for _ in 0..sample_count {
-        let sample_count = be_u32(src)?;
+        let sample_count = be_u32_with_limit(src)?;
         let sample_delta = be_u32(src)?;
         samples.push(Sample {
             sample_count: sample_count,
@@ -2048,7 +2050,7 @@ fn be_u32<T: ReadBytesExt>(src: &mut T) -> Result<u32> {
 fn be_u32_with_limit<T: ReadBytesExt>(src: &mut T) -> Result<u32> {
     be_u32(src).and_then(|v| {
         if v > TABLE_SIZE_LIMIT {
-            return Err(Error::Unsupported("Over limited value"));
+            return Err(Error::TableTooLarge);
         }
         Ok(v)
     })
