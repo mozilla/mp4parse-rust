@@ -1031,7 +1031,7 @@ fn max_table_limit() {
     let mut stream = iter.next_box().unwrap().unwrap();
     let mut track = super::Track::new(0);
     match super::read_edts(&mut stream, &mut track) {
-        Err(Error::Unsupported(s)) => assert_eq!(s, "Over limited value"),
+        Err(Error::TableTooLarge) => (),
         Ok(_) => panic!("expected an error result"),
         _ => panic!("expected a different error result"),
     }
