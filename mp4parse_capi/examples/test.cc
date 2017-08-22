@@ -184,6 +184,7 @@ const char * errorstring(mp4parse_status error)
     case mp4parse_status_UNSUPPORTED: return "Feature unsupported";
     case mp4parse_status_EOF: return "Unexpected end-of-file";
     case mp4parse_status_IO: return "I/O error";
+    case mp4parse_status_TABLE_TOO_LARGE: return "Table too large";
   }
   return "Unknown error";
 }
