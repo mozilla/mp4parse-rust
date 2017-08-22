@@ -4,6 +4,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 #undef NDEBUG
+#include <algorithm>
 #include <cassert>
 #include <cinttypes>
 #include <cstdint>
@@ -227,6 +228,20 @@ int32_t read_file(const char* filename)
 
 int main(int argc, char* argv[])
 {
+  // Parse command line options.
+  std::vector<std::string> args(argv + 1, argv + argc);
+  args.erase(
+    std::remove_if(args.begin(), args.end(), [](std::string& arg){
+      if (!arg.compare("-v")) {
+        fprintf(stderr, "Enabling debug logging.\n");
+        mp4parse_log(true);
+        return true;
+      }
+      return false;
+    }),
+    args.end()
+  );
+
   test_new_parser();
   test_arg_validation();
   test_arg_validation_with_parser();
@@ -238,8 +253,8 @@ int main(int argc, char* argv[])
   test_arg_validation_with_data(path);
 
   // Run any other test files passed on the command line.
-  for (auto i = 1; i < argc; ++i) {
-    read_file(argv[i]);
+  for (auto arg: args) {
+    read_file(arg.c_str());
   }
 
   return 0;
