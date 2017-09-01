@@ -977,7 +977,7 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
     //
     // Composition end time is not in specification. However, gecko needs it, so we need to
     // calculate to correct the composition end time.
-    if track.ctts.is_some() {
+    if sample_table.len() > 0 {
         // Create an index table refers to sample_table and sorted by start_composisiton time.
         let mut sort_table = Vec::new();
         sort_table.reserve(sample_table.len());
