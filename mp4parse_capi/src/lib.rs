@@ -58,6 +58,7 @@ use mp4parse::TrackScaledTime;
 use mp4parse::serialize_opus_header;
 use mp4parse::CodecType;
 use mp4parse::Track;
+use mp4parse::vec_push;
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
@@ -70,6 +71,7 @@ pub enum mp4parse_status {
     EOF = 4,
     IO = 5,
     TABLE_TOO_LARGE = 6,
+    OOM = 7,
 }
 
 #[allow(non_camel_case_types)]
@@ -308,6 +310,11 @@ pub unsafe extern fn mp4parse_log(enable: bool) {
     mp4parse::set_debug_mode(enable);
 }
 
+#[no_mangle]
+pub unsafe extern fn mp4parse_fallible_allocation(enable: bool) {
+    mp4parse::set_fallible_allocation_mode(enable);
+}
+
 /// Run the `mp4parse_parser*` allocated by `mp4parse_new()` until EOF or error.
 #[no_mangle]
 pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_status {
@@ -338,6 +345,7 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_sta
             mp4parse_status::IO
         },
         Err(Error::TableTooLarge) => mp4parse_status::TABLE_TOO_LARGE,
+        Err(Error::OutOfMemory) => mp4parse_status::OOM,
     }
 }
 
@@ -900,16 +908,17 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
             }
             cur_position = end_offset;
 
-            sample_table.push(
-                mp4parse_indice {
-                    start_offset: start_offset,
-                    end_offset: end_offset,
-                    start_composition: 0,
-                    end_composition: 0,
-                    start_decode: 0,
-                    sync: !has_sync_table,
-                }
-            );
+            let res = vec_push(&mut sample_table, mp4parse_indice {
+                start_offset: start_offset,
+                end_offset: end_offset,
+                start_composition: 0,
+                end_composition: 0,
+                start_decode: 0,
+                sync: !has_sync_table,
+            });
+            if res.is_err() {
+                return None;
+            }
         }
     }
 
@@ -980,9 +989,10 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
     if sample_table.len() > 0 {
         // Create an index table refers to sample_table and sorted by start_composisiton time.
         let mut sort_table = Vec::new();
-        sort_table.reserve(sample_table.len());
         for i in 0 .. sample_table.len() {
-            sort_table.push(i);
+            if vec_push(&mut sort_table, i).is_err() {
+                return None;
+            }
         }
 
         sort_table.sort_by_key(|i| {
