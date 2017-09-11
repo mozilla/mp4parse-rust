@@ -316,8 +316,8 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_sta
         return mp4parse_status::BAD_ARG;
     }
 
-    let mut context = (*parser).context_mut();
-    let mut io = (*parser).io_mut();
+    let context = (*parser).context_mut();
+    let io = (*parser).io_mut();
 
     let r = read_mp4(io, context);
     match r {
@@ -1116,7 +1116,7 @@ extern fn error_read(_: *mut u8, _: usize, _: *mut std::os::raw::c_void) -> isiz
 
 #[cfg(test)]
 extern fn valid_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
-    let mut input: &mut std::fs::File = unsafe { &mut *(userdata as *mut _) };
+    let input: &mut std::fs::File = unsafe { &mut *(userdata as *mut _) };
 
     let mut buf = unsafe { std::slice::from_raw_parts_mut(buf, size) };
     match input.read(&mut buf) {
