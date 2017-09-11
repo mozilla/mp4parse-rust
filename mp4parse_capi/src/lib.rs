@@ -1280,6 +1280,8 @@ fn get_track_count_poisoned_parser() {
         let mut count: u32 = 0;
         let rv = mp4parse_get_track_count(parser, &mut count);
         assert_eq!(rv, mp4parse_status::BAD_ARG);
+
+        mp4parse_free(parser);
     }
 }
 

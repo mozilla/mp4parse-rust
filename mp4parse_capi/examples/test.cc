@@ -247,7 +247,9 @@ int main(int argc, char* argv[])
   test_arg_validation_with_parser();
 
   // Find our test file relative to our executable file path.
-  std::string path(realpath(argv[0], NULL));
+  char* real = realpath(argv[0], NULL);
+  std::string path(real);
+  free(real);
   auto split = path.rfind('/');
   path.replace(split, path.length() - split, "/../../mp4parse/tests/minimal.mp4");
   test_arg_validation_with_data(path);
