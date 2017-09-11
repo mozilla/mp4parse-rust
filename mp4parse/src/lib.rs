@@ -735,7 +735,7 @@ fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHe
 
     let mut pssh_box = Vec::new();
     write_be_u32(&mut pssh_box, src.head.size as u32)?;
-    pssh_box.append(&mut b"pssh".to_vec());
+    pssh_box.extend_from_slice(b"pssh");
     pssh_box.append(&mut box_content);
 
     Ok(ProtectionSystemSpecificHeaderBox {
@@ -1455,7 +1455,7 @@ fn read_ds_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
     esds.audio_sample_rate = sample_frequency;
     esds.audio_channel_count = Some(channel_counts);
     assert!(esds.decoder_specific_data.is_empty());
-    esds.decoder_specific_data.extend(data.iter());
+    esds.decoder_specific_data.extend_from_slice(data);
 
     Ok(())
 }
