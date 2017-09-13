@@ -11,14 +11,14 @@ extern crate afl;
 extern crate byteorder;
 extern crate bitreader;
 extern crate num_traits;
-extern crate fallible;
+extern crate mp4parse_fallible;
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use bitreader::{BitReader, ReadInto};
 use std::io::{Read, Take};
 use std::io::Cursor;
 use std::cmp;
 use num_traits::Num;
-use fallible::FallibleVec;
+use mp4parse_fallible::FallibleVec;
 
 mod boxes;
 use boxes::{BoxType, FourCC};
