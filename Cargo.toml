@@ -2,7 +2,6 @@
 members = [
     "mp4parse",
     "mp4parse_capi",
-    "mp4parse_fallible"
 ]
 
 # Somewhat heavy-handed, but we want at least -Z force-overflow-checks=on.
