@@ -11,13 +11,17 @@ extern crate afl;
 extern crate byteorder;
 extern crate bitreader;
 extern crate num_traits;
-extern crate mp4parse_fallible;
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use bitreader::{BitReader, ReadInto};
 use std::io::{Read, Take};
 use std::io::Cursor;
 use std::cmp;
 use num_traits::Num;
+
+#[cfg(feature = "fallible_memory_allocation")]
+extern crate mp4parse_fallible;
+
+#[cfg(feature = "fallible_memory_allocation")]
 use mp4parse_fallible::FallibleVec;
 
 mod boxes;
@@ -35,16 +39,6 @@ const BUF_SIZE_LIMIT: usize = 1024 * 1024;
 const TABLE_SIZE_LIMIT: u32 = 30 * 60 * 60 * 24 * 7;
 
 static DEBUG_MODE: std::sync::atomic::AtomicBool = std::sync::atomic::ATOMIC_BOOL_INIT;
-
-static FALLIBLE_ALLOCATION: std::sync::atomic::AtomicBool = std::sync::atomic::ATOMIC_BOOL_INIT;
-
-pub fn set_fallible_allocation_mode(fallible: bool) {
-    FALLIBLE_ALLOCATION.store(fallible, std::sync::atomic::Ordering::SeqCst);
-}
-
-fn get_fallible_allocation_mode() -> bool {
-    FALLIBLE_ALLOCATION.load(std::sync::atomic::Ordering::Relaxed)
-}
 
 pub fn set_debug_mode(mode: bool) {
     DEBUG_MODE.store(mode, std::sync::atomic::Ordering::SeqCst);
@@ -66,7 +60,8 @@ macro_rules! log {
 // TODO: vec_push() and vec_reserve() needs to be replaced when Rust supports
 // fallible memory allocation in raw_vec.
 pub fn vec_push<T>(vec: &mut Vec<T>, val: T) -> std::result::Result<(), ()> {
-    if get_fallible_allocation_mode() {
+    #[cfg(feature = "fallible_memory_allocation")]
+    {
         return vec.try_push(val);
     }
 
@@ -75,7 +70,8 @@ pub fn vec_push<T>(vec: &mut Vec<T>, val: T) -> std::result::Result<(), ()> {
 }
 
 pub fn vec_reserve<T>(vec: &mut Vec<T>, size: usize) -> std::result::Result<(), ()> {
-    if get_fallible_allocation_mode() {
+    #[cfg(feature = "fallible_memory_allocation")]
+    {
         return vec.try_reserve(size);
     }
 
@@ -84,7 +80,8 @@ pub fn vec_reserve<T>(vec: &mut Vec<T>, size: usize) -> std::result::Result<(), 
 }
 
 fn reserve_read_buf(size: usize) -> std::result::Result<Vec<u8>, ()> {
-    if get_fallible_allocation_mode() {
+    #[cfg(feature = "fallible_memory_allocation")]
+    {
         let mut buf: Vec<u8> = Vec::new();
         buf.try_reserve(size)?;
         unsafe { buf.set_len(size); }

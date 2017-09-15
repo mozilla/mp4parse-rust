@@ -310,11 +310,6 @@ pub unsafe extern fn mp4parse_log(enable: bool) {
     mp4parse::set_debug_mode(enable);
 }
 
-#[no_mangle]
-pub unsafe extern fn mp4parse_fallible_allocation(enable: bool) {
-    mp4parse::set_fallible_allocation_mode(enable);
-}
-
 /// Run the `mp4parse_parser*` allocated by `mp4parse_new()` until EOF or error.
 #[no_mangle]
 pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_status {
