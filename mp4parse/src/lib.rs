@@ -79,7 +79,7 @@ pub fn vec_reserve<T>(vec: &mut Vec<T>, size: usize) -> std::result::Result<(), 
     Ok(())
 }
 
-fn reserve_read_buf(size: usize) -> std::result::Result<Vec<u8>, ()> {
+fn allocate_read_buf(size: usize) -> std::result::Result<Vec<u8>, ()> {
     #[cfg(feature = "fallible_memory_allocation")]
     {
         let mut buf: Vec<u8> = Vec::new();
@@ -2056,7 +2056,7 @@ fn read_buf<T: ReadBytesExt>(src: &mut T, size: usize) -> Result<Vec<u8>> {
     if size > BUF_SIZE_LIMIT {
         return Err(Error::InvalidData("read_buf size exceeds BUF_SIZE_LIMIT"));
     }
-    if let Ok(mut buf) = reserve_read_buf(size) {
+    if let Ok(mut buf) = allocate_read_buf(size) {
         let r = src.read(&mut buf)?;
         if r != size {
           return Err(Error::InvalidData("failed buffer read"));
