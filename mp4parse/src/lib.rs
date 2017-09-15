@@ -107,8 +107,6 @@ pub enum Error {
     Io(std::io::Error),
     /// read_mp4 terminated without detecting a moov box.
     NoMoov,
-    /// Parse error caused by table size is over limitation.
-    TableTooLarge,
     /// Out of memory
     OutOfMemory,
 }
@@ -2099,7 +2097,7 @@ fn be_u32<T: ReadBytesExt>(src: &mut T) -> Result<u32> {
 fn be_u32_with_limit<T: ReadBytesExt>(src: &mut T) -> Result<u32> {
     be_u32(src).and_then(|v| {
         if v > TABLE_SIZE_LIMIT {
-            return Err(Error::TableTooLarge);
+            return Err(Error::OutOfMemory);
         }
         Ok(v)
     })

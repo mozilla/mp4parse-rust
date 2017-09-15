@@ -70,8 +70,7 @@ pub enum mp4parse_status {
     UNSUPPORTED = 3,
     EOF = 4,
     IO = 5,
-    TABLE_TOO_LARGE = 6,
-    OOM = 7,
+    OOM = 6,
 }
 
 #[allow(non_camel_case_types)]
@@ -339,7 +338,6 @@ pub unsafe extern fn mp4parse_read(parser: *mut mp4parse_parser) -> mp4parse_sta
             (*parser).set_poisoned(true);
             mp4parse_status::IO
         },
-        Err(Error::TableTooLarge) => mp4parse_status::TABLE_TOO_LARGE,
         Err(Error::OutOfMemory) => mp4parse_status::OOM,
     }
 }
