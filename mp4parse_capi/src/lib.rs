@@ -108,7 +108,7 @@ impl Default for mp4parse_codec {
 }
 
 #[repr(C)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct mp4parse_track_info {
     pub track_type: mp4parse_track_type,
     pub codec: mp4parse_codec,
@@ -130,6 +130,7 @@ pub struct mp4parse_indice {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct mp4parse_byte_data {
     pub length: u32,
     // cheddar can't handle generic type, so it needs to be multiple data types here.
@@ -165,7 +166,7 @@ pub struct mp4parse_pssh_info {
 }
 
 #[repr(C)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct mp4parse_sinf_info {
     pub is_encrypted: u32,
     pub iv_size: u8,
@@ -173,7 +174,7 @@ pub struct mp4parse_sinf_info {
 }
 
 #[repr(C)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct mp4parse_track_audio_info {
     pub channels: u16,
     pub bit_depth: u16,
@@ -185,7 +186,7 @@ pub struct mp4parse_track_audio_info {
 }
 
 #[repr(C)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct mp4parse_track_video_info {
     pub display_width: u32,
     pub display_height: u32,
@@ -197,7 +198,7 @@ pub struct mp4parse_track_video_info {
 }
 
 #[repr(C)]
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct mp4parse_fragment_info {
     pub fragment_duration: u64,
     // TODO:
