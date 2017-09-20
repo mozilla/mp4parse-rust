@@ -18,10 +18,10 @@ use std::io::Cursor;
 use std::cmp;
 use num_traits::Num;
 
-#[cfg(feature = "fallible_memory_allocation")]
+#[cfg(feature = "mp4parse_fallible")]
 extern crate mp4parse_fallible;
 
-#[cfg(feature = "fallible_memory_allocation")]
+#[cfg(feature = "mp4parse_fallible")]
 use mp4parse_fallible::FallibleVec;
 
 mod boxes;
@@ -60,7 +60,7 @@ macro_rules! log {
 // TODO: vec_push() and vec_reserve() needs to be replaced when Rust supports
 // fallible memory allocation in raw_vec.
 pub fn vec_push<T>(vec: &mut Vec<T>, val: T) -> std::result::Result<(), ()> {
-    #[cfg(feature = "fallible_memory_allocation")]
+    #[cfg(feature = "mp4parse_fallible")]
     {
         return vec.try_push(val);
     }
@@ -70,7 +70,7 @@ pub fn vec_push<T>(vec: &mut Vec<T>, val: T) -> std::result::Result<(), ()> {
 }
 
 pub fn vec_reserve<T>(vec: &mut Vec<T>, size: usize) -> std::result::Result<(), ()> {
-    #[cfg(feature = "fallible_memory_allocation")]
+    #[cfg(feature = "mp4parse_fallible")]
     {
         return vec.try_reserve(size);
     }
@@ -80,7 +80,7 @@ pub fn vec_reserve<T>(vec: &mut Vec<T>, size: usize) -> std::result::Result<(), 
 }
 
 fn allocate_read_buf(size: usize) -> std::result::Result<Vec<u8>, ()> {
-    #[cfg(feature = "fallible_memory_allocation")]
+    #[cfg(feature = "mp4parse_fallible")]
     {
         let mut buf: Vec<u8> = Vec::new();
         buf.try_reserve(size)?;
