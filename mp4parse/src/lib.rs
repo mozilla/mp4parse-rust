@@ -59,6 +59,7 @@ macro_rules! log {
 
 // TODO: vec_push() and vec_reserve() needs to be replaced when Rust supports
 // fallible memory allocation in raw_vec.
+#[allow(unreachable_code)]
 pub fn vec_push<T>(vec: &mut Vec<T>, val: T) -> std::result::Result<(), ()> {
     #[cfg(feature = "mp4parse_fallible")]
     {
@@ -69,6 +70,7 @@ pub fn vec_push<T>(vec: &mut Vec<T>, val: T) -> std::result::Result<(), ()> {
     Ok(())
 }
 
+#[allow(unreachable_code)]
 pub fn vec_reserve<T>(vec: &mut Vec<T>, size: usize) -> std::result::Result<(), ()> {
     #[cfg(feature = "mp4parse_fallible")]
     {
@@ -79,6 +81,7 @@ pub fn vec_reserve<T>(vec: &mut Vec<T>, size: usize) -> std::result::Result<(), 
     Ok(())
 }
 
+#[allow(unreachable_code)]
 fn allocate_read_buf(size: usize) -> std::result::Result<Vec<u8>, ()> {
     #[cfg(feature = "mp4parse_fallible")]
     {
