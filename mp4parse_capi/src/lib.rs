@@ -918,10 +918,9 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<mp4p
     // Mark the sync sample in sample_table according to 'stss'.
     if let Some(ref v) = track.stss {
         for iter in &v.samples {
-            if let Some(elem) = sample_table.get_mut((iter - 1) as usize) {
-                elem.sync = true;
-            } else {
-                return None;
+            match iter.checked_sub(1).and_then(|idx| { sample_table.get_mut(idx as usize) }) {
+                Some(elem) => elem.sync = true,
+                _ => return None,
             }
         }
     }
