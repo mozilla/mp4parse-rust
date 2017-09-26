@@ -833,11 +833,11 @@ impl<'a> Iterator for SampleToChunkIterator<'a> {
         let has_chunk = self.chunks.next()
             .or_else(|| {
                 self.chunks = match (self.stsc_peek_iter.next(), self.stsc_peek_iter.peek()) {
-                    (Some(next), Some(peek)) => {
+                    (Some(next), Some(peek)) if next.first_chunk > 0 && peek.first_chunk > 0 => {
                         self.sample_count = next.samples_per_chunk;
                         ((next.first_chunk - 1) .. (peek.first_chunk - 1))
                     },
-                    (Some(next), None) => {
+                    (Some(next), None) if next.first_chunk > 0 => {
                         self.sample_count = next.samples_per_chunk;
                         // Total chunk number in 'stsc' could be different to 'stco',
                         // there could be more chunks at the last 'stsc' record.
@@ -845,8 +845,11 @@ impl<'a> Iterator for SampleToChunkIterator<'a> {
                     },
                     _ => (0 .. 0),
                 };
-                self.remain_chunk_count -= self.chunks.len() as u32;
-                self.chunks.next()
+
+                self.remain_chunk_count.checked_sub(self.chunks.len() as u32).and_then(|res| {
+                    self.remain_chunk_count = res;
+                    self.chunks.next()
+                })
             });
 
         has_chunk.map_or(None, |id| { Some((id, self.sample_count)) })
