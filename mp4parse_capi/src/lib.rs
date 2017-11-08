@@ -204,9 +204,9 @@ pub struct mp4parse_fragment_info {
     // info in trex box.
 }
 
-// Even though mp4parse_parser is opaque to C, rusty-cheddar won't let us
-// use more than one member, so we introduce *another* wrapper.
-struct Wrap {
+#[repr(C)]
+#[allow(non_camel_case_types)]
+struct mp4parse_parser {
     context: MediaContext,
     io: mp4parse_io,
     poisoned: bool,
@@ -214,10 +214,6 @@ struct Wrap {
     pssh_data: Vec<u8>,
     sample_table: HashMap<u32, Vec<mp4parse_indice>>,
 }
-
-#[repr(C)]
-#[allow(non_camel_case_types)]
-pub struct mp4parse_parser(Wrap);
 
 impl mp4parse_parser {
     fn context(&self) -> &MediaContext {
@@ -285,14 +281,14 @@ pub unsafe extern fn mp4parse_new(io: *const mp4parse_io) -> *mut mp4parse_parse
     if (*io).read.is_none() {
         return std::ptr::null_mut();
     }
-    let parser = Box::new(mp4parse_parser(Wrap {
+    let parser = Box::new(mp4parse_parser {
         context: MediaContext::new(),
         io: (*io).clone(),
         poisoned: false,
         opus_header: HashMap::new(),
         pssh_data: Vec::new(),
         sample_table: HashMap::new(),
-    }));
+    });
 
     Box::into_raw(parser)
 }
