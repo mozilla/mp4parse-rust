@@ -6,6 +6,7 @@ fn build_ffi_test() {
     let output = Command::new("make")
         .arg("-C")
         .arg("examples")
+        .arg("clean")
         .arg("check")
         .output()
         .expect("failed to execute process");
