@@ -14,7 +14,7 @@ extern fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_voi
 #[test]
 fn parse_rotation() {
     let mut file = std::fs::File::open("tests/video_rotation_90.mp4").expect("Unknown file");
-    let io = mp4parse_io {
+    let io = Mp4parseIo {
         read: Some(buf_read),
         userdata: &mut file as *mut _ as *mut std::os::raw::c_void
     };
@@ -23,25 +23,25 @@ fn parse_rotation() {
         let parser = mp4parse_new(&io);
 
         let mut rv = mp4parse_read(parser);
-        assert_eq!(rv, mp4parse_status::OK);
+        assert_eq!(rv, Mp4parseStatus::Ok);
 
         let mut counts: u32 = 0;
         rv = mp4parse_get_track_count(parser, &mut counts);
-        assert_eq!(rv, mp4parse_status::OK);
+        assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(counts, 1);
 
-        let mut video = mp4parse_track_video_info {
+        let mut video = Mp4parseTrackVideoInfo {
             display_width: 0,
             display_height: 0,
             image_width: 0,
             image_height: 0,
             rotation: 0,
-            extra_data: mp4parse_byte_data::default(), 
+            extra_data: Mp4parseByteData::default(),
             protected_data: Default::default(),
         };
 
         let rv = mp4parse_get_track_video_info(parser, 0, &mut video);
-        assert_eq!(rv, mp4parse_status::OK);
+        assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(video.rotation, 90);
 
         mp4parse_free(parser);
