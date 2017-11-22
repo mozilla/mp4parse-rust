@@ -17,7 +17,7 @@ extern fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_voi
 
 fn dump_file(filename: &str, verbose: bool) {
     let mut file = File::open(filename).expect("Unknown file");
-    let io = mp4parse_io {
+    let io = Mp4parseIo {
         read: Some(buf_read),
         userdata: &mut file as *mut _ as *mut std::os::raw::c_void
     };
@@ -30,16 +30,16 @@ fn dump_file(filename: &str, verbose: bool) {
         }
 
         match mp4parse_read(parser) {
-            mp4parse_status::OK => (),
+            Mp4parseStatus::Ok => (),
             _ => {
                 println!("-- fail to parse, '-v' for more info");
                 return;
             },
         }
 
-        let mut frag_info = mp4parse_fragment_info { .. Default::default() };
+        let mut frag_info = Mp4parseFragmentInfo::default();
         match mp4parse_get_fragment_info(parser, &mut frag_info) {
-            mp4parse_status::OK => {
+            Mp4parseStatus::Ok => {
                 println!("-- mp4parse_fragment_info {:?}", frag_info);
             },
             _ => {
@@ -50,7 +50,7 @@ fn dump_file(filename: &str, verbose: bool) {
 
         let mut counts: u32 = 0;
         match mp4parse_get_track_count(parser, &mut counts) {
-            mp4parse_status::OK => (),
+            Mp4parseStatus::Ok => (),
             _ => {
                 println!("-- mp4parse_get_track_count failed");
                 return;
@@ -58,15 +58,15 @@ fn dump_file(filename: &str, verbose: bool) {
         }
 
         for i in 0 .. counts {
-            let mut track_info = mp4parse_track_info {
-                track_type: mp4parse_track_type::AUDIO,
-                codec: mp4parse_codec::UNKNOWN,
+            let mut track_info = Mp4parseTrackInfo {
+                track_type: Mp4parseTrackType::Audio,
+                codec: Mp4parseCodec::Unknown,
                 track_id: 0,
                 duration: 0,
                 media_time: 0,
             };
             match mp4parse_get_track_info(parser, i, &mut track_info) {
-                mp4parse_status::OK => {
+                Mp4parseStatus::Ok => {
                     println!("-- mp4parse_get_track_info {:?}", track_info);
                 },
                 _ => {
@@ -76,10 +76,10 @@ fn dump_file(filename: &str, verbose: bool) {
             }
 
             match track_info.track_type {
-                mp4parse_track_type::AUDIO => {
-                    let mut audio_info = mp4parse_track_audio_info { .. Default::default() };
+                Mp4parseTrackType::Audio => {
+                    let mut audio_info = Mp4parseTrackAudioInfo::default();
                     match mp4parse_get_track_audio_info(parser, i, &mut audio_info) {
-                        mp4parse_status::OK => {
+                        Mp4parseStatus::Ok => {
                           println!("-- mp4parse_get_track_audio_info {:?}", audio_info);
                         },
                         _ => {
@@ -88,10 +88,10 @@ fn dump_file(filename: &str, verbose: bool) {
                         }
                     }
                 },
-                mp4parse_track_type::VIDEO => {
-                    let mut video_info = mp4parse_track_video_info { .. Default::default() };
+                Mp4parseTrackType::Video => {
+                    let mut video_info = Mp4parseTrackVideoInfo::default();
                     match mp4parse_get_track_video_info(parser, i, &mut video_info) {
-                        mp4parse_status::OK => {
+                        Mp4parseStatus::Ok => {
                           println!("-- mp4parse_get_track_video_info {:?}", video_info);
                         },
                         _ => {
@@ -102,9 +102,9 @@ fn dump_file(filename: &str, verbose: bool) {
                 },
             }
 
-            let mut indices = mp4parse_byte_data::default();
+            let mut indices = Mp4parseByteData::default();
             match mp4parse_get_indice_table(parser, track_info.track_id, &mut indices) {
-                mp4parse_status::OK => {
+                Mp4parseStatus::Ok => {
                   println!("-- mp4parse_get_indice_table track_id {} indices {:?}", track_info.track_id, indices);
                 },
                 _ => {

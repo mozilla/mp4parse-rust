@@ -1,6 +1,6 @@
 [package]
 name = "mp4parse_capi"
-version = "0.8.0"
+version = "0.9.0"
 authors = [
   "Ralph Giles <giles@mozilla.com>",
   "Matthew Gregan <kinetik@flim.org>",
@@ -18,8 +18,6 @@ exclude = [
   "*.mp4",
 ]
 
-build = "build.rs"
-
 [badges]
 travis-ci = { repository = "https://github.com/mozilla/mp4parse-rust" }
 
@@ -32,7 +30,7 @@ mp4parse = {version = "0.8.0", path = "../mp4parse"}
 num-traits = "0.1.37"
 
 [build-dependencies]
-moz-cheddar = "0.4.0"
+cbindgen = "0.1.30"
 
 [features]
 fuzz = ["mp4parse/fuzz"]

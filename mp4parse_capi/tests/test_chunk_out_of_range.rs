@@ -14,7 +14,7 @@ extern fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_voi
 #[test]
 fn parse_out_of_chunk_range() {
     let mut file = std::fs::File::open("tests/chunk_out_of_range.mp4").expect("Unknown file");
-    let io = mp4parse_io {
+    let io = Mp4parseIo {
         read: Some(buf_read),
         userdata: &mut file as *mut _ as *mut std::os::raw::c_void
     };
@@ -23,11 +23,11 @@ fn parse_out_of_chunk_range() {
         let parser = mp4parse_new(&io);
 
         let mut rv = mp4parse_read(parser);
-        assert_eq!(rv, mp4parse_status::OK);
+        assert_eq!(rv, Mp4parseStatus::Ok);
 
         let mut counts: u32 = 0;
         rv = mp4parse_get_track_count(parser, &mut counts);
-        assert_eq!(rv, mp4parse_status::OK);
+        assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(counts, 1);
 
         // its first chunk is out of range.
@@ -36,9 +36,9 @@ fn parse_out_of_chunk_range() {
         //     <FullBoxInfo Version="0" Flags="0x0"/>
         //     <SampleToChunkEntry FirstChunk="16777217" SamplesPerChunk="17" SampleDescriptionIndex="1"/>
         //
-        let mut indice = mp4parse_byte_data::default();
+        let mut indice = Mp4parseByteData::default();
         let rv = mp4parse_get_indice_table(parser, 1, &mut indice);
-        assert_eq!(rv, mp4parse_status::INVALID);
+        assert_eq!(rv, Mp4parseStatus::Invalid);
 
         mp4parse_free(parser);
     }
