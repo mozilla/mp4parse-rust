@@ -1142,14 +1142,6 @@ fn new_parser() {
 }
 
 #[test]
-#[should_panic(expected = "assertion failed")]
-fn free_null_parser() {
-    unsafe {
-        mp4parse_free(std::ptr::null_mut());
-    }
-}
-
-#[test]
 fn get_track_count_null_parser() {
     unsafe {
         let mut count: u32 = 0;
