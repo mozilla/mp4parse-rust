@@ -98,6 +98,7 @@ pub enum Mp4parseCodec {
     Jpeg,   // for QT JPEG atom in video track
     Ac3,
     Ec3,
+    Alac,
 }
 
 impl Default for Mp4parseCodec {
@@ -429,6 +430,8 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut Mp4parseParser, track_
                 Mp4parseCodec::Unknown,
             AudioCodecSpecific::MP3 =>
                 Mp4parseCodec::Mp3,
+            AudioCodecSpecific::ALACSpecificBox(_) =>
+                Mp4parseCodec::Alac,
         },
         Some(SampleEntry::Video(ref video)) => match video.codec_specific {
             VideoCodecSpecific::VPxConfig(_) =>
@@ -564,6 +567,10 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut Mp4parseParser, 
                     }
                 }
             }
+        }
+        AudioCodecSpecific::ALACSpecificBox(ref alac) => {
+            (*info).extra_data.length = alac.data.len() as u32;
+            (*info).extra_data.data = alac.data.as_ptr();
         }
         AudioCodecSpecific::MP3 | AudioCodecSpecific::LPCM => (),
     }
