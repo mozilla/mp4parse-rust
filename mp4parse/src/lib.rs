@@ -316,6 +316,7 @@ pub enum AudioCodecSpecific {
     ES_Descriptor(ES_Descriptor),
     FLACSpecificBox(FLACSpecificBox),
     OpusSpecificBox(OpusSpecificBox),
+    ALACSpecificBox(ALACSpecificBox),
     MP3,
     LPCM,
 }
@@ -392,6 +393,13 @@ pub struct OpusSpecificBox {
     channel_mapping_table: Option<ChannelMappingTable>,
 }
 
+/// Represent an ALACSpecificBox 'alac'
+#[derive(Debug, Clone)]
+pub struct ALACSpecificBox {
+    version: u8,
+    pub data: Vec<u8>,
+}
+
 #[derive(Debug)]
 pub struct MovieExtendsBox {
     pub fragment_duration: Option<MediaScaledTime>,
@@ -464,6 +472,7 @@ pub enum CodecType {
     EncryptedVideo,
     EncryptedAudio,
     LPCM,   // QT
+    ALAC,
 }
 
 impl Default for CodecType {
@@ -1689,6 +1698,28 @@ pub fn serialize_opus_header<W: byteorder::WriteBytesExt + std::io::Write>(opus:
     Ok(())
 }
 
+/// Parse `ALACSpecificBox`.
+fn read_alac<T: Read>(src: &mut BMFFBox<T>) -> Result<ALACSpecificBox> {
+    let (version, flags) = read_fullbox_extra(src)?;
+    if version != 0 {
+        return Err(Error::Unsupported("unknown alac (ALAC) version"));
+    }
+    if flags != 0 {
+        return Err(Error::InvalidData("no-zero alac (ALAC) flags"));
+    }
+
+    let length = src.bytes_left();
+    if length != 24 && length != 48 {
+        return Err(Error::InvalidData("ALACSpecificBox magic cookie is the wrong size"));
+    }
+    let data = read_buf(src, length)?;
+
+    Ok(ALACSpecificBox {
+        version: version,
+        data: data,
+    })
+}
+
 /// Parse a hdlr box.
 fn read_hdlr<T: Read>(src: &mut BMFFBox<T>) -> Result<HandlerBox> {
     let (_, _) = read_fullbox_extra(src)?;
@@ -1899,6 +1930,15 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<(CodecType, 
                 let dops = read_dops(&mut b)?;
                 codec_type = CodecType::Opus;
                 codec_specific = Some(AudioCodecSpecific::OpusSpecificBox(dops));
+            }
+            BoxType::ALACSpecificBox => {
+                if name != BoxType::ALACSpecificBox ||
+                    codec_specific.is_some() {
+                    return Err(Error::InvalidData("malformed audio sample entry"));
+                }
+                let alac = read_alac(&mut b)?;
+                codec_type = CodecType::ALAC;
+                codec_specific = Some(AudioCodecSpecific::ALACSpecificBox(alac));
             }
             BoxType::QTWaveAtom => {
                 let qt_esds = read_qt_wave_atom(&mut b)?;
