@@ -298,12 +298,6 @@ pub unsafe extern fn mp4parse_free(parser: *mut Mp4parseParser) {
     let _ = Box::from_raw(parser);
 }
 
-/// Enable `mp4_parser` log.
-#[no_mangle]
-pub unsafe extern fn mp4parse_log(enable: bool) {
-    mp4parse::set_debug_mode(enable);
-}
-
 /// Run the `Mp4parseParser*` allocated by `mp4parse_new()` until EOF or error.
 #[no_mangle]
 pub unsafe extern fn mp4parse_read(parser: *mut Mp4parseParser) -> Mp4parseStatus {
