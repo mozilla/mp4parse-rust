@@ -234,7 +234,13 @@ int main(int argc, char* argv[])
     std::remove_if(args.begin(), args.end(), [](std::string& arg){
       if (!arg.compare("-v")) {
         fprintf(stderr, "Enabling debug logging.\n");
-        mp4parse_log(true);
+        const char* LOG_ENV = "RUST_LOG";
+        auto logger = std::string(getenv(LOG_ENV));
+        if (!logger.empty()) {
+          logger.append(",");
+        }
+        logger.append("debug");
+        setenv(LOG_ENV, logger.c_str(), 1);
         return true;
       }
       return false;
