@@ -1,6 +1,11 @@
 extern crate mp4parse;
 extern crate mp4parse_capi;
 
+#[macro_use]
+extern crate log;
+
+extern crate env_logger;
+
 use std::env;
 use std::fs::File;
 use std::io::Read;
@@ -15,7 +20,7 @@ extern fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_voi
     }
 }
 
-fn dump_file(filename: &str, verbose: bool) {
+fn dump_file(filename: &str) {
     let mut file = File::open(filename).expect("Unknown file");
     let io = Mp4parseIo {
         read: Some(buf_read),
@@ -24,10 +29,6 @@ fn dump_file(filename: &str, verbose: bool) {
 
     unsafe {
         let parser = mp4parse_new(&io);
-
-        if verbose {
-            mp4parse_log(true);
-        }
 
         match mp4parse_read(parser) {
             Mp4parseStatus::Ok => (),
@@ -122,18 +123,23 @@ fn main() {
     if args.len() < 2 {
         return;
     }
+
+    // Initialize logging, setting the log level if requested.
     let (skip, verbose) = if args[1] == "-v" {
         (2, true)
     } else {
         (1, false)
     };
+    let env = env_logger::Env::default();
+    let mut logger = env_logger::Builder::from_env(env);
+    if verbose {
+        logger.filter(None, log::LevelFilter::Debug);
+    }
+    logger.init();
+
     for filename in args.iter().skip(skip) {
-        if verbose {
-            println!("-- dump of '{}' --", filename);
-        }
-        dump_file(filename, verbose);
-        if verbose {
-            println!("-- end of '{}' --", filename);
-        }
+        info!("-- dump of '{}' --", filename);
+        dump_file(filename);
+        info!("-- end of '{}' --", filename);
     }
 }
