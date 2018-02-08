@@ -22,7 +22,7 @@ exclude = [
 travis-ci = { repository = "https://github.com/mozilla/mp4parse-rust" }
 
 [dependencies]
-byteorder = "1.0.0"
+byteorder = "1.2.1"
 env_logger = "0.5.3"
 log = "0.4"
 
