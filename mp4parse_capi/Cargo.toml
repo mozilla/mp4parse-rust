@@ -34,7 +34,7 @@ num-traits = "0.2.0"
 env_logger = "0.5.3"
 
 [build-dependencies]
-cbindgen = "0.4.3"
+cbindgen = "0.5.2"
 
 [features]
 fuzz = ["mp4parse/fuzz"]
