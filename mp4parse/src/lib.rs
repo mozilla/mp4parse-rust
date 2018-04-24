@@ -1097,6 +1097,9 @@ fn read_elst<T: Read>(src: &mut BMFFBox<T>) -> Result<EditListBox> {
         })?;
     }
 
+    // Padding could be added in some contents.
+    skip_box_remain(src)?;
+
     Ok(EditListBox {
         edits: edits,
     })
