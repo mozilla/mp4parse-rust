@@ -77,6 +77,7 @@ pub enum Mp4parseStatus {
 pub enum Mp4parseTrackType {
     Video = 0,
     Audio = 1,
+    Metadata = 2,
 }
 
 impl Default for Mp4parseTrackType {
@@ -406,6 +407,7 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut Mp4parseParser, track_
     info.track_type = match context.tracks[track_index].track_type {
         TrackType::Video => Mp4parseTrackType::Video,
         TrackType::Audio => Mp4parseTrackType::Audio,
+        TrackType::Metadata => Mp4parseTrackType::Metadata,
         TrackType::Unknown => return Mp4parseStatus::Unsupported,
     };
 

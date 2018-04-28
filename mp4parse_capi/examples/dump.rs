@@ -101,6 +101,9 @@ fn dump_file(filename: &str) {
                         }
                     }
                 },
+                Mp4parseTrackType::Metadata => {
+                    println!("TODO metadata track");
+                },
             }
 
             let mut indices = Mp4parseByteData::default();

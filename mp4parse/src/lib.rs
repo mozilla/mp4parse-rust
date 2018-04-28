@@ -436,6 +436,7 @@ impl MediaContext {
 pub enum TrackType {
     Audio,
     Video,
+    Metadata,
     Unknown,
 }
 
@@ -918,6 +919,7 @@ fn read_mdia<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
                 match hdlr.handler_type.value.as_ref() {
                     "vide" => track.track_type = TrackType::Video,
                     "soun" => track.track_type = TrackType::Audio,
+                    "meta" => track.track_type = TrackType::Metadata,
                     _ => (),
                 }
                 debug!("{:?}", hdlr);
@@ -2005,6 +2007,7 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
             let description = match track.track_type {
                 TrackType::Video => read_video_sample_entry(&mut b),
                 TrackType::Audio => read_audio_sample_entry(&mut b),
+                TrackType::Metadata => Err(Error::Unsupported("metadata track")),
                 TrackType::Unknown => Err(Error::Unsupported("unknown track type")),
             };
             let description = match description {
