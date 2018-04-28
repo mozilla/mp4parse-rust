@@ -71,6 +71,9 @@ fn doit() {
                                          audio.channels, audio.bit_depth, audio.sample_rate);
                             }
                         }
+                        Mp4parseTrackType::Metadata => {
+                            println!("  metadata found (TODO)");
+                        }
                     }
                 }
             }
