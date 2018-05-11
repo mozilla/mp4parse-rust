@@ -600,16 +600,19 @@ fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
         _ => 4 + 4,
     };
     let uuid = if name == BoxType::UuidBox {
-        if size < offset + 16 {
-            return Err(Error::InvalidData("malformed size for uuid"));
-        }
-        let mut buffer = [0u8; 16];
-        let count = src.read(&mut buffer)?;
-        if count < 16 {
-            None
+        if size >= offset + 16 {
+            let mut buffer = [0u8; 16];
+            let count = src.read(&mut buffer)?;
+            offset += count as u64;
+            if count == 16 {
+                Some(buffer)
+            } else {
+                debug!("malformed uuid (short read), skipping");
+                None
+            }
         } else {
-            offset += 16;
-            Some(buffer)
+            debug!("malformed uuid, skipping");
+            None
         }
     } else {
         None
