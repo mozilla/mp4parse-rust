@@ -149,6 +149,23 @@ fn read_box_header_uuid() {
 }
 
 #[test]
+fn read_box_header_truncated_uuid() {
+    const HEADER_UUID: [u8; 16] = [
+        0x85, 0xc0, 0xb6,0x87,
+        0x82, 0x0f,
+        0x11, 0xe0,
+        0x81, 0x11,
+        0xf4, 0xce, 0x46, 0x2b, 0x6a, 0x48 ];
+
+    let mut stream = make_uuid_box(BoxSize::UncheckedShort(23), &HEADER_UUID, |s| s);
+    let mut iter = super::BoxIter::new(&mut stream);
+    let stream = iter.next_box().unwrap().unwrap();
+    assert_eq!(stream.head.name, BoxType::UuidBox);
+    assert_eq!(stream.head.size, 23);
+    assert!(stream.head.uuid.is_none());
+}
+
+#[test]
 fn read_ftyp() {
     let mut stream = make_box(BoxSize::Short(24), b"ftyp", |s| {
         s.append_bytes(b"mp42")
