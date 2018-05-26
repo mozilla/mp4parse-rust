@@ -25,6 +25,9 @@ extern crate mp4parse_fallible;
 #[cfg(feature = "mp4parse_fallible")]
 use mp4parse_fallible::FallibleVec;
 
+#[macro_use]
+mod macros;
+
 mod boxes;
 use boxes::{BoxType, FourCC};
 
@@ -658,15 +661,6 @@ fn skip_box_remain<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
         len
     };
     skip(src, remain)
-}
-
-macro_rules! check_parser_state {
-    ( $src:expr ) => {
-        if $src.limit() > 0 {
-            debug!("bad parser state: {} content bytes left", $src.limit());
-            return Err(Error::InvalidData("unread box content or bad parser sync"));
-        }
-    }
 }
 
 /// Read the contents of a box, including sub boxes.
