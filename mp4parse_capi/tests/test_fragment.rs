@@ -60,3 +60,62 @@ fn parse_fragment() {
         mp4parse_free(parser);
     }
 }
+
+
+#[test]
+fn parse_opus_fragment() {
+    let mut file = std::fs::File::open("tests/opus_audioinit.mp4").expect("Unknown file");
+    let io = Mp4parseIo {
+        read: Some(buf_read),
+        userdata: &mut file as *mut _ as *mut std::os::raw::c_void
+    };
+
+    unsafe {
+        let parser = mp4parse_new(&io);
+
+        let mut rv = mp4parse_read(parser);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+
+        let mut counts: u32 = 0;
+        rv = mp4parse_get_track_count(parser, &mut counts);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(counts, 1);
+
+        let mut track_info = Mp4parseTrackInfo {
+            track_type: Mp4parseTrackType::Audio,
+            codec: Mp4parseCodec::Unknown,
+            track_id: 0,
+            duration: 0,
+            media_time: 0,
+        };
+        rv = mp4parse_get_track_info(parser, 0, &mut track_info);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
+        assert_eq!(track_info.codec, Mp4parseCodec::Opus);
+        assert_eq!(track_info.track_id, 1);
+        assert_eq!(track_info.duration, 0);
+        assert_eq!(track_info.media_time, 0);
+
+        let mut audio = Default::default();
+        rv = mp4parse_get_track_audio_info(parser, 0, &mut audio);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(audio.channels, 1);
+        assert_eq!(audio.bit_depth, 16);
+        assert_eq!(audio.sample_rate, 48000);
+        assert_eq!(audio.extra_data.length, 0);
+        assert_eq!(audio.codec_specific_config.length, 19);
+
+        let mut is_fragmented_file: u8 = 0;
+        rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(is_fragmented_file, 1);
+
+        let mut fragment_info = Mp4parseFragmentInfo {
+            fragment_duration: 0,
+        };
+        rv = mp4parse_get_fragment_info(parser, &mut fragment_info);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+
+        mp4parse_free(parser);
+    }
+}
