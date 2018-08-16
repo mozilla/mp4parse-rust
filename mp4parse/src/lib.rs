@@ -1386,11 +1386,6 @@ fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
 }
 
 fn read_av1c<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1ConfigBox> {
-    let (box_version, _) = read_fullbox_extra(src)?;
-    let supported_versions = [0];
-    if !supported_versions.contains(&box_version) {
-        return Err(Error::Unsupported("unknown av1C version"));
-    }
     let marker_byte = src.read_u8()?;
     if !(marker_byte & 0x80 == 0x80) {
         return Err(Error::Unsupported("missing av1C marker bit"));
