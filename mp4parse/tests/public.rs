@@ -156,6 +156,9 @@ fn public_audio_tenc() {
                     assert!(tenc.is_encrypted > 0);
                     assert_eq!(tenc.iv_size, 16);
                     assert_eq!(tenc.kid, kid);
+                    assert_eq!(tenc.crypt_byte_block_count, None);
+                    assert_eq!(tenc.skip_byte_block_count, None);
+                    assert_eq!(tenc.constant_iv, None);
                 } else {
                     assert!(false, "Invalid test condition");
                 }
@@ -207,6 +210,9 @@ fn public_video_cenc() {
                     assert!(tenc.is_encrypted > 0);
                     assert_eq!(tenc.iv_size, 16);
                     assert_eq!(tenc.kid, kid);
+                    assert_eq!(tenc.crypt_byte_block_count, None);
+                    assert_eq!(tenc.skip_byte_block_count, None);
+                    assert_eq!(tenc.constant_iv, None);
                 } else {
                     assert!(false, "Invalid test condition");
                 }
