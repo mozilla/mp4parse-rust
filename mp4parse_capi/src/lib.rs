@@ -168,9 +168,15 @@ pub struct Mp4parsePsshInfo {
 #[repr(C)]
 #[derive(Default, Debug)]
 pub struct Mp4parseSinfInfo {
-    pub is_encrypted: u32,
+    pub is_encrypted: u8,
     pub iv_size: u8,
     pub kid: Mp4parseByteData,
+    // Members for pattern encryption schemes, may be 0 (u8) or empty
+    // (Mp4parseByteData) if pattern encryption is not in use
+    pub crypt_byte_block: u8,
+    pub skip_byte_block: u8,
+    pub constant_iv: Mp4parseByteData,
+    // End pattern encryption scheme members
 }
 
 #[repr(C)]
@@ -617,6 +623,23 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut Mp4parseParser, 
                 sample_info.protected_data.is_encrypted = tenc.is_encrypted;
                 sample_info.protected_data.iv_size = tenc.iv_size;
                 sample_info.protected_data.kid.set_data(&(tenc.kid));
+                sample_info.protected_data.crypt_byte_block = match tenc.crypt_byte_block_count {
+                    Some(n) => n,
+                    None => 0,
+                };
+                sample_info.protected_data.skip_byte_block = match tenc.skip_byte_block_count {
+                    Some(n) => n,
+                    None => 0,
+                };
+                match tenc.constant_iv {
+                    Some(ref iv_vec) => {
+                        if iv_vec.len() > std::u32::MAX as usize {
+                            return Mp4parseStatus::Invalid;
+                        }
+                        sample_info.protected_data.constant_iv.set_data(iv_vec);
+                    },
+                    None => {}, // Don't need to do anything, defaults are correct
+                };
             }
         }
         audio_sample_infos.push(sample_info);
@@ -721,6 +744,23 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut Mp4parseParser, 
                 sample_info.protected_data.is_encrypted = tenc.is_encrypted;
                 sample_info.protected_data.iv_size = tenc.iv_size;
                 sample_info.protected_data.kid.set_data(&(tenc.kid));
+                sample_info.protected_data.crypt_byte_block = match tenc.crypt_byte_block_count {
+                    Some(n) => n,
+                    None => 0,
+                };
+                sample_info.protected_data.skip_byte_block = match tenc.skip_byte_block_count {
+                    Some(n) => n,
+                    None => 0,
+                };
+                match tenc.constant_iv {
+                    Some(ref iv_vec) => {
+                        if iv_vec.len() > std::u32::MAX as usize {
+                            return Mp4parseStatus::Invalid;
+                        }
+                        sample_info.protected_data.constant_iv.set_data(iv_vec);
+                    },
+                    None => {}, // Don't need to do anything, defaults are correct
+                };
             }
         }
         video_sample_infos.push(sample_info);
