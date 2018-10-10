@@ -10,8 +10,19 @@ use std::io::{Cursor, Read};
 use std::fs::File;
 
 static MINI_MP4: &'static str = "tests/minimal.mp4";
-static AUDIO_EME_MP4: &'static str = "tests/bipbop-cenc-audioinit.mp4";
-static VIDEO_EME_MP4: &'static str = "tests/bipbop_480wp_1001kbps-cenc-video-key1-init.mp4";
+static AUDIO_EME_CENC_MP4: &'static str = "tests/bipbop-cenc-audioinit.mp4";
+static VIDEO_EME_CENC_MP4: &'static str = "tests/bipbop_480wp_1001kbps-cenc-video-key1-init.mp4";
+// The cbcs files were created via shaka-packager from Firefox's test suite's bipbop.mp4 using:
+// packager-win.exe
+// in=bipbop.mp4,stream=audio,init_segment=bipbop_cbcs_audio_init.mp4,segment_template=bipbop_cbcs_audio_$Number$.m4s
+// in=bipbop.mp4,stream=video,init_segment=bipbop_cbcs_video_init.mp4,segment_template=bipbop_cbcs_video_$Number$.m4s
+// --protection_scheme cbcs --enable_raw_key_encryption
+// --keys label=:key_id=7e571d047e571d047e571d047e571d21:key=7e5744447e5744447e5744447e574421
+// --iv 11223344556677889900112233445566
+// --generate_static_mpd --mpd_output bipbop_cbcs.mpd
+// note: only the init files are needed for these tests
+static AUDIO_EME_CBCS_MP4: &'static str = "tests/bipbop_cbcs_audio_init.mp4";
+static VIDEO_EME_CBCS_MP4: &'static str = "tests/bipbop_cbcs_video_init.mp4";
 static VIDEO_AV1_MP4: &'static str = "tests/tiny_av1.mp4";
 
 // Adapted from https://github.com/GuillaumeGomez/audio-video-metadata/blob/9dff40f565af71d5502e03a2e78ae63df95cfd40/src/metadata.rs#L53
@@ -135,7 +146,7 @@ fn public_audio_tenc() {
         vec![0x7e, 0x57, 0x1d, 0x04, 0x7e, 0x57, 0x1d, 0x04,
              0x7e, 0x57, 0x1d, 0x04, 0x7e, 0x57, 0x1d, 0x04];
 
-    let mut fd = File::open(AUDIO_EME_MP4).expect("Unknown file");
+    let mut fd = File::open(AUDIO_EME_CENC_MP4).expect("Unknown file");
     let mut buf = Vec::new();
     fd.read_to_end(&mut buf).expect("File error");
 
@@ -189,7 +200,7 @@ fn public_video_cenc() {
              0x7e, 0x57, 0x1d, 0x03, 0x7e, 0x57, 0x1d, 0x11,
              0x00, 0x00, 0x00, 0x00];
 
-    let mut fd = File::open(VIDEO_EME_MP4).expect("Unknown file");
+    let mut fd = File::open(VIDEO_EME_CENC_MP4).expect("Unknown file");
     let mut buf = Vec::new();
     fd.read_to_end(&mut buf).expect("File error");
 
@@ -221,6 +232,153 @@ fn public_video_cenc() {
                 assert!(false, "Invalid test condition");
             }
         }
+    }
+
+    for pssh in context.psshs {
+        assert_eq!(pssh.system_id, system_id);
+        for kid_id in pssh.kid {
+            assert_eq!(kid_id, kid);
+        }
+        assert!(pssh.data.is_empty());
+        assert_eq!(pssh.box_content, pssh_box);
+    }
+}
+
+#[test]
+fn publicaudio_cbcs() {
+    let system_id =
+        vec![0x10, 0x77, 0xef, 0xec, 0xc0, 0xb2, 0x4d, 0x02,
+             0xac, 0xe3, 0x3c, 0x1e, 0x52, 0xe2, 0xfb, 0x4b];
+
+    let kid =
+        vec![0x7e, 0x57, 0x1d, 0x04, 0x7e, 0x57, 0x1d, 0x04,
+             0x7e, 0x57, 0x1d, 0x04, 0x7e, 0x57, 0x1d, 0x21];
+
+    let default_iv =
+        vec![0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+             0x99, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
+
+    let pssh_box =
+        vec![0x00, 0x00, 0x00, 0x34, 0x70, 0x73, 0x73, 0x68,
+             0x01, 0x00, 0x00, 0x00, 0x10, 0x77, 0xef, 0xec,
+             0xc0, 0xb2, 0x4d, 0x02, 0xac, 0xe3, 0x3c, 0x1e,
+             0x52, 0xe2, 0xfb, 0x4b, 0x00, 0x00, 0x00, 0x01,
+             0x7e, 0x57, 0x1d, 0x04, 0x7e, 0x57, 0x1d, 0x04,
+             0x7e, 0x57, 0x1d, 0x04, 0x7e, 0x57, 0x1d, 0x21,
+             0x00, 0x00, 0x00, 0x00];
+
+    let mut fd = File::open(AUDIO_EME_CBCS_MP4).expect("Unknown file");
+    let mut buf = Vec::new();
+    fd.read_to_end(&mut buf).expect("File error");
+
+    let mut c = Cursor::new(&buf);
+    let mut context = mp4::MediaContext::new();
+    mp4::read_mp4(&mut c, &mut context).expect("read_mp4 failed");
+    for track in context.tracks {
+        let stsd = track.stsd.expect("expected an stsd");
+        assert_eq!(stsd.descriptions.len(), 2);
+        let mut found_encrypted_sample_description = false;
+        for description in stsd.descriptions {
+            match description {
+                mp4::SampleEntry::Audio(ref a) => {
+                    if let Some(p) = a.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
+                        found_encrypted_sample_description = true;
+                        assert_eq!(p.code_name, "mp4a");
+                        if let Some(ref tenc) = p.tenc {
+                            assert!(tenc.is_encrypted > 0);
+                            assert_eq!(tenc.iv_size, 0);
+                            assert_eq!(tenc.kid, kid);
+                            // Note: 0 for both crypt and skip seems odd but
+                            // that's what shaka-packager produced. It appears
+                            // to indicate full encryption.
+                            assert_eq!(tenc.crypt_byte_block_count, Some(0));
+                            assert_eq!(tenc.skip_byte_block_count, Some(0));
+                            assert_eq!(tenc.constant_iv, Some(default_iv.clone()));
+                        } else {
+                            assert!(false, "Invalid test condition");
+                        }
+                    }
+                },
+                _ => {
+                    panic!("expected a VideoSampleEntry");
+                },
+            }
+        }
+        assert!(found_encrypted_sample_description,
+                "Should have found an encrypted sample description");
+    }
+
+    for pssh in context.psshs {
+        assert_eq!(pssh.system_id, system_id);
+        for kid_id in pssh.kid {
+            assert_eq!(kid_id, kid);
+        }
+        assert!(pssh.data.is_empty());
+        assert_eq!(pssh.box_content, pssh_box);
+    }
+}
+
+#[test]
+fn public_video_cbcs() {
+    let system_id =
+        vec![0x10, 0x77, 0xef, 0xec, 0xc0, 0xb2, 0x4d, 0x02,
+             0xac, 0xe3, 0x3c, 0x1e, 0x52, 0xe2, 0xfb, 0x4b];
+
+    let kid =
+        vec![0x7e, 0x57, 0x1d, 0x04, 0x7e, 0x57, 0x1d, 0x04,
+             0x7e, 0x57, 0x1d, 0x04, 0x7e, 0x57, 0x1d, 0x21];
+
+    let default_iv =
+        vec![0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+             0x99, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
+
+    let pssh_box =
+        vec![0x00, 0x00, 0x00, 0x34, 0x70, 0x73, 0x73, 0x68,
+             0x01, 0x00, 0x00, 0x00, 0x10, 0x77, 0xef, 0xec,
+             0xc0, 0xb2, 0x4d, 0x02, 0xac, 0xe3, 0x3c, 0x1e,
+             0x52, 0xe2, 0xfb, 0x4b, 0x00, 0x00, 0x00, 0x01,
+             0x7e, 0x57, 0x1d, 0x04, 0x7e, 0x57, 0x1d, 0x04,
+             0x7e, 0x57, 0x1d, 0x04, 0x7e, 0x57, 0x1d, 0x21,
+             0x00, 0x00, 0x00, 0x00];
+
+    let mut fd = File::open(VIDEO_EME_CBCS_MP4).expect("Unknown file");
+    let mut buf = Vec::new();
+    fd.read_to_end(&mut buf).expect("File error");
+
+    let mut c = Cursor::new(&buf);
+    let mut context = mp4::MediaContext::new();
+    mp4::read_mp4(&mut c, &mut context).expect("read_mp4 failed");
+    for track in context.tracks {
+        let stsd = track.stsd.expect("expected an stsd");
+        assert_eq!(stsd.descriptions.len(), 2);
+        let mut found_encrypted_sample_description = false;
+        for description in stsd.descriptions {
+            match description {
+                mp4::SampleEntry::Video(ref v) => {
+                    assert_eq!(v.width, 400);
+                    assert_eq!(v.height, 300);
+                    if let Some(p) = v.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
+                        found_encrypted_sample_description = true;
+                        assert_eq!(p.code_name, "avc1");
+                        if let Some(ref tenc) = p.tenc {
+                            assert!(tenc.is_encrypted > 0);
+                            assert_eq!(tenc.iv_size, 0);
+                            assert_eq!(tenc.kid, kid);
+                            assert_eq!(tenc.crypt_byte_block_count, Some(1));
+                            assert_eq!(tenc.skip_byte_block_count, Some(9));
+                            assert_eq!(tenc.constant_iv, Some(default_iv.clone()));
+                        } else {
+                            assert!(false, "Invalid test condition");
+                        }
+                    }
+                },
+                _ => {
+                    panic!("expected a VideoSampleEntry");
+                },
+            }
+        }
+        assert!(found_encrypted_sample_description,
+                "Should have found an encrypted sample description");
     }
 
     for pssh in context.psshs {
