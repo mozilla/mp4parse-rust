@@ -36,7 +36,6 @@ fn doit() {
             for track in 0..count {
                 let mut info = Mp4parseTrackInfo {
                     track_type: Mp4parseTrackType::Video,
-                    codec: Mp4parseCodec::Unknown,
                     track_id: 0,
                     duration: 0,
                     media_time: 0,
@@ -47,28 +46,39 @@ fn doit() {
                              track, info.track_id, info.duration, info.media_time);
                     match info.track_type {
                         Mp4parseTrackType::Video => {
-                            let mut video = Mp4parseTrackVideoInfo {
-                                display_width: 0,
-                                display_height: 0,
-                                image_width: 0,
-                                image_height: 0,
-                                rotation: 0,
-                                extra_data: Mp4parseByteData::default(),
-                                protected_data: Default::default(),
-                            };
+                            let mut video = Mp4parseTrackVideoInfo::default();
                             let rv = mp4parse_get_track_video_info(context, track, &mut video);
                             if rv == Mp4parseStatus::Ok {
-                                println!("  video: display={}x{} image={}x{}",
-                                         video.display_width, video.display_height,
-                                         video.image_width, video.image_height);
+                                println!("  video: display={}x{} rotation={}",
+                                         video.display_width,
+                                         video.display_height,
+                                         video.rotation);
+                                for i in 0 .. video.sample_info_count as isize {
+                                    let info = &*video.sample_info.offset(i);
+                                    println!("    sample info[{}]: codec={:?} image={}x{}",
+                                             i,
+                                             info.codec_type,
+                                             info.image_width,
+                                             info.image_height);
+                                }
                             }
                         }
                         Mp4parseTrackType::Audio => {
                             let mut audio = Default::default();
                             let rv = mp4parse_get_track_audio_info(context, track, &mut audio);
                             if rv == Mp4parseStatus::Ok {
-                                println!("  audio: channels={} bit_depth={} sample_rate={}",
-                                         audio.channels, audio.bit_depth, audio.sample_rate);
+                                println!("  audio:");
+                                for i in 0 .. audio.sample_info_count as isize {
+                                    let info = &*audio.sample_info.offset(i);
+                                    println!("    sample info[{}]: codec={:?} channels={} \
+                                             bit depth={} sample rate={} profile={}",
+                                             i,
+                                             info.codec_type,
+                                             info.channels,
+                                             info.bit_depth,
+                                             info.sample_rate,
+                                             info.profile);
+                                }
                             }
                         }
                         Mp4parseTrackType::Metadata => {

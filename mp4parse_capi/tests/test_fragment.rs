@@ -32,7 +32,6 @@ fn parse_fragment() {
 
         let mut track_info = Mp4parseTrackInfo {
             track_type: Mp4parseTrackType::Audio,
-            codec: Mp4parseCodec::Unknown,
             track_id: 0,
             duration: 0,
             media_time: 0,
@@ -40,10 +39,20 @@ fn parse_fragment() {
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
-        assert_eq!(track_info.codec, Mp4parseCodec::Aac);
         assert_eq!(track_info.track_id, 1);
         assert_eq!(track_info.duration, 0);
         assert_eq!(track_info.media_time, 0);
+
+        let mut audio = Default::default();
+        rv = mp4parse_get_track_audio_info(parser, 0, &mut audio);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(audio.sample_info_count, 1);
+
+        assert_eq!((*audio.sample_info).channels, 2);
+        assert_eq!((*audio.sample_info).bit_depth, 16);
+        assert_eq!((*audio.sample_info).sample_rate, 22050);
+        assert_eq!((*audio.sample_info).extra_data.length, 27);
+        assert_eq!((*audio.sample_info).codec_specific_config.length, 2);
 
         let mut is_fragmented_file: u8 = 0;
         rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);
@@ -83,7 +92,6 @@ fn parse_opus_fragment() {
 
         let mut track_info = Mp4parseTrackInfo {
             track_type: Mp4parseTrackType::Audio,
-            codec: Mp4parseCodec::Unknown,
             track_id: 0,
             duration: 0,
             media_time: 0,
@@ -91,7 +99,6 @@ fn parse_opus_fragment() {
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
-        assert_eq!(track_info.codec, Mp4parseCodec::Opus);
         assert_eq!(track_info.track_id, 1);
         assert_eq!(track_info.duration, 0);
         assert_eq!(track_info.media_time, 0);
@@ -99,11 +106,13 @@ fn parse_opus_fragment() {
         let mut audio = Default::default();
         rv = mp4parse_get_track_audio_info(parser, 0, &mut audio);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(audio.channels, 1);
-        assert_eq!(audio.bit_depth, 16);
-        assert_eq!(audio.sample_rate, 48000);
-        assert_eq!(audio.extra_data.length, 0);
-        assert_eq!(audio.codec_specific_config.length, 19);
+        assert_eq!(audio.sample_info_count, 1);
+
+        assert_eq!((*audio.sample_info).channels, 1);
+        assert_eq!((*audio.sample_info).bit_depth, 16);
+        assert_eq!((*audio.sample_info).sample_rate, 48000);
+        assert_eq!((*audio.sample_info).extra_data.length, 0);
+        assert_eq!((*audio.sample_info).codec_specific_config.length, 19);
 
         let mut is_fragmented_file: u8 = 0;
         rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);

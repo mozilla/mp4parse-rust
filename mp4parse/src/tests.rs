@@ -942,9 +942,13 @@ fn read_qt_wave_atom() {
 
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
-    let (codec_type, _) = super::read_audio_sample_entry(&mut stream)
+    let sample_entry = super::read_audio_sample_entry(&mut stream)
           .expect("fail to read qt wave atom");
-    assert_eq!(codec_type, super::CodecType::MP3);
+    match sample_entry {
+        super::SampleEntry::Audio(sample_entry) =>
+          assert_eq!(sample_entry.codec_type, super::CodecType::MP3),
+        _ => assert!(false, "fail to read audio sample enctry"),
+    }
 }
 
 #[test]
@@ -1033,12 +1037,11 @@ fn read_stsd_mp4v() {
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
 
-    let (codec_type, sample_entry) = super::read_video_sample_entry(&mut stream).unwrap();
-
-    assert_eq!(codec_type, super::CodecType::MP4V);
+    let sample_entry = super::read_video_sample_entry(&mut stream).unwrap();
 
     match sample_entry {
         super::SampleEntry::Video(v) => {
+            assert_eq!(v.codec_type, super::CodecType::MP4V);
             assert_eq!(v.width, 720);
             assert_eq!(v.height, 480);
             match v.codec_specific {
@@ -1110,9 +1113,13 @@ fn read_f4v_stsd() {
 
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
-    let (codec_type, _) = super::read_audio_sample_entry(&mut stream)
+    let sample_entry = super::read_audio_sample_entry(&mut stream)
           .expect("failed to read f4v stsd atom");
-    assert_eq!(codec_type, super::CodecType::MP3);
+    match sample_entry {
+        super::SampleEntry::Audio(sample_entry) =>
+          assert_eq!(sample_entry.codec_type, super::CodecType::MP3),
+        _ => assert!(false, "fail to read audio sample enctry"),
+    }
 }
 
 #[test]
@@ -1152,7 +1159,7 @@ fn unknown_video_sample_entry() {
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
     match super::read_video_sample_entry(&mut stream) {
-        Ok((super::CodecType::Unknown, super::SampleEntry::Unknown)) => (),
+        Ok(super::SampleEntry::Unknown) => (),
         _ => panic!("expected a different error result"),
     }
 }
@@ -1177,7 +1184,7 @@ fn unknown_audio_sample_entry() {
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
     match super::read_audio_sample_entry(&mut stream) {
-        Ok((super::CodecType::Unknown, super::SampleEntry::Unknown)) => (),
+        Ok(super::SampleEntry::Unknown) => (),
         _ => panic!("expected a different error result"),
     }
 }
@@ -1281,12 +1288,11 @@ fn read_stsd_lpcm() {
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
 
-    let (codec_type, sample_entry) = super::read_audio_sample_entry(&mut stream).unwrap();
-
-    assert_eq!(codec_type, super::CodecType::LPCM);
+    let sample_entry = super::read_audio_sample_entry(&mut stream).unwrap();
 
     match sample_entry {
         super::SampleEntry::Audio(a) => {
+            assert_eq!(a.codec_type, super::CodecType::LPCM);
             assert_eq!(a.samplerate, 96000.0);
             assert_eq!(a.channelcount, 1);
             match a.codec_specific {

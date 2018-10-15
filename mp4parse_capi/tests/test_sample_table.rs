@@ -32,7 +32,6 @@ fn parse_sample_table() {
 
         let mut track_info = Mp4parseTrackInfo {
             track_type: Mp4parseTrackType::Audio,
-            codec: Mp4parseCodec::Unknown,
             track_id: 0,
             duration: 0,
             media_time: 0,
@@ -40,7 +39,6 @@ fn parse_sample_table() {
         rv = mp4parse_get_track_info(parser, 1, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
-        assert_eq!(track_info.codec, Mp4parseCodec::Aac);
 
         // Check audio smaple table
         let mut is_fragmented_file: u8 = 0;
@@ -63,7 +61,6 @@ fn parse_sample_table() {
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(track_info.track_type, Mp4parseTrackType::Video);
-        assert_eq!(track_info.codec, Mp4parseCodec::Avc);
 
         let mut is_fragmented_file: u8 = 0;
         rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);
@@ -117,7 +114,6 @@ fn parse_sample_table_with_elst() {
 
         let mut track_info = Mp4parseTrackInfo {
             track_type: Mp4parseTrackType::Audio,
-            codec: Mp4parseCodec::Unknown,
             track_id: 0,
             duration: 0,
             media_time: 0,
@@ -125,7 +121,6 @@ fn parse_sample_table_with_elst() {
         rv = mp4parse_get_track_info(parser, 1, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
-        assert_eq!(track_info.codec, Mp4parseCodec::Aac);
 
         // Check audio sample table
         let mut is_fragmented_file: u8 = std::u8::MAX;
@@ -173,7 +168,6 @@ fn parse_sample_table_with_negative_ctts() {
 
         let mut track_info = Mp4parseTrackInfo {
             track_type: Mp4parseTrackType::Audio,
-            codec: Mp4parseCodec::Unknown,
             track_id: 0,
             duration: 0,
             media_time: 0,
@@ -181,7 +175,6 @@ fn parse_sample_table_with_negative_ctts() {
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(track_info.track_type, Mp4parseTrackType::Video);
-        assert_eq!(track_info.codec, Mp4parseCodec::Avc);
 
         let mut is_fragmented_file: u8 = std::u8::MAX;
         rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);

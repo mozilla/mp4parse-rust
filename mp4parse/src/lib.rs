@@ -277,8 +277,8 @@ struct HandlerBox {
 
 // Sample description box 'stsd'
 #[derive(Debug)]
-struct SampleDescriptionBox {
-    descriptions: Vec<SampleEntry>,
+pub struct SampleDescriptionBox {
+    pub descriptions: Vec<SampleEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -312,6 +312,7 @@ pub enum AudioCodecSpecific {
 
 #[derive(Debug, Clone)]
 pub struct AudioSampleEntry {
+    pub codec_type: CodecType,
     data_reference_index: u16,
     pub channelcount: u32,
     pub samplesize: u16,
@@ -330,6 +331,7 @@ pub enum VideoCodecSpecific {
 
 #[derive(Debug, Clone)]
 pub struct VideoSampleEntry {
+    pub codec_type: CodecType,
     data_reference_index: u16,
     pub width: u16,
     pub height: u16,
@@ -520,9 +522,8 @@ pub struct Track {
     pub timescale: Option<TrackTimeScale<u64>>,
     pub duration: Option<TrackScaledTime<u64>>,
     pub track_id: Option<u32>,
-    pub codec_type: CodecType,
-    pub data: Option<SampleEntry>,
     pub tkhd: Option<TrackHeaderBox>, // TODO(kinetik): find a nicer way to export this.
+    pub stsd: Option<SampleDescriptionBox>,
     pub stts: Option<TimeToSampleBox>,
     pub stsc: Option<SampleToChunkBox>,
     pub stsz: Option<SampleSizeBox>,
@@ -961,6 +962,7 @@ fn read_stbl<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
             BoxType::SampleDescriptionBox => {
                 let stsd = read_stsd(&mut b, track)?;
                 debug!("{:?}", stsd);
+                track.stsd = Some(stsd);
             }
             BoxType::TimeToSampleBox => {
                 let stts = read_stts(&mut b)?;
@@ -1652,6 +1654,8 @@ fn read_es_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
 fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
     let (_, _) = read_fullbox_extra(src)?;
 
+    // Subtract 4 extra to offset the members of fullbox not accounted for in
+    // head.offset
     let esds_size = src.head.size - src.head.offset - 4;
     let esds_array = read_buf(src, esds_size as usize)?;
 
@@ -1819,7 +1823,7 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>) -> Result<HandlerBox> {
 }
 
 /// Parse an video description inside an stsd box.
-fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<(CodecType, SampleEntry)> {
+fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry> {
     let name = src.get_header().name;
     let codec_type = match name {
         BoxType::AVCSampleEntry | BoxType::AVC3SampleEntry => CodecType::H264,
@@ -1889,6 +1893,8 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<(CodecType, 
                     return Err(Error::InvalidData("malformed video sample entry"));
                 }
                 let (_, _) = read_fullbox_extra(&mut b.content)?;
+                // Subtract 4 extra to offset the members of fullbox not
+                // accounted for in head.offset
                 let esds_size = b.head.size - b.head.offset - 4;
                 let esds = read_buf(&mut b.content, esds_size as usize)?;
                 codec_specific = Some(VideoCodecSpecific::ESDSConfig(esds));
@@ -1909,14 +1915,15 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<(CodecType, 
         check_parser_state!(b.content);
     }
 
-    Ok(codec_specific.map_or((CodecType::Unknown, SampleEntry::Unknown),
-        |codec_specific| (codec_type, SampleEntry::Video(VideoSampleEntry {
+    Ok(codec_specific.map_or(SampleEntry::Unknown,
+        |codec_specific| SampleEntry::Video(VideoSampleEntry {
+            codec_type: codec_type,
             data_reference_index: data_reference_index,
             width: width,
             height: height,
             codec_specific: codec_specific,
             protection_info: protection_info,
-        })))
+        }))
     )
 }
 
@@ -1937,7 +1944,7 @@ fn read_qt_wave_atom<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
 }
 
 /// Parse an audio description inside an stsd box.
-fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<(CodecType, SampleEntry)> {
+fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry> {
     let name = src.get_header().name;
 
     // Skip uninteresting fields.
@@ -2049,15 +2056,16 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<(CodecType, 
         check_parser_state!(b.content);
     }
 
-    Ok(codec_specific.map_or((CodecType::Unknown, SampleEntry::Unknown),
-        |codec_specific| (codec_type, SampleEntry::Audio(AudioSampleEntry {
+    Ok(codec_specific.map_or(SampleEntry::Unknown,
+        |codec_specific| SampleEntry::Audio(AudioSampleEntry {
+            codec_type: codec_type,
             data_reference_index: data_reference_index,
             channelcount: channelcount,
             samplesize: samplesize,
             samplerate: samplerate,
             codec_specific: codec_specific,
             protection_info: protection_info,
-        })))
+        }))
     )
 }
 
@@ -2069,7 +2077,6 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
     let mut descriptions = Vec::new();
 
     {
-        // TODO(kinetik): check if/when more than one desc per track? do we need to support?
         let mut iter = src.box_iter();
         while let Some(mut b) = iter.next_box()? {
             let description = match track.track_type {
@@ -2079,10 +2086,7 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
                 TrackType::Unknown => Err(Error::Unsupported("unknown track type")),
             };
             let description = match description {
-                Ok((codec_type, desc)) => {
-                    track.codec_type = codec_type;
-                    desc
-                }
+                Ok(desc) => desc,
                 Err(Error::Unsupported(_)) => {
                     // read_{audio,video}_desc may have returned Unsupported
                     // after partially reading the box content, so we can't
@@ -2090,14 +2094,9 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
                     let to_skip = b.bytes_left();
                     skip(&mut b, to_skip)?;
                     SampleEntry::Unknown
-                }
+                },
                 Err(e) => return Err(e),
             };
-            if track.data.is_none() {
-                track.data = Some(description.clone());
-            } else {
-                debug!("** don't know how to handle multiple descriptions **");
-            }
             vec_push(&mut descriptions, description)?;
             check_parser_state!(b.content);
             if descriptions.len() == description_count as usize {
