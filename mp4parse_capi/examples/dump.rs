@@ -61,7 +61,6 @@ fn dump_file(filename: &str) {
         for i in 0 .. counts {
             let mut track_info = Mp4parseTrackInfo {
                 track_type: Mp4parseTrackType::Audio,
-                codec: Mp4parseCodec::Unknown,
                 track_id: 0,
                 duration: 0,
                 media_time: 0,
@@ -82,6 +81,11 @@ fn dump_file(filename: &str) {
                     match mp4parse_get_track_audio_info(parser, i, &mut audio_info) {
                         Mp4parseStatus::Ok => {
                           println!("-- mp4parse_get_track_audio_info {:?}", audio_info);
+                          for i in 0 .. audio_info.sample_info_count as isize {
+                              let sample_info = audio_info.sample_info.offset(i);
+                              println!("  -- mp4parse_get_track_audio_info sample_info[{:?}] {:?}",
+                                       i, *sample_info);
+                          }
                         },
                         _ => {
                           println!("-- mp4parse_get_track_audio_info failed, track id: {}", i);
@@ -94,6 +98,11 @@ fn dump_file(filename: &str) {
                     match mp4parse_get_track_video_info(parser, i, &mut video_info) {
                         Mp4parseStatus::Ok => {
                           println!("-- mp4parse_get_track_video_info {:?}", video_info);
+                          for i in 0 .. video_info.sample_info_count as isize {
+                              let sample_info = video_info.sample_info.offset(i);
+                              println!("  -- mp4parse_get_track_video_info sample_info[{:?}] {:?}",
+                                       i, *sample_info);
+                          }
                         },
                         _ => {
                           println!("-- mp4parse_get_track_video_info failed, track id: {}", i);

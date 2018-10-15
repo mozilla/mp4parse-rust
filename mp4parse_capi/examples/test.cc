@@ -144,15 +144,17 @@ void test_arg_validation_with_data(const std::string& filename)
   assert(rv == MP4PARSE_STATUS_OK);
   assert(video.display_width == 320);
   assert(video.display_height == 240);
-  assert(video.image_width == 320);
-  assert(video.image_height == 240);
+  assert(video.sample_info_count == 1);
+  assert(video.sample_info[0].image_width == 320);
+  assert(video.sample_info[0].image_height == 240);
 
   Mp4parseTrackAudioInfo audio;
   rv = mp4parse_get_track_audio_info(parser, 1, &audio);
   assert(rv == MP4PARSE_STATUS_OK);
-  assert(audio.channels == 1);
-  assert(audio.bit_depth == 16);
-  assert(audio.sample_rate == 48000);
+  assert(audio.sample_info_count == 1);
+  assert(audio.sample_info[0].channels == 1);
+  assert(audio.sample_info[0].bit_depth == 16);
+  assert(audio.sample_info[0].sample_rate == 48000);
 
   // Test with an invalid track number.
 

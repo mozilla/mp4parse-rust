@@ -30,15 +30,7 @@ fn parse_rotation() {
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(counts, 1);
 
-        let mut video = Mp4parseTrackVideoInfo {
-            display_width: 0,
-            display_height: 0,
-            image_width: 0,
-            image_height: 0,
-            rotation: 0,
-            extra_data: Mp4parseByteData::default(),
-            protected_data: Default::default(),
-        };
+        let mut video = Mp4parseTrackVideoInfo::default();
 
         let rv = mp4parse_get_track_video_info(parser, 0, &mut video);
         assert_eq!(rv, Mp4parseStatus::Ok);
