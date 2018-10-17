@@ -3,6 +3,16 @@ rust:
   - stable
   - nightly
 
+os:
+  - linux
+  - osx
+
+before_install:
+  # Work around https://github.com/travis-ci/travis-ci/issues/8826, when that
+  # issue is fixed we can just include gcc in the addons
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew cask uninstall oclint; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install gcc@5; fi
+  
 addons:
   apt:
     sources:
