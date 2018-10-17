@@ -6,6 +6,7 @@ rust:
 os:
   - linux
   - osx
+  - windows
 
 before_install:
   # Work around https://github.com/travis-ci/travis-ci/issues/8826, when that
