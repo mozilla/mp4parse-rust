@@ -7,3 +7,29 @@ Our primary interest is writing a pure-rust replacement for the
 track metadata parser needed by Firefox.
 
 [API documentation](https://docs.rs/mp4parse/)
+
+# Project structure
+
+`mp4parse` is a parser for ISO base media file format (mp4) written in rust.
+
+`mp4parse-capi` is a C API that exposes the functionality of `mp4parse`. The C
+API is intended to wrap the rust parser. As such, features should primarily
+be implemented in the rust parser and exposed via the C API, rather than the C
+API implementing features on its own.
+
+## Tests
+
+Test coverage comes from several sources:
+- Conventional tests exist in `mp4parse/src/lib.rs` and
+`mp4parse_capi/src/lib.rs` as well as under `mp4parse/tests` and
+`mp4parse_capi/tests`. These tests can be run via `cargo test`.
+- Examples are included under `mp4parse_capi/examples`. These programs should
+continue to build and run after changes are made. Note, these programs are not
+typically run by `cargo test`, so manual verification is required. However,
+`test.cc` is used to  test the foreign function interface via
+`build_ffi_test.rs` on non-Windows platforms and will be run by `cargo test`.
+  - Examples with `afl` related names are for use with the
+[american fuzzy lop](http://lcamtuf.coredump.cx/afl/) fuzzer. These examples can
+be run without `afl`, but they can be built specifically to receive input from
+`afl` via by setting the `fuzz` feature when building. E.g. `cargo build
+--features fuzz` would build the examples with fuzzing options.
