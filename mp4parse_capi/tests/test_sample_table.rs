@@ -30,12 +30,7 @@ fn parse_sample_table() {
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(counts, 2);
 
-        let mut track_info = Mp4parseTrackInfo {
-            track_type: Mp4parseTrackType::Audio,
-            track_id: 0,
-            duration: 0,
-            media_time: 0,
-        };
+        let mut track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 1, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
@@ -112,12 +107,7 @@ fn parse_sample_table_with_elst() {
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(counts, 2);
 
-        let mut track_info = Mp4parseTrackInfo {
-            track_type: Mp4parseTrackType::Audio,
-            track_id: 0,
-            duration: 0,
-            media_time: 0,
-        };
+        let mut track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 1, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
@@ -166,12 +156,7 @@ fn parse_sample_table_with_negative_ctts() {
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(counts, 1);
 
-        let mut track_info = Mp4parseTrackInfo {
-            track_type: Mp4parseTrackType::Audio,
-            track_id: 0,
-            duration: 0,
-            media_time: 0,
-        };
+        let mut track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(track_info.track_type, Mp4parseTrackType::Video);

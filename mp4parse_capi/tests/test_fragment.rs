@@ -30,12 +30,7 @@ fn parse_fragment() {
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(counts, 1);
 
-        let mut track_info = Mp4parseTrackInfo {
-            track_type: Mp4parseTrackType::Audio,
-            track_id: 0,
-            duration: 0,
-            media_time: 0,
-        };
+        let mut track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
@@ -48,6 +43,7 @@ fn parse_fragment() {
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(audio.sample_info_count, 1);
 
+        assert_eq!((*audio.sample_info).codec_type, Mp4parseCodec::Aac);
         assert_eq!((*audio.sample_info).channels, 2);
         assert_eq!((*audio.sample_info).bit_depth, 16);
         assert_eq!((*audio.sample_info).sample_rate, 22050);
@@ -59,9 +55,7 @@ fn parse_fragment() {
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(is_fragmented_file, 1);
 
-        let mut fragment_info = Mp4parseFragmentInfo {
-            fragment_duration: 0,
-        };
+        let mut fragment_info = Mp4parseFragmentInfo::default();
         rv = mp4parse_get_fragment_info(parser, &mut fragment_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(fragment_info.fragment_duration, 10032000);
@@ -90,12 +84,7 @@ fn parse_opus_fragment() {
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(counts, 1);
 
-        let mut track_info = Mp4parseTrackInfo {
-            track_type: Mp4parseTrackType::Audio,
-            track_id: 0,
-            duration: 0,
-            media_time: 0,
-        };
+        let mut track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
@@ -108,6 +97,7 @@ fn parse_opus_fragment() {
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(audio.sample_info_count, 1);
 
+        assert_eq!((*audio.sample_info).codec_type, Mp4parseCodec::Opus);
         assert_eq!((*audio.sample_info).channels, 1);
         assert_eq!((*audio.sample_info).bit_depth, 16);
         assert_eq!((*audio.sample_info).sample_rate, 48000);
@@ -119,9 +109,7 @@ fn parse_opus_fragment() {
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert_eq!(is_fragmented_file, 1);
 
-        let mut fragment_info = Mp4parseFragmentInfo {
-            fragment_duration: 0,
-        };
+        let mut fragment_info = Mp4parseFragmentInfo::default();
         rv = mp4parse_get_fragment_info(parser, &mut fragment_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
 
