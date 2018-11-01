@@ -425,6 +425,12 @@ pub struct ProtectionSystemSpecificHeaderBox {
 }
 
 #[derive(Debug, Default, Clone)]
+pub struct SchemeTypeBox {
+    pub scheme_type: FourCC,
+    pub scheme_version: u32,
+}
+
+#[derive(Debug, Default, Clone)]
 pub struct TrackEncryptionBox {
     pub is_encrypted: u8,
     pub iv_size: u8,
@@ -439,6 +445,7 @@ pub struct TrackEncryptionBox {
 #[derive(Debug, Default, Clone)]
 pub struct ProtectionSchemeInfoBox {
     pub code_name: String,
+    pub scheme_type: Option<SchemeTypeBox>,
     pub tenc: Option<TrackEncryptionBox>,
 }
 
@@ -2128,6 +2135,9 @@ fn read_sinf<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSchemeInfoBox> {
                 let frma = read_frma(&mut b)?;
                 sinf.code_name = frma;
             },
+            BoxType::SchemeTypeBox => {
+                sinf.scheme_type = Some(read_schm(&mut b)?);
+            }
             BoxType::SchemeInformationBox => {
                 // We only need tenc box in schi box so far.
                 sinf.tenc = read_schi(&mut b)?;
@@ -2201,6 +2211,20 @@ fn read_tenc<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackEncryptionBox> {
 fn read_frma<T: Read>(src: &mut BMFFBox<T>) -> Result<String> {
     let code_name = read_buf(src, 4)?;
     String::from_utf8(code_name).map_err(From::from)
+}
+
+fn read_schm<T: Read>(src: &mut BMFFBox<T>) -> Result<SchemeTypeBox> {
+    // Flags can be used to signal presence of URI in the box, but we don't
+    // use the URI so don't bother storing the flags.
+    let (_, _) = read_fullbox_extra(src)?;
+    let scheme_type =  FourCC::from(be_u32(src)?);
+    let scheme_version = be_u32(src)?;
+    // Null terminated scheme URI may follow, but we don't use it right now.
+    skip_box_remain(src)?;
+    Ok(SchemeTypeBox {
+        scheme_type: scheme_type,
+        scheme_version: scheme_version,
+    })
 }
 
 /// Skip a number of bytes that we don't care to parse.
