@@ -108,6 +108,23 @@ impl Default for Mp4parseCodec {
 }
 
 #[repr(C)]
+#[derive(PartialEq, Debug)]
+pub enum Mp4ParseEncryptionSchemeType {
+    None,
+    Cenc,
+    Cbc1,
+    Cens,
+    Cbcs,
+    // Schemes also have a version component. At the time of writing, this does
+    // not impact handling, so we do not expose it. Note that this may need to
+    // be exposed in future, should the spec change.
+}
+
+impl Default for Mp4ParseEncryptionSchemeType {
+    fn default() -> Self { Mp4ParseEncryptionSchemeType::None }
+}
+
+#[repr(C)]
 #[derive(Default, Debug)]
 pub struct Mp4parseTrackInfo {
     pub track_type: Mp4parseTrackType,
@@ -168,6 +185,7 @@ pub struct Mp4parsePsshInfo {
 #[repr(C)]
 #[derive(Default, Debug)]
 pub struct Mp4parseSinfInfo {
+    pub scheme_type: Mp4ParseEncryptionSchemeType,
     pub is_encrypted: u8,
     pub iv_size: u8,
     pub kid: Mp4parseByteData,
@@ -619,6 +637,19 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut Mp4parseParser, 
         }
 
         if let Some(p) = audio.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
+            sample_info.protected_data.scheme_type = match p.scheme_type {
+                Some(ref scheme_type_box) => {
+                    match scheme_type_box.scheme_type.value.as_ref() {
+                        "cenc" => Mp4ParseEncryptionSchemeType::Cenc,
+                        "cbcs" => Mp4ParseEncryptionSchemeType::Cbcs,
+                        // We don't support other schemes, and shouldn't reach
+                        // this case. Try to gracefully handle by treating as
+                        // no encryption case.
+                        _ => Mp4ParseEncryptionSchemeType::None,
+                    }
+                },
+                None => Mp4ParseEncryptionSchemeType::None,
+            };
             if let Some(ref tenc) = p.tenc {
                 sample_info.protected_data.is_encrypted = tenc.is_encrypted;
                 sample_info.protected_data.iv_size = tenc.iv_size;
@@ -740,6 +771,19 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut Mp4parseParser, 
         }
 
         if let Some(p) = video.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
+            sample_info.protected_data.scheme_type = match p.scheme_type {
+                Some(ref scheme_type_box) => {
+                    match scheme_type_box.scheme_type.value.as_ref() {
+                        "cenc" => Mp4ParseEncryptionSchemeType::Cenc,
+                        "cbcs" => Mp4ParseEncryptionSchemeType::Cbcs,
+                        // We don't support other schemes, and shouldn't reach
+                        // this case. Try to gracefully handle by treating as
+                        // no encryption case.
+                        _ => Mp4ParseEncryptionSchemeType::None,
+                    }
+                },
+                None => Mp4ParseEncryptionSchemeType::None,
+            };
             if let Some(ref tenc) = p.tenc {
                 sample_info.protected_data.is_encrypted = tenc.is_encrypted;
                 sample_info.protected_data.iv_size = tenc.iv_size;
