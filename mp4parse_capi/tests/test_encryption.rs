@@ -50,6 +50,7 @@ fn parse_cenc() {
         assert_eq!((*video.sample_info).image_width, 320);
         assert_eq!((*video.sample_info).image_height, 240);
         let protected_data = &(*video.sample_info).protected_data;
+        assert_eq!(protected_data.scheme_type, Mp4ParseEncryptionSchemeType::Cenc);
         assert_eq!(protected_data.is_encrypted, 0x01);
         assert_eq!(protected_data.iv_size, 16);
         assert_eq!(protected_data.kid.length, 16);
@@ -119,6 +120,7 @@ fn parse_cbcs() {
         assert_eq!((*video.sample_info).image_width, 400);
         assert_eq!((*video.sample_info).image_height, 300);
         let protected_data = &(*video.sample_info).protected_data;
+        assert_eq!(protected_data.scheme_type, Mp4ParseEncryptionSchemeType::Cbcs);
         assert_eq!(protected_data.is_encrypted, 0x01);
         assert_eq!(protected_data.iv_size, 0);
         assert_eq!(protected_data.kid.length, 16);
@@ -135,5 +137,46 @@ fn parse_cbcs() {
         for (i, expected_byte) in expected_iv.iter().enumerate() {
             assert_eq!(&(*protected_data.constant_iv.data.offset(i as isize)), expected_byte);
         }
+    }
+}
+
+#[test]
+fn parse_unencrypted() {
+    // Ensure the encryption related data is not populated for files without
+    // encryption metadata.
+    let mut file = std::fs::File::open("tests/opus_audioinit.mp4").expect("Unknown file");
+    let io = Mp4parseIo {
+        read: Some(buf_read),
+        userdata: &mut file as *mut _ as *mut std::os::raw::c_void
+    };
+
+    unsafe {
+        let parser = mp4parse_new(&io);
+
+        let mut rv = mp4parse_read(parser);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+
+        let mut counts: u32 = 0;
+        rv = mp4parse_get_track_count(parser, &mut counts);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(counts, 1);
+
+        let mut track_info = Mp4parseTrackInfo::default();
+        rv = mp4parse_get_track_info(parser, 0, &mut track_info);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
+
+        let mut audio = Mp4parseTrackAudioInfo::default();
+        rv = mp4parse_get_track_audio_info(parser, 0, &mut audio);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(audio.sample_info_count, 1);
+        let protected_data = &(*audio.sample_info).protected_data;
+        assert_eq!(protected_data.scheme_type, Mp4ParseEncryptionSchemeType::None);
+        assert_eq!(protected_data.is_encrypted, 0x00);
+        assert_eq!(protected_data.iv_size, 0);
+        assert_eq!(protected_data.kid.length, 0);
+        assert_eq!(protected_data.crypt_byte_block, 0);
+        assert_eq!(protected_data.skip_byte_block, 0);
+        assert_eq!(protected_data.constant_iv.length, 0);
     }
 }
