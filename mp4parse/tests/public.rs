@@ -163,6 +163,11 @@ fn public_audio_tenc() {
         match a.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
             Some(ref p) => {
                 assert_eq!(p.code_name, "mp4a");
+                if let Some(ref schm) = p.scheme_type {
+                    assert_eq!(schm.scheme_type.value, "cenc");
+                } else {
+                    assert!(false, "Expected scheme type info");
+                }
                 if let Some(ref tenc) = p.tenc {
                     assert!(tenc.is_encrypted > 0);
                     assert_eq!(tenc.iv_size, 16);
@@ -217,6 +222,11 @@ fn public_video_cenc() {
         match v.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
             Some(ref p) => {
                 assert_eq!(p.code_name, "avc1");
+                if let Some(ref schm) = p.scheme_type {
+                    assert_eq!(schm.scheme_type.value, "cenc");
+                } else {
+                    assert!(false, "Expected scheme type info");
+                }
                 if let Some(ref tenc) = p.tenc {
                     assert!(tenc.is_encrypted > 0);
                     assert_eq!(tenc.iv_size, 16);
@@ -284,6 +294,11 @@ fn publicaudio_cbcs() {
                     if let Some(p) = a.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
                         found_encrypted_sample_description = true;
                         assert_eq!(p.code_name, "mp4a");
+                        if let Some(ref schm) = p.scheme_type {
+                            assert_eq!(schm.scheme_type.value, "cbcs");
+                        } else {
+                            assert!(false, "Expected scheme type info");
+                        }
                         if let Some(ref tenc) = p.tenc {
                             assert!(tenc.is_encrypted > 0);
                             assert_eq!(tenc.iv_size, 0);
@@ -360,6 +375,11 @@ fn public_video_cbcs() {
                     if let Some(p) = v.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
                         found_encrypted_sample_description = true;
                         assert_eq!(p.code_name, "avc1");
+                        if let Some(ref schm) = p.scheme_type {
+                            assert_eq!(schm.scheme_type.value, "cbcs");
+                        } else {
+                            assert!(false, "Expected scheme type info");
+                        }
                         if let Some(ref tenc) = p.tenc {
                             assert!(tenc.is_encrypted > 0);
                             assert_eq!(tenc.iv_size, 0);
