@@ -7,12 +7,6 @@ os:
   - linux
   - osx
   - windows
-
-before_install:
-  # Work around https://github.com/travis-ci/travis-ci/issues/8826, when that
-  # issue is fixed we can just include gcc in the addons
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew cask uninstall oclint; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install gcc@5; fi
   
 addons:
   apt:
@@ -20,6 +14,9 @@ addons:
       - ubuntu-toolchain-r-test
     packages:
       - g++-5
+  homebrew:
+    packages:
+      - gcc@5
 
 env:
   global:
