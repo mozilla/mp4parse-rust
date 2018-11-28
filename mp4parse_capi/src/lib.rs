@@ -205,6 +205,7 @@ pub struct Mp4parseTrackAudioSampleInfo {
     pub bit_depth: u16,
     pub sample_rate: u32,
     pub profile: u16,
+    pub extended_profile: u16,
     pub codec_specific_config: Mp4parseByteData,
     pub extra_data: Mp4parseByteData,
     pub protected_data: Mp4parseSinfInfo,
@@ -600,6 +601,10 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut Mp4parseParser, 
                 if let Some(profile) = esds.audio_object_type {
                     sample_info.profile = profile;
                 }
+                sample_info.extended_profile = match esds.extended_audio_object_type {
+                    Some(extended_profile) => extended_profile,
+                    _ => sample_info.profile
+                };
             }
             AudioCodecSpecific::FLACSpecificBox(ref flac) => {
                 // Return the STREAMINFO metadata block in the codec_specific.
