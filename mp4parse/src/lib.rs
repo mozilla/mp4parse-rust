@@ -439,6 +439,16 @@ pub struct ProtectionSchemeInfoBox {
     pub tenc: Option<TrackEncryptionBox>,
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct UserdataBox {
+    pub meta: Option<MetadataBox>
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct MetadataBox {
+    pub track_name: Option<String>,
+}
+
 /// Internal data structures.
 #[derive(Debug, Default)]
 pub struct MediaContext {
@@ -446,7 +456,8 @@ pub struct MediaContext {
     /// Tracks found in the file.
     pub tracks: Vec<Track>,
     pub mvex: Option<MovieExtendsBox>,
-    pub psshs: Vec<ProtectionSystemSpecificHeaderBox>
+    pub psshs: Vec<ProtectionSystemSpecificHeaderBox>,
+    pub udta: Option<UserdataBox>,
 }
 
 impl MediaContext {
@@ -772,6 +783,11 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: &mut MediaContext) -> Result<
                 let pssh = read_pssh(&mut b)?;
                 debug!("{:?}", pssh);
                 vec_push(&mut context.psshs, pssh)?;
+            }
+            BoxType::UserdataBox => {
+                let udta = read_udta(&mut b)?;
+                debug!("{:?}", udta);
+                context.udta = Some(udta);
             }
             _ => skip_box_content(&mut b)?,
         };
@@ -2285,6 +2301,74 @@ fn read_schm<T: Read>(src: &mut BMFFBox<T>) -> Result<SchemeTypeBox> {
         scheme_version: scheme_version,
     })
 }
+
+//Parse a metadata box inside a moov, trak, or mdia box.
+fn read_udta<T: Read>(src: &mut BMFFBox<T>) -> Result<UserdataBox> {
+    let mut iter = src.box_iter();
+    let mut udta = UserdataBox { meta: None };
+
+    while let Some(mut b) = iter.next_box()? {
+        match b.head.name {
+            BoxType::MetadataBox => {
+                let meta = read_meta(&mut b)?;
+                udta.meta = Some(meta);
+            },
+            _ => skip_box_content(&mut b)?,
+        };
+        check_parser_state!(b.content);
+    }
+    Ok(udta)
+}
+
+/// Parse a metadata box inside a udta box
+fn read_meta<T: Read>(src: &mut BMFFBox<T>) -> Result<MetadataBox> {
+    let (_, _) = read_fullbox_extra(src)?;
+    let mut iter = src.box_iter();
+    let mut meta = MetadataBox { track_name: None };
+    while let Some(mut b) = iter.next_box()? {
+
+        match b.head.name {
+            BoxType::MetadataItemListEntry => read_ilst(&mut b, &mut meta)?,
+            _ => skip_box_content(&mut b)?
+        };
+        check_parser_state!(b.content);
+    }
+    Ok(meta)
+}
+
+/// Parse a metadata box inside a udta box
+fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()> {
+    println!("ilst");
+    let mut iter = src.box_iter();
+    while let Some(mut b) = iter.next_box()? {
+        match b.head.name {
+            BoxType::UnknownBox(fourcc) => {
+                println!("{}", fourcc); // fourcc 
+                skip_box_content(&mut b)?
+            }
+            _ => skip_box_content(&mut b)?
+        };
+        check_parser_state!(b.content);
+    }
+    Ok(())
+}
+
+/// Parse a metadata box inside a udta box
+fn read_ilst_item<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()> {
+    // let mut iter = src.box_iter();
+    // while let Some(mut b) = iter.next_box()? {
+    //     match FourCC::from(b.head.name).value.as_str() {
+    //         "trkn" => {
+    //             panic!("{:?}", b.content);
+    //         }
+    //         _ => skip_box_content(&mut b)?,
+    //     };
+    //     check_parser_state!(b.content);
+    // }
+    Ok(())
+}
+
+
 
 /// Skip a number of bytes that we don't care to parse.
 fn skip<T: Read>(src: &mut T, mut bytes: usize) -> Result<()> {

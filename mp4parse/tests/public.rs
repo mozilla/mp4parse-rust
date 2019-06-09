@@ -10,6 +10,7 @@ use std::io::{Cursor, Read};
 use std::fs::File;
 
 static MINI_MP4: &'static str = "tests/minimal.mp4";
+static MINI_MP4_WITH_METADATA: &'static str = "tests/metadata.mp4";
 static AUDIO_EME_CENC_MP4: &'static str = "tests/bipbop-cenc-audioinit.mp4";
 static VIDEO_EME_CENC_MP4: &'static str = "tests/bipbop_480wp_1001kbps-cenc-video-key1-init.mp4";
 // The cbcs files were created via shaka-packager from Firefox's test suite's bipbop.mp4 using:
@@ -138,6 +139,19 @@ fn public_api() {
             mp4::TrackType::Metadata | mp4::TrackType::Unknown => {}
         }
     }
+}
+
+#[test]
+fn public_metadata() {
+      let mut fd = File::open(MINI_MP4_WITH_METADATA).expect("Unknown file");
+    let mut buf = Vec::new();
+    fd.read_to_end(&mut buf).expect("File error");
+
+    let mut c = Cursor::new(&buf);
+    let mut context = mp4::MediaContext::new();
+    mp4::read_mp4(&mut c, &mut context).expect("read_mp4 failed");
+    assert_eq!(context.timescale, Some(mp4::MediaTimeScale(1000)));
+    context.udta.expect("didn't find udta");
 }
 
 #[test]

@@ -143,4 +143,12 @@ box_database!(
     LPCMAudioSampleEntry              0x6C70636D, // "lpcm" - quicktime atom
     ALACSpecificBox                   0x616C6163, // "alac" - Also used by ALACSampleEntry
     UuidBox                           0x75756964, // "uuid"
+    MetadataBox                       0x6d657461, // "meta" - IS this needed?
+    MetadataHeaderBox                 0x6d686472, // "mhdr"
+    MetadataItemKeysBox               0x6b657973, // "keys"
+    MetadataItemListEntry             0x696c7374, // "ilst"
+    MetadataItemDataEntry             0x64617461, // "data"
+    MetadataItemNameBox               0x6e616d65, // "name"
+    MetadataItemInformationBox        0x69746966, // "itif"
+    UserdataBox                       0x75647461, // "udta"
 );
