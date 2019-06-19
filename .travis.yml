@@ -8,20 +8,6 @@ os:
   - osx
   - windows
   
-addons:
-  apt:
-    sources:
-      - ubuntu-toolchain-r-test
-    packages:
-      - g++-5
-  homebrew:
-    packages:
-      - gcc@5
-
-env:
-  global:
-    - CXX=g++-5
-
 script:
   - cargo test --all --verbose
   - cargo doc --package mp4parse_capi
