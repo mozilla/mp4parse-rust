@@ -8,6 +8,11 @@ os:
   - osx
   - windows
   
+env:
+  matrix:
+    - RELEASE=
+    - RELEASE=--release
+
 script:
-  - cargo test --all --verbose
+  - cargo test --all --verbose $RELEASE
   - cargo doc --package mp4parse_capi
