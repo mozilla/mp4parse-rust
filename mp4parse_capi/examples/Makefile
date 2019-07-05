@@ -20,7 +20,7 @@ else
 PRINT_NATIVE_STATIC_LIBS := --print native-static-libs
 endif
 
-CRATE_DIR := ../../target/debug/deps
+CRATE_DIR := $(OUT_DIR)/../../../deps
 
 libmp4parse.a libmp4parse.a.out : ../src/lib.rs
 	rustc -g --crate-type staticlib --crate-name mp4parse \
