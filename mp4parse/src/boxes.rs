@@ -151,4 +151,6 @@ box_database!(
     MetadataItemNameBox               0x6e616d65, // "name"
     MetadataItemInformationBox        0x69746966, // "itif"
     UserdataBox                       0x75647461, // "udta"
+    TrackNumberBox                    0x74726b6e, // "trkn
+    AlbumNameBox                      0xa9616c62, // "©alb"
 );
