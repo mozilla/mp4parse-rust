@@ -2336,14 +2336,18 @@ fn read_meta<T: Read>(src: &mut BMFFBox<T>) -> Result<MetadataBox> {
     Ok(meta)
 }
 
+
 /// Parse a metadata box inside a udta box
 fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()> {
-    println!("ilst");
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
+            BoxType::AlbumNameBox => {
+                let alb = read_string_data(&mut b)?.expect("no");
+                println!("{:?}", alb);
+            },
             BoxType::UnknownBox(fourcc) => {
-                println!("{}", fourcc); // fourcc 
+                println!("{}", fourcc); // fourcc
                 skip_box_content(&mut b)?
             }
             _ => skip_box_content(&mut b)?
@@ -2353,22 +2357,28 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
     Ok(())
 }
 
-/// Parse a metadata box inside a udta box
-fn read_ilst_item<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()> {
-    // let mut iter = src.box_iter();
-    // while let Some(mut b) = iter.next_box()? {
-    //     match FourCC::from(b.head.name).value.as_str() {
-    //         "trkn" => {
-    //             panic!("{:?}", b.content);
-    //         }
-    //         _ => skip_box_content(&mut b)?,
-    //     };
-    //     check_parser_state!(b.content);
-    // }
-    Ok(())
+fn read_string_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<String>> {
+    let mut iter = src.box_iter();
+    let mut string = None;
+    while let Some(mut b) = iter.next_box()? {
+        match b.head.name {
+            BoxType::MetadataItemDataEntry => {
+                let data = read_data(&mut b)?;
+                string = Some(String::from_utf8(data).map_err::<std::string::FromUtf8Error, _>(From::from)?);
+            }
+            _ => skip_box_content(&mut b)?,
+        };
+        check_parser_state!(b.content);
+    }
+    Ok(string)
 }
 
-
+fn read_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<u8>> {
+    // Skip past the padding bytes
+    skip(&mut src.content, src.head.offset as usize)?;
+    let size =  src.content.limit() as usize;
+    read_buf(&mut src.content, size)
+}
 
 /// Skip a number of bytes that we don't care to parse.
 fn skip<T: Read>(src: &mut T, mut bytes: usize) -> Result<()> {
