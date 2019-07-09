@@ -444,9 +444,66 @@ pub struct UserdataBox {
     pub meta: Option<MetadataBox>
 }
 
+#[derive(Debug, Clone)]
+pub enum Genre {
+    StandardGenre(u8),
+    CustomGenre(String),
+}
+
+#[derive(Debug, Clone)]
+pub enum MediaType {
+    Movie = 0,
+    Normal = 1,
+    AudioBook = 2,
+    WhackedBookmark = 5,
+    MusicVideo = 6,
+    ShortFilm = 9,
+    TVShow = 10,
+    Booklet = 11,
+}
+
+#[derive(Debug, Clone)]
+pub enum AdvisoryRating {
+    Clean = 2,
+    Inoffensive = 0,
+    Explicit
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct MetadataBox {
-    pub track_name: Option<String>,
+    pub album: Option<String>,
+    pub artist: Option<String>,
+    pub album_artist: Option<String>,
+    pub comment: Option<String>,
+    pub year: Option<String>,
+    pub title: Option<String>,
+    pub genre: Option<Genre>,
+    pub track_number: Option<u8>,
+    pub disk_number: Option<u8>,
+    pub composer: Option<String>,
+    pub encoder: Option<String>,
+    pub beats_per_minute: Option<u8>,
+    pub copyright: Option<String>,
+    // https://github.com/wez/atomicparsley/blob/618933f235a234385c37b036aaf74b17c3108694/src/metalist.cpp#L453
+    pub compilation: Option<bool>,
+    pub advisory_rating: Option<u8>,
+    pub grouping: Option<String>,
+    pub media_type: Option<MediaType>, // stik
+    pub podcast: Option<bool>,
+    pub category: Option<String>,
+    pub keyword: Option<String>,
+    pub podcast_url: Option<String>, // todo: confirm this is string
+    // https://github.com/wez/atomicparsley/blob/618933f235a234385c37b036aaf74b17c3108694/src/metalist.cpp#L443
+    pub episode_guid: Option<String>,
+    pub description: Option<String>,
+    pub lyrics: Option<String>,
+    pub tv_network_name: Option<String>,
+    pub tv_show_name: Option<String>,
+    pub tv_episode_number: Option<String>,
+    pub tv_season: Option<u8>,
+    pub purchase_date: Option<String>,
+    pub gapless_playback: Option<bool>,
+    pub cover_art: Option<Vec<Vec<u8>>>, // this is currently unimplemented, need to parse covr.
 }
 
 /// Internal data structures.
@@ -2324,9 +2381,8 @@ fn read_udta<T: Read>(src: &mut BMFFBox<T>) -> Result<UserdataBox> {
 fn read_meta<T: Read>(src: &mut BMFFBox<T>) -> Result<MetadataBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let mut iter = src.box_iter();
-    let mut meta = MetadataBox { track_name: None };
+    let mut meta = MetadataBox::default();
     while let Some(mut b) = iter.next_box()? {
-
         match b.head.name {
             BoxType::MetadataItemListEntry => read_ilst(&mut b, &mut meta)?,
             _ => skip_box_content(&mut b)?
@@ -2342,14 +2398,7 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
-            BoxType::AlbumNameBox => {
-                let alb = read_string_data(&mut b)?.expect("no");
-                println!("{:?}", alb);
-            },
-            BoxType::UnknownBox(fourcc) => {
-                println!("{}", fourcc); // fourcc
-                skip_box_content(&mut b)?
-            }
+            BoxType::AlbumNameBox => meta.album = read_string_data(&mut b)?,
             _ => skip_box_content(&mut b)?
         };
         check_parser_state!(b.content);
