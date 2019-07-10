@@ -152,40 +152,41 @@ box_database!(
     MetadataItemInformationBox        0x69746966, // "itif"
     UserdataBox                       0x75647461, // "udta"
     AlbumEntry                        0xa9616c62, // "©alb"
-    ArtistEntry                       0xa9617274, // @art
-    AlbumArtistEntry                  0x61415254, // aART
-    CommentEntry                      0xa9636d74, // @cmt
-    DateEntry                         0xa9646179, // @day
-    TitleEntry                        0xa96e616d, // @nam
-    CustomGenreEntry                  0xa967656e, // @gen
-    StandardGenreEntry                0x676e7265, // gnre
-    TrackNumberEntry                  0x74726b6e, // trkn
-    DiskNumberEntry                   0x6469736b, // disk
-    ComposerEntry                     0xa9777274, // @wrt
-    EncoderEntry                      0xa9746f6f, // @too
-    TempoEntry                        0x746d706f, // tmpo
-    CopyrightEntry                    0x63707274, // cprt
-    CompilationEntry                  0x6370696c, // cpil
-    CoverArtEntry                     0x636f7672, // covr
-    AdvisoryEntry                     0x72746e67, // rtng
-    RatingEntry                       0x72617465, // rate
-    GroupingEntry                     0xa9677270, // @grp
-    MediaTypeEntry                    0x7374696b, //stik
-    PodcastEntry                      0x70637374, //pcst
-    CategoryEntry                     0x63617467, //catg
-    KeywordEntry                      0x6b657977, //keyw
-    PodcastUrlEntry                   0x7075726c, //purl
-    PodcastGuidEntry                  0x65676964, //egid
-    DescriptionEntry                  0x64657363, //desc
-    LongDescriptionEntry              0x6c646573, //ldes
-    LyricsEntry                       0xa96c7972, // @lyr
-    TVNetworkNameEntry                0x74766e6e, //tvnn
-    TVShowNameEntry                   0x74767368, //tvsh
-    TVEpisodeNameEntry                0x7476656e, //tven
-    TVSeasonEntry                     0x7476736e, //tvsn
-    TVEpisodeNumberEntry              0x74766573, //tves
-    PurchaseDateEntry                 0x70757264, //purd
-    GaplessPlaybackEntry              0x70676170, //pgap
+    ArtistEntry                       0xa9415254, // "©ART"
+    ArtistLowercaseEntry              0xa9617274, // "©art"
+    AlbumArtistEntry                  0x61415254, // "aART"
+    CommentEntry                      0xa9636d74, // "©cmt"
+    DateEntry                         0xa9646179, // "©day"
+    TitleEntry                        0xa96e616d, // "©nam"
+    CustomGenreEntry                  0xa967656e, // "©gen"
+    StandardGenreEntry                0x676e7265, // "gnre"
+    TrackNumberEntry                  0x74726b6e, // "trkn"
+    DiskNumberEntry                   0x6469736b, // "disk"
+    ComposerEntry                     0xa9777274, // "©wrt"
+    EncoderEntry                      0xa9746f6f, // "©too"
+    TempoEntry                        0x746d706f, // "tmpo"
+    CopyrightEntry                    0x63707274, // "cprt"
+    CompilationEntry                  0x6370696c, // "cpil"
+    CoverArtEntry                     0x636f7672, // "covr"
+    AdvisoryEntry                     0x72746e67, // "rtng"
+    RatingEntry                       0x72617465, // "rate"
+    GroupingEntry                     0xa9677270, // "©grp"
+    MediaTypeEntry                    0x7374696b, // "stik"
+    PodcastEntry                      0x70637374, // "pcst"
+    CategoryEntry                     0x63617467, // "catg"
+    KeywordEntry                      0x6b657977, // "keyw"
+    PodcastUrlEntry                   0x7075726c, // "purl"
+    PodcastGuidEntry                  0x65676964, // "egid"
+    DescriptionEntry                  0x64657363, // "desc"
+    LongDescriptionEntry              0x6c646573, // "ldes"
+    LyricsEntry                       0xa96c7972, // "©lyr"
+    TVNetworkNameEntry                0x74766e6e, // "tvnn"
+    TVShowNameEntry                   0x74767368, // "tvsh"
+    TVEpisodeNameEntry                0x7476656e, // "tven"
+    TVSeasonEntry                     0x7476736e, // "tvsn"
+    TVEpisodeNumberEntry              0x74766573, // "tves"
+    PurchaseDateEntry                 0x70757264, // "purd"
+    GaplessPlaybackEntry              0x70676170, // "pgap"
 );
 
 //
