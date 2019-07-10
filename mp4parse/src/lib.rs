@@ -482,6 +482,8 @@ pub struct MetadataBox {
     pub genre: Option<Genre>,
     pub track_number: Option<u8>,
     pub disk_number: Option<u8>,
+    pub total_tracks: Option<u8>,
+    pub total_disks: Option<u8>,
     pub composer: Option<String>,
     pub encoder: Option<String>,
     pub beats_per_minute: Option<u8>,
@@ -499,6 +501,7 @@ pub struct MetadataBox {
     // https://github.com/wez/atomicparsley/blob/618933f235a234385c37b036aaf74b17c3108694/src/metalist.cpp#L443
     pub podcast_guid: Option<String>,
     pub description: Option<String>,
+    pub long_description: Option<String>,
     pub lyrics: Option<String>,
     pub tv_network_name: Option<String>,
     pub tv_show_name: Option<String>,
@@ -2411,7 +2414,42 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
             BoxType::TitleEntry => meta.title = read_string_data(&mut b)?,
             BoxType::CustomGenreEntry => meta.genre = read_string_data(&mut b)?
                 .map(|s| CustomGenre(s)),
-            _ => skip_box_content(&mut b)?
+            BoxType::ComposerEntry => meta.composer = read_string_data(&mut b)?,
+            BoxType::EncoderEntry => meta.encoder = read_string_data(&mut b)?,
+            BoxType::CopyrightEntry => meta.copyright = read_string_data(&mut b)?,
+            BoxType::GroupingEntry => meta.grouping = read_string_data(&mut b)?,
+            BoxType::CategoryEntry => meta.category = read_string_data(&mut b)?,
+            BoxType::KeywordEntry => meta.keyword = read_string_data(&mut b)?,
+            BoxType::PodcastUrlEntry => meta.podcast_url = read_string_data(&mut b)?,
+            BoxType::PodcastGuidEntry => meta.podcast_guid = read_string_data(&mut b)?,
+            BoxType::DescriptionEntry => meta.description = read_string_data(&mut b)?,
+            BoxType::LongDescriptionEntry => meta.long_description = read_string_data(&mut b)?,
+            BoxType::LyricsEntry => meta.lyrics = read_string_data(&mut b)?,
+            BoxType::TVNetworkNameEntry => meta.tv_network_name = read_string_data(&mut b)?,
+            BoxType::TVEpisodeNameEntry => meta.tv_episode_name = read_string_data(&mut b)?,
+            BoxType::TVShowNameEntry => meta.tv_show_name = read_string_data(&mut b)?,
+            BoxType::PurchaseDateEntry => meta.purchase_date = read_string_data(&mut b)?,
+            BoxType::TrackNumberEntry => {
+                if let Some(trkn) = read_u8_data(&mut b)? {
+                    if let Some(track_number) = trkn.get(3) {
+                        meta.track_number = Some(*track_number);
+                    }
+                    if let Some(total_tracks) = trkn.get(5) {
+                        meta.total_tracks = Some(*total_tracks);
+                    }
+                };
+            },
+            BoxType::DiskNumberEntry => {
+                if let Some(disk) = read_u8_data(&mut b)? {
+                    if let Some(disk_number) = disk.get(3) {
+                        meta.disk_number = Some(*disk_number);
+                    }
+                    if let Some(total_disks) = disk.get(5) {
+                        meta.total_disks = Some(*total_disks);
+                    }
+                };
+            },
+            _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
     }
@@ -2419,19 +2457,28 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
 }
 
 fn read_string_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<String>> {
+    read_u8_data(src)?
+        .map_or(Ok(None),
+                |d| String::from_utf8(d)
+                                    .map_err(From::from)
+                                    .map(Some)
+        )
+}
+
+
+fn read_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<Vec<u8>>> {
     let mut iter = src.box_iter();
-    let mut string = None;
+    let mut data = None;
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::MetadataItemDataEntry => {
-                let data = read_data(&mut b)?;
-                string = Some(String::from_utf8(data).map_err::<std::string::FromUtf8Error, _>(From::from)?);
+                data = Some(read_data(&mut b)?);
             }
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
     }
-    Ok(string)
+    Ok(data)
 }
 
 fn read_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<u8>> {
