@@ -30,6 +30,7 @@ mod macros;
 
 mod boxes;
 use boxes::{BoxType, FourCC};
+use ::Genre::CustomGenre;
 
 // Unit tests.
 #[cfg(test)]
@@ -460,6 +461,7 @@ pub enum MediaType {
     ShortFilm = 9,
     TVShow = 10,
     Booklet = 11,
+    Unknown,
 }
 
 #[derive(Debug, Clone)]
@@ -486,7 +488,8 @@ pub struct MetadataBox {
     pub copyright: Option<String>,
     // https://github.com/wez/atomicparsley/blob/618933f235a234385c37b036aaf74b17c3108694/src/metalist.cpp#L453
     pub compilation: Option<bool>,
-    pub advisory_rating: Option<u8>,
+    pub advisory: Option<u8>,
+    pub rating: Option<u8>,
     pub grouping: Option<String>,
     pub media_type: Option<MediaType>, // stik
     pub podcast: Option<bool>,
@@ -494,12 +497,13 @@ pub struct MetadataBox {
     pub keyword: Option<String>,
     pub podcast_url: Option<String>, // todo: confirm this is string
     // https://github.com/wez/atomicparsley/blob/618933f235a234385c37b036aaf74b17c3108694/src/metalist.cpp#L443
-    pub episode_guid: Option<String>,
+    pub podcast_guid: Option<String>,
     pub description: Option<String>,
     pub lyrics: Option<String>,
     pub tv_network_name: Option<String>,
     pub tv_show_name: Option<String>,
-    pub tv_episode_number: Option<String>,
+    pub tv_episode_name: Option<String>,
+    pub tv_episode_number: Option<u8>,
     pub tv_season: Option<u8>,
     pub purchase_date: Option<String>,
     pub gapless_playback: Option<bool>,
@@ -2398,7 +2402,14 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
-            BoxType::AlbumNameBox => meta.album = read_string_data(&mut b)?,
+            BoxType::AlbumEntry => meta.album = read_string_data(&mut b)?,
+            BoxType::ArtistEntry => meta.artist = read_string_data(&mut b)?,
+            BoxType::AlbumArtistEntry => meta.album_artist = read_string_data(&mut b)?,
+            BoxType::CommentEntry => meta.comment = read_string_data(&mut b)?,
+            BoxType::DateEntry => meta.year = read_string_data(&mut b)?,
+            BoxType::TitleEntry => meta.title = read_string_data(&mut b)?,
+            BoxType::CustomGenreEntry => meta.genre = read_string_data(&mut b)?
+                .map(|s| CustomGenre(s)),
             _ => skip_box_content(&mut b)?
         };
         check_parser_state!(b.content);
