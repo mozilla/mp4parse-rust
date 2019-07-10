@@ -2403,7 +2403,8 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::AlbumEntry => meta.album = read_string_data(&mut b)?,
-            BoxType::ArtistEntry => meta.artist = read_string_data(&mut b)?,
+            BoxType::ArtistEntry | BoxType::ArtistLowercaseEntry =>
+                meta.artist = read_string_data(&mut b)?,
             BoxType::AlbumArtistEntry => meta.album_artist = read_string_data(&mut b)?,
             BoxType::CommentEntry => meta.comment = read_string_data(&mut b)?,
             BoxType::DateEntry => meta.year = read_string_data(&mut b)?,
