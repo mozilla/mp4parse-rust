@@ -183,29 +183,8 @@ box_database!(
     TVNetworkNameEntry                0x74766e6e, // "tvnn"
     TVShowNameEntry                   0x74767368, // "tvsh"
     TVEpisodeNameEntry                0x7476656e, // "tven"
-    TVSeasonNumberEntry                     0x7476736e, // "tvsn"
+    TVSeasonNumberEntry               0x7476736e, // "tvsn"
     TVEpisodeNumberEntry              0x74766573, // "tves"
     PurchaseDateEntry                 0x70757264, // "purd"
     GaplessPlaybackEntry              0x70676170, // "pgap"
 );
-
-//
-//@alb 0xa9616c62
-//@art 0xa9617274
-//aART 0x61415254
-//@cmt 0xa9636d74
-//@day 0xa9646179
-//@nam 0xa96e616d
-//@gen 0xa967656e
-//gnre 0x676e7265
-//trkn 0x74726b6e
-//disk 0x6469736b
-//@wrt 0xa9777274
-//@too 0xa9746f6f
-//tmpo 0x746d706f
-//cprt 0x63707274
-//cpil 0x6370696c
-//covr 0x636f7672
-//rtng 0x72746e67
-//@grp 0xa9677270
-//@lyr 0xa96c7972
