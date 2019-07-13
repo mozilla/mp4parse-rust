@@ -183,7 +183,7 @@ box_database!(
     TVNetworkNameEntry                0x74766e6e, // "tvnn"
     TVShowNameEntry                   0x74767368, // "tvsh"
     TVEpisodeNameEntry                0x7476656e, // "tven"
-    TVSeasonEntry                     0x7476736e, // "tvsn"
+    TVSeasonNumberEntry                     0x7476736e, // "tvsn"
     TVEpisodeNumberEntry              0x74766573, // "tves"
     PurchaseDateEntry                 0x70757264, // "purd"
     GaplessPlaybackEntry              0x70676170, // "pgap"
