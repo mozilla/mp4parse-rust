@@ -30,7 +30,6 @@ mod macros;
 
 mod boxes;
 use boxes::{BoxType, FourCC};
-use ::Genre::CustomGenre;
 
 // Unit tests.
 #[cfg(test)]
@@ -453,7 +452,7 @@ pub struct UserdataBox {
 /// 'udta.meta.ilst' may only have either a
 /// standard genre box 'gnre' or a custom
 /// genre box '©gen', but never both at once.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Genre {
     /// A standard ID3v1 numbered genre.
     StandardGenre(u8),
@@ -464,7 +463,7 @@ pub enum Genre {
 /// Represents the contents of a 'stik'
 /// atom that indicates content types within
 /// iTunes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum MediaType {
     /// Movie is stored as 0 in a 'stik' atom.
     Movie, // 0
@@ -488,7 +487,7 @@ pub enum MediaType {
 
 /// Represents the parental advisory rating on the track,
 /// stored within the 'rtng' atom.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum AdvisoryRating {
     /// Clean is always stored as 2 in an 'rtng' atom.
     Clean, // 2
@@ -524,13 +523,13 @@ pub struct MetadataBox {
     /// The track number 'trkn'.
     pub track_number: Option<u8>,
     /// The disc number 'disk'
-    pub disk_number: Option<u8>,
+    pub disc_number: Option<u8>,
     /// The total number of tracks on the disc,
     /// stored in 'trkn'
     pub total_tracks: Option<u8>,
     /// The total number of discs in the album,
     /// stored in 'disk'
-    pub total_disks: Option<u8>,
+    pub total_discs: Option<u8>,
     /// The composer of the track '©wrt'
     pub composer: Option<String>,
     /// The encoder used to create this track '©too'
@@ -545,9 +544,9 @@ pub struct MetadataBox {
     pub advisory: Option<AdvisoryRating>,
     /// The personal rating of this track, 'rate'.
     ///
-    /// This is stored by iTunes as an arbitrary string, and may not
-    /// be properly parseable as a rating out of 5 or some
-    /// other number.
+    /// This is stored in the box as string data, but
+    /// the format is an integer percentage from 0 - 100,
+    /// where 100 is displayed as 5 stars out of 5.
     pub rating: Option<String>,
     /// The grouping this track belongs to '©grp'
     pub grouping: Option<String>,
@@ -2497,7 +2496,7 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
             BoxType::DateEntry => meta.year = read_string_data(&mut b)?,
             BoxType::TitleEntry => meta.title = read_string_data(&mut b)?,
             BoxType::CustomGenreEntry => meta.genre = read_string_data(&mut b)?
-                .map(|s| CustomGenre(s)),
+                .map(|s| Genre::CustomGenre(s)),
             BoxType::ComposerEntry => meta.composer = read_string_data(&mut b)?,
             BoxType::EncoderEntry => meta.encoder = read_string_data(&mut b)?,
             BoxType::CopyrightEntry => meta.copyright = read_string_data(&mut b)?,
@@ -2522,17 +2521,17 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
             },
             BoxType::DiskNumberEntry => {
                 if let Some(disk) = read_u8_data(&mut b)? {
-                    meta.disk_number = disk.get(3).copied();
-                    meta.total_disks = disk.get(5).copied();
+                    meta.disc_number = disk.get(3).copied();
+                    meta.total_discs = disk.get(5).copied();
                 };
             },
             BoxType::TempoEntry => meta.beats_per_minute = read_u8_data(&mut b)?
-                .and_then(|tmpo| tmpo.get(5).copied()),
+                .and_then(|tmpo| tmpo.get(1).copied()),
             BoxType::CompilationEntry => meta.compilation = read_u8_data(&mut b)?
-                .and_then(|cpil| Some(cpil.get(5)? == &1)),
+                .and_then(|cpil| Some(cpil.get(0)? == &1)),
             BoxType::AdvisoryEntry => meta.advisory = read_u8_data(&mut b)?
                 .and_then(|rtng| {
-                    Some(match rtng.get(5)? {
+                    Some(match rtng.get(0)? {
                         2 => AdvisoryRating::Clean,
                         0 => AdvisoryRating::Inoffensive,
                         r => AdvisoryRating::Explicit(*r),
@@ -2540,7 +2539,7 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
                 }),
             BoxType::MediaTypeEntry => meta.media_type = read_u8_data(&mut b)?
                 .and_then(|stik| {
-                    Some(match stik.get(5)? {
+                    Some(match stik.get(0)? {
                         0 => MediaType::Movie,
                         1 => MediaType::Normal,
                         2 => MediaType::AudioBook,
@@ -2553,13 +2552,13 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
                     })
                 }),
             BoxType::PodcastEntry => meta.podcast = read_u8_data(&mut b)?
-                .and_then(|pcst| Some(pcst.get(5)? == &1)),
+                .and_then(|pcst| Some(pcst.get(0)? == &1)),
             BoxType::TVSeasonNumberEntry => meta.tv_season = read_u8_data(&mut b)?
-                .and_then(|tvsn| tvsn.get(7).copied()),
+                .and_then(|tvsn| tvsn.get(3).copied()),
             BoxType::TVEpisodeNumberEntry => meta.tv_episode_number = read_u8_data(&mut b)?
-                .and_then(|tves| tves.get(7).copied()),
+                .and_then(|tves| tves.get(3).copied()),
             BoxType::GaplessPlaybackEntry => meta.gapless_playback = read_u8_data(&mut b)?
-                .and_then(|pgap| Some(pgap.get(5)? == &1)),
+                .and_then(|pgap| Some(pgap.get(0)? == &1)),
             BoxType::CoverArtEntry => meta.cover_art = read_multiple_u8_data(&mut b).ok(),
             _ => skip_box_content(&mut b)?,
 
