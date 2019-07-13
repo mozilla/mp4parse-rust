@@ -365,7 +365,7 @@ pub struct FLACMetadataBlock {
     pub data: Vec<u8>,
 }
 
-/// Represet a FLACSpecificBox 'dfLa'
+/// Represents a FLACSpecificBox 'dfLa'
 #[derive(Debug, Clone)]
 pub struct FLACSpecificBox {
     version: u8,
@@ -440,6 +440,9 @@ pub struct ProtectionSchemeInfoBox {
     pub tenc: Option<TrackEncryptionBox>,
 }
 
+/// Represents a userdata box 'udta'.
+/// Currently, only the metadata atom 'meta'
+/// is parsed.
 #[derive(Debug, Default, Clone)]
 pub struct UserdataBox {
     pub meta: Option<MetadataBox>
@@ -453,24 +456,27 @@ pub enum Genre {
 
 #[derive(Debug, Clone)]
 pub enum MediaType {
-    Movie = 0,
-    Normal = 1,
-    AudioBook = 2,
-    WhackedBookmark = 5,
-    MusicVideo = 6,
-    ShortFilm = 9,
-    TVShow = 10,
-    Booklet = 11,
-    Unknown,
+    Movie, // 0
+    Normal, // 1
+    AudioBook, // 2
+    WhackedBookmark, // 5
+    MusicVideo, // 6
+    ShortFilm, // 9
+    TVShow, // 10
+    Booklet, // 11
+    Unknown(u8),
 }
 
 #[derive(Debug, Clone)]
 pub enum AdvisoryRating {
-    Clean = 2,
-    Inoffensive = 0,
-    Explicit
+    Clean, // 2
+    Inoffensive, // 0
+    Explicit(u8),
 }
 
+/// Represents the contents of 'ilst' atoms within
+/// a metadata box 'meta', parsed as iTunes metadata using
+/// the conventional tags.
 #[derive(Debug, Default, Clone)]
 pub struct MetadataBox {
     pub album: Option<String>,
@@ -488,10 +494,9 @@ pub struct MetadataBox {
     pub encoder: Option<String>,
     pub beats_per_minute: Option<u8>,
     pub copyright: Option<String>,
-    // https://github.com/wez/atomicparsley/blob/618933f235a234385c37b036aaf74b17c3108694/src/metalist.cpp#L453
     pub compilation: Option<bool>,
-    pub advisory: Option<u8>,
-    pub rating: Option<u8>,
+    pub advisory: Option<AdvisoryRating>,
+    pub rating: Option<String>,
     pub grouping: Option<String>,
     pub media_type: Option<MediaType>, // stik
     pub podcast: Option<bool>,
@@ -2429,27 +2434,56 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
             BoxType::TVEpisodeNameEntry => meta.tv_episode_name = read_string_data(&mut b)?,
             BoxType::TVShowNameEntry => meta.tv_show_name = read_string_data(&mut b)?,
             BoxType::PurchaseDateEntry => meta.purchase_date = read_string_data(&mut b)?,
+            BoxType::RatingEntry => meta.rating = read_string_data(&mut b)?,
             BoxType::TrackNumberEntry => {
                 if let Some(trkn) = read_u8_data(&mut b)? {
-                    if let Some(track_number) = trkn.get(3) {
-                        meta.track_number = Some(*track_number);
-                    }
-                    if let Some(total_tracks) = trkn.get(5) {
-                        meta.total_tracks = Some(*total_tracks);
-                    }
+                    meta.track_number = trkn.get(3).copied();
+                    meta.total_tracks = trkn.get(5).copied();
                 };
             },
             BoxType::DiskNumberEntry => {
                 if let Some(disk) = read_u8_data(&mut b)? {
-                    if let Some(disk_number) = disk.get(3) {
-                        meta.disk_number = Some(*disk_number);
-                    }
-                    if let Some(total_disks) = disk.get(5) {
-                        meta.total_disks = Some(*total_disks);
-                    }
+                    meta.disk_number = disk.get(3).copied();
+                    meta.total_disks = disk.get(5).copied();
                 };
             },
+            BoxType::TempoEntry => meta.beats_per_minute = read_u8_data(&mut b)?
+                .and_then(|tmpo| tmpo.get(5).copied()),
+            BoxType::CompilationEntry => meta.compilation = read_u8_data(&mut b)?
+                .and_then(|cpil| Some(cpil.get(5)? == &1)),
+            BoxType::AdvisoryEntry => meta.advisory = read_u8_data(&mut b)?
+                .and_then(|rtng| {
+                    Some(match rtng.get(5)? {
+                        2 => AdvisoryRating::Clean,
+                        0 => AdvisoryRating::Inoffensive,
+                        r => AdvisoryRating::Explicit(*r),
+                    })
+                }),
+            BoxType::MediaTypeEntry => meta.media_type = read_u8_data(&mut b)?
+                .and_then(|stik| {
+                    Some(match stik.get(5)? {
+                        0 => MediaType::Movie,
+                        1 => MediaType::Normal,
+                        2 => MediaType::AudioBook,
+                        5 => MediaType::WhackedBookmark,
+                        6 => MediaType::MusicVideo,
+                        9 => MediaType::ShortFilm,
+                        10 => MediaType::TVShow,
+                        11 => MediaType::Booklet,
+                        s => MediaType::Unknown(*s)
+                    })
+                }),
+            BoxType::PodcastEntry => meta.podcast = read_u8_data(&mut b)?
+                .and_then(|pcst| Some(pcst.get(5)? == &1)),
+            BoxType::TVSeasonNumberEntry => meta.tv_season = read_u8_data(&mut b)?
+                .and_then(|tvsn| tvsn.get(7).copied()),
+            BoxType::TVEpisodeNumberEntry => meta.tv_episode_number = read_u8_data(&mut b)?
+                .and_then(|tves| tves.get(7).copied()),
+            BoxType::GaplessPlaybackEntry => meta.gapless_playback = read_u8_data(&mut b)?
+                .and_then(|pgap| Some(pgap.get(5)? == &1)),
+            BoxType::CoverArtEntry => meta.cover_art = read_multiple_u8_data(&mut b).ok(),
             _ => skip_box_content(&mut b)?,
+
         };
         check_parser_state!(b.content);
     }
@@ -2473,6 +2507,22 @@ fn read_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<Vec<u8>>> {
         match b.head.name {
             BoxType::MetadataItemDataEntry => {
                 data = Some(read_data(&mut b)?);
+            }
+            _ => skip_box_content(&mut b)?,
+        };
+        check_parser_state!(b.content);
+    }
+    Ok(data)
+}
+
+
+fn read_multiple_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<Vec<u8>>> {
+    let mut iter = src.box_iter();
+    let mut data = Vec::new();
+    while let Some(mut b) = iter.next_box()? {
+        match b.head.name {
+            BoxType::MetadataItemDataEntry => {
+                data.push(read_data(&mut b)?);
             }
             _ => skip_box_content(&mut b)?,
         };
