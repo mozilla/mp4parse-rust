@@ -448,29 +448,53 @@ pub struct UserdataBox {
     pub meta: Option<MetadataBox>
 }
 
+/// Represents possible contents of the
+/// ©gen or gnre atoms within a metadata box.
+/// 'udta.meta.ilst' may only have either a
+/// standard genre box 'gnre' or a custom
+/// genre box '©gen', but never both at once.
 #[derive(Debug, Clone)]
 pub enum Genre {
+    /// A standard ID3v1 numbered genre.
     StandardGenre(u8),
+    /// Any custom genre string.
     CustomGenre(String),
 }
 
+/// Represents the contents of a 'stik'
+/// atom that indicates content types within
+/// iTunes.
 #[derive(Debug, Clone)]
 pub enum MediaType {
+    /// Movie is stored as 0 in a 'stik' atom.
     Movie, // 0
+    /// Normal is stored as 1 in a 'stik' atom.
     Normal, // 1
+    /// AudioBook is stored as 2 in a 'stik' atom.
     AudioBook, // 2
+    /// WhackedBookmark is stored as 5 in a 'stik' atom.
     WhackedBookmark, // 5
+    /// MusicVideo is stored as 6 in a 'stik' atom.
     MusicVideo, // 6
+    /// ShortFilm is stored as 9 in a 'stik' atom.
     ShortFilm, // 9
+    /// TVShow is stored as 10 in a 'stik' atom.
     TVShow, // 10
+    /// Booklet is stored as 11 in a 'stik' atom.
     Booklet, // 11
+    /// An unknown 'stik' value.
     Unknown(u8),
 }
 
+/// Represents the parental advisory rating on the track,
+/// stored within the 'rtng' atom.
 #[derive(Debug, Clone)]
 pub enum AdvisoryRating {
+    /// Clean is always stored as 2 in an 'rtng' atom.
     Clean, // 2
+    /// A value of 0 in an 'rtng' atom indicates 'Inoffensive'
     Inoffensive, // 0
+    /// Any non 2 or 0 value in 'rtng' indicates the track is explicit.
     Explicit(u8),
 }
 
@@ -479,43 +503,98 @@ pub enum AdvisoryRating {
 /// the conventional tags.
 #[derive(Debug, Default, Clone)]
 pub struct MetadataBox {
+    /// The album name, '©alb'
     pub album: Option<String>,
+    /// The artist name '©art' or '©ART'
     pub artist: Option<String>,
+    /// The album artist 'aART'
     pub album_artist: Option<String>,
+    /// Track comments '©cmt'
     pub comment: Option<String>,
+    /// The date or year field '©day'
+    ///
+    /// This is stored as an arbitrary string,
+    /// and may not necessarily be in a valid date
+    /// format.
     pub year: Option<String>,
+    /// The track title '©nam'
     pub title: Option<String>,
+    /// The track genre '©gen' or 'gnre'.
     pub genre: Option<Genre>,
+    /// The track number 'trkn'.
     pub track_number: Option<u8>,
+    /// The disc number 'disk'
     pub disk_number: Option<u8>,
+    /// The total number of tracks on the disc,
+    /// stored in 'trkn'
     pub total_tracks: Option<u8>,
+    /// The total number of discs in the album,
+    /// stored in 'disk'
     pub total_disks: Option<u8>,
+    /// The composer of the track '©wrt'
     pub composer: Option<String>,
+    /// The encoder used to create this track '©too'
     pub encoder: Option<String>,
+    /// The tempo or BPM of the track 'tmpo'
     pub beats_per_minute: Option<u8>,
+    /// Copyright information of the track 'cprt'
     pub copyright: Option<String>,
+    /// Whether or not this track is part of a compilation 'cpil'
     pub compilation: Option<bool>,
+    /// The advisory rating of this track 'rtng'
     pub advisory: Option<AdvisoryRating>,
+    /// The personal rating of this track, 'rate'.
+    ///
+    /// This is stored by iTunes as an arbitrary string, and may not
+    /// be properly parseable as a rating out of 5 or some
+    /// other number.
     pub rating: Option<String>,
+    /// The grouping this track belongs to '©grp'
     pub grouping: Option<String>,
+    /// The media type of this track 'stik'
     pub media_type: Option<MediaType>, // stik
+    /// Whether or not this track is a podcast 'pcst'
     pub podcast: Option<bool>,
+    /// The category of ths track 'catg'
     pub category: Option<String>,
+    /// The podcast keyword 'keyw'
     pub keyword: Option<String>,
-    pub podcast_url: Option<String>, // todo: confirm this is string
-    // https://github.com/wez/atomicparsley/blob/618933f235a234385c37b036aaf74b17c3108694/src/metalist.cpp#L443
+    /// The podcast url 'purl'
+    pub podcast_url: Option<String>,
+    /// The podcast episode GUID 'egid'
     pub podcast_guid: Option<String>,
+    /// The description of the track 'desc'
     pub description: Option<String>,
+    /// The long description of the track 'ldes'.
+    ///
+    /// Unlike other string fields, the long description field
+    /// can be longer than 256 characters.
     pub long_description: Option<String>,
+    /// The lyrics of the track '©lyr'.
+    ///
+    /// Unlike other string fields, the lyrics field
+    /// can be longer than 256 characters.
     pub lyrics: Option<String>,
+    /// The name of the TV network this track aired on 'tvnn'.
     pub tv_network_name: Option<String>,
+    /// The name of the TV Show for this track 'tvsh'.
     pub tv_show_name: Option<String>,
+    /// The name of the TV Episode for this track 'tven'.
     pub tv_episode_name: Option<String>,
+    /// The number of the TV Episode for this track 'tves'.
     pub tv_episode_number: Option<u8>,
+    /// The season of the TV Episode of this track 'tvsn'.
     pub tv_season: Option<u8>,
+    /// The date this track was purchased 'purd'.
     pub purchase_date: Option<String>,
+    /// Whether or not this track supports gapless playback 'pgap'
     pub gapless_playback: Option<bool>,
-    pub cover_art: Option<Vec<Vec<u8>>>, // this is currently unimplemented, need to parse covr.
+    /// Any cover artwork attached to this track 'covr'
+    ///
+    /// 'covr' is unique in that it may contain multiple 'data' sub-entries,
+    /// each an image file. Here, each subentry's raw binary data is exposed,
+    /// which may contain image data in JPEG or PNG format.
+    pub cover_art: Option<Vec<Vec<u8>>>,
 }
 
 /// Internal data structures.
