@@ -11,6 +11,8 @@ use std::fs::File;
 
 static MINI_MP4: &'static str = "tests/minimal.mp4";
 static MINI_MP4_WITH_METADATA: &'static str = "tests/metadata.mp4";
+static MINI_MP4_WITH_METADATA_STD_GENRE: &'static str = "tests/metadata_gnre.mp4";
+
 static AUDIO_EME_CENC_MP4: &'static str = "tests/bipbop-cenc-audioinit.mp4";
 static VIDEO_EME_CENC_MP4: &'static str = "tests/bipbop_480wp_1001kbps-cenc-video-key1-init.mp4";
 // The cbcs files were created via shaka-packager from Firefox's test suite's bipbop.mp4 using:
@@ -159,6 +161,7 @@ fn public_metadata() {
     assert_eq!(meta.year.unwrap(), "2019");
     assert_eq!(meta.genre.unwrap(), mp4::Genre::CustomGenre("Custom Genre".to_string()));
     assert_eq!(meta.encoder.unwrap(), "Lavf56.40.101");
+    assert_eq!(meta.encoded_by.unwrap(), "Encoded-by");
     assert_eq!(meta.copyright.unwrap(), "Copyright");
     assert_eq!(meta.track_number.unwrap(), 3);
     assert_eq!(meta.total_tracks.unwrap(), 6);
@@ -183,6 +186,67 @@ fn public_metadata() {
     assert_eq!(meta.tv_episode_number.unwrap(), 15);
     assert_eq!(meta.tv_season.unwrap(), 10);
     assert_eq!(meta.tv_show_name.unwrap(), "Show Name");
+    assert_eq!(meta.hd_video.unwrap(), true);
+    assert_eq!(meta.owner.unwrap(), "Owner");
+    assert_eq!(meta.sort_name.unwrap(), "Sort Name");
+    assert_eq!(meta.sort_album.unwrap(), "Sort Album");
+    assert_eq!(meta.sort_artist.unwrap(), "Sort Artist");
+    assert_eq!(meta.sort_album_artist.unwrap(), "Sort Album Artist");
+    assert_eq!(meta.sort_composer.unwrap(), "Sort Composer");
+    assert_eq!(meta.cover_art.unwrap().len(), 1);
+}
+
+
+#[test]
+fn public_metadata_gnre() {
+    let mut fd = File::open(MINI_MP4_WITH_METADATA_STD_GENRE).expect("Unknown file");
+    let mut buf = Vec::new();
+    fd.read_to_end(&mut buf).expect("File error");
+
+    let mut c = Cursor::new(&buf);
+    let mut context = mp4::MediaContext::new();
+    mp4::read_mp4(&mut c, &mut context).expect("read_mp4 failed");
+    let udta = context.udta.expect("didn't find udta");
+    let meta = udta.meta.expect("didn't find meta");
+    assert_eq!(meta.title.unwrap(), "Title");
+    assert_eq!(meta.artist.unwrap(), "Artist");
+    assert_eq!(meta.album_artist.unwrap(), "Album Artist");
+    assert_eq!(meta.comment.unwrap(), "Comments");
+    assert_eq!(meta.year.unwrap(), "2019");
+    assert_eq!(meta.genre.unwrap(), mp4::Genre::StandardGenre(3));
+    assert_eq!(meta.encoder.unwrap(), "Lavf56.40.101");
+    assert_eq!(meta.encoded_by.unwrap(), "Encoded-by");
+    assert_eq!(meta.copyright.unwrap(), "Copyright");
+    assert_eq!(meta.track_number.unwrap(), 3);
+    assert_eq!(meta.total_tracks.unwrap(), 6);
+    assert_eq!(meta.disc_number.unwrap(), 5);
+    assert_eq!(meta.total_discs.unwrap(), 10);
+    assert_eq!(meta.beats_per_minute.unwrap(), 128);
+    assert_eq!(meta.composer.unwrap(), "Composer");
+    assert_eq!(meta.compilation.unwrap(), true);
+    assert_eq!(meta.gapless_playback.unwrap(), false);
+    assert_eq!(meta.podcast.unwrap(), false);
+    assert_eq!(meta.advisory.unwrap(), mp4::AdvisoryRating::Clean);
+    assert_eq!(meta.media_type.unwrap(), mp4::MediaType::Normal);
+    assert_eq!(meta.rating.unwrap(), "50");
+    assert_eq!(meta.grouping.unwrap(), "Grouping");
+    assert_eq!(meta.category.unwrap(), "Category");
+    assert_eq!(meta.keyword.unwrap(), "Keyword");
+    assert_eq!(meta.description.unwrap(), "Description");
+    assert_eq!(meta.lyrics.unwrap(), "Lyrics");
+    assert_eq!(meta.long_description.unwrap(), "Long Description");
+    assert_eq!(meta.tv_episode_name.unwrap(), "Episode Name");
+    assert_eq!(meta.tv_network_name.unwrap(), "Network Name");
+    assert_eq!(meta.tv_episode_number.unwrap(), 15);
+    assert_eq!(meta.tv_season.unwrap(), 10);
+    assert_eq!(meta.tv_show_name.unwrap(), "Show Name");
+    assert_eq!(meta.hd_video.unwrap(), true);
+    assert_eq!(meta.owner.unwrap(), "Owner");
+    assert_eq!(meta.sort_name.unwrap(), "Sort Name");
+    assert_eq!(meta.sort_album.unwrap(), "Sort Album");
+    assert_eq!(meta.sort_artist.unwrap(), "Sort Artist");
+    assert_eq!(meta.sort_album_artist.unwrap(), "Sort Album Artist");
+    assert_eq!(meta.sort_composer.unwrap(), "Sort Composer");
     assert_eq!(meta.cover_art.unwrap().len(), 1);
 }
 
