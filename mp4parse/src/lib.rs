@@ -534,6 +534,8 @@ pub struct MetadataBox {
     pub composer: Option<String>,
     /// The encoder used to create this track '©too'
     pub encoder: Option<String>,
+    /// The encoded-by settingo this track '©enc'
+    pub encoded_by: Option<String>,
     /// The tempo or BPM of the track 'tmpo'
     pub beats_per_minute: Option<u8>,
     /// Copyright information of the track 'cprt'
@@ -594,6 +596,20 @@ pub struct MetadataBox {
     /// each an image file. Here, each subentry's raw binary data is exposed,
     /// which may contain image data in JPEG or PNG format.
     pub cover_art: Option<Vec<Vec<u8>>>,
+    /// The owner of the track 'ownr'
+    pub owner: Option<String>,
+    /// Whether or not this track is HD Video 'hdvd'
+    pub hd_video: Option<bool>,
+    /// The name of the track to sort by 'sonm'
+    pub sort_name: Option<String>,
+    /// The name of the album to sort by 'soal'
+    pub sort_album: Option<String>,
+    /// The name of the artist to sort by 'soar'
+    pub sort_artist: Option<String>,
+    /// The name of the album artist to sort by 'soaa'
+    pub sort_album_artist: Option<String>,
+    /// The name of the composer to sort by 'soco'
+    pub sort_composer: Option<String>,
 }
 
 /// Internal data structures.
@@ -2497,8 +2513,11 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
             BoxType::TitleEntry => meta.title = read_string_data(&mut b)?,
             BoxType::CustomGenreEntry => meta.genre = read_string_data(&mut b)?
                 .map(|s| Genre::CustomGenre(s)),
+            BoxType::StandardGenreEntry => meta.genre = read_u8_data(&mut b)?
+                .and_then(|gnre| Some(Genre::StandardGenre(gnre.get(1).copied()?))),
             BoxType::ComposerEntry => meta.composer = read_string_data(&mut b)?,
             BoxType::EncoderEntry => meta.encoder = read_string_data(&mut b)?,
+            BoxType::EncodedByEntry => meta.encoded_by = read_string_data(&mut b)?,
             BoxType::CopyrightEntry => meta.copyright = read_string_data(&mut b)?,
             BoxType::GroupingEntry => meta.grouping = read_string_data(&mut b)?,
             BoxType::CategoryEntry => meta.category = read_string_data(&mut b)?,
@@ -2513,6 +2532,13 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
             BoxType::TVShowNameEntry => meta.tv_show_name = read_string_data(&mut b)?,
             BoxType::PurchaseDateEntry => meta.purchase_date = read_string_data(&mut b)?,
             BoxType::RatingEntry => meta.rating = read_string_data(&mut b)?,
+            BoxType::OwnerEntry => meta.owner = read_string_data(&mut b)?,
+            BoxType::HDVideoEntry => meta.hd_video = read_bool_data(&mut b)?,
+            BoxType::SortNameEntry => meta.sort_name = read_string_data(&mut b)?,
+            BoxType::SortArtistEntry => meta.sort_artist = read_string_data(&mut b)?,
+            BoxType::SortAlbumEntry => meta.sort_album = read_string_data(&mut b)?,
+            BoxType::SortAlbumArtistEntry => meta.sort_album_artist = read_string_data(&mut b)?,
+            BoxType::SortComposerEntry => meta.sort_composer = read_string_data(&mut b)?,
             BoxType::TrackNumberEntry => {
                 if let Some(trkn) = read_u8_data(&mut b)? {
                     meta.track_number = trkn.get(3).copied();
@@ -2527,8 +2553,7 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
             },
             BoxType::TempoEntry => meta.beats_per_minute = read_u8_data(&mut b)?
                 .and_then(|tmpo| tmpo.get(1).copied()),
-            BoxType::CompilationEntry => meta.compilation = read_u8_data(&mut b)?
-                .and_then(|cpil| Some(cpil.get(0)? == &1)),
+            BoxType::CompilationEntry => meta.compilation = read_bool_data(&mut b)?,
             BoxType::AdvisoryEntry => meta.advisory = read_u8_data(&mut b)?
                 .and_then(|rtng| {
                     Some(match rtng.get(0)? {
@@ -2551,14 +2576,12 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
                         s => MediaType::Unknown(*s)
                     })
                 }),
-            BoxType::PodcastEntry => meta.podcast = read_u8_data(&mut b)?
-                .and_then(|pcst| Some(pcst.get(0)? == &1)),
+            BoxType::PodcastEntry => meta.podcast = read_bool_data(&mut b)?,
             BoxType::TVSeasonNumberEntry => meta.tv_season = read_u8_data(&mut b)?
                 .and_then(|tvsn| tvsn.get(3).copied()),
             BoxType::TVEpisodeNumberEntry => meta.tv_episode_number = read_u8_data(&mut b)?
                 .and_then(|tves| tves.get(3).copied()),
-            BoxType::GaplessPlaybackEntry => meta.gapless_playback = read_u8_data(&mut b)?
-                .and_then(|pgap| Some(pgap.get(0)? == &1)),
+            BoxType::GaplessPlaybackEntry => meta.gapless_playback = read_bool_data(&mut b)?,
             BoxType::CoverArtEntry => meta.cover_art = read_multiple_u8_data(&mut b).ok(),
             _ => skip_box_content(&mut b)?,
 
@@ -2568,12 +2591,16 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
     Ok(())
 }
 
+fn read_bool_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<bool>> {
+    Ok(read_u8_data(src)?.and_then(|d| Some(d.get(0)? == &1)))
+}
+
 fn read_string_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<String>> {
     read_u8_data(src)?
         .map_or(Ok(None),
                 |d| String::from_utf8(d)
-                                    .map_err(From::from)
-                                    .map(Some)
+                    .map_err(From::from)
+                    .map(Some)
         )
 }
 
