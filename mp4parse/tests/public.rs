@@ -193,7 +193,15 @@ fn public_metadata() {
     assert_eq!(meta.sort_artist.unwrap(), "Sort Artist");
     assert_eq!(meta.sort_album_artist.unwrap(), "Sort Album Artist");
     assert_eq!(meta.sort_composer.unwrap(), "Sort Composer");
-    assert_eq!(meta.cover_art.unwrap().len(), 1);
+
+    // Check for valid JPEG header
+    let covers = meta.cover_art.unwrap();
+    let cover = &covers[0];
+    let mut bytes = [0u8; 4];
+    bytes[0] = cover[0];
+    bytes[1] = cover[1];
+    bytes[2] = cover[2];
+    assert_eq!(u32::from_le_bytes(bytes), 0xffd8ff);
 }
 
 
@@ -247,7 +255,15 @@ fn public_metadata_gnre() {
     assert_eq!(meta.sort_artist.unwrap(), "Sort Artist");
     assert_eq!(meta.sort_album_artist.unwrap(), "Sort Album Artist");
     assert_eq!(meta.sort_composer.unwrap(), "Sort Composer");
-    assert_eq!(meta.cover_art.unwrap().len(), 1);
+
+    // Check for valid JPEG header
+    let covers = meta.cover_art.unwrap();
+    let cover = &covers[0];
+    let mut bytes = [0u8; 4];
+    bytes[0] = cover[0];
+    bytes[1] = cover[1];
+    bytes[2] = cover[2];
+    assert_eq!(u32::from_le_bytes(bytes), 0xffd8ff);
 }
 
 #[test]
