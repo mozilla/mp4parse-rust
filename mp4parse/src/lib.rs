@@ -620,7 +620,7 @@ pub struct MediaContext {
     pub tracks: Vec<Track>,
     pub mvex: Option<MovieExtendsBox>,
     pub psshs: Vec<ProtectionSystemSpecificHeaderBox>,
-    pub userdata: Option<UserdataBox>,
+    pub userdata: Option<Result<UserdataBox>>,
 }
 
 impl MediaContext {
@@ -948,7 +948,7 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: &mut MediaContext) -> Result<
                 vec_push(&mut context.psshs, pssh)?;
             }
             BoxType::UserdataBox => {
-                let udta = read_udta(&mut b)?;
+                let udta = read_udta(&mut b);
                 debug!("{:?}", udta);
                 context.userdata = Some(udta);
             }
