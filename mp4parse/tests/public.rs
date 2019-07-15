@@ -205,7 +205,6 @@ fn public_metadata() {
     assert_eq!(u32::from_le_bytes(bytes), 0xffd8ff);
 }
 
-
 #[test]
 fn public_metadata_gnre() {
     let mut fd = File::open(MINI_MP4_WITH_METADATA_STD_GENRE).expect("Unknown file");

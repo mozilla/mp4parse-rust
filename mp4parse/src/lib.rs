@@ -2465,7 +2465,7 @@ fn read_schm<T: Read>(src: &mut BMFFBox<T>) -> Result<SchemeTypeBox> {
     })
 }
 
-//Parse a metadata box inside a moov, trak, or mdia box.
+/// Parse a metadata box inside a moov, trak, or mdia box.
 fn read_udta<T: Read>(src: &mut BMFFBox<T>) -> Result<UserdataBox> {
     let mut iter = src.box_iter();
     let mut udta = UserdataBox { meta: None };
@@ -2497,7 +2497,6 @@ fn read_meta<T: Read>(src: &mut BMFFBox<T>) -> Result<MetadataBox> {
     }
     Ok(meta)
 }
-
 
 /// Parse a metadata box inside a udta box
 fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()> {
@@ -2627,7 +2626,7 @@ fn read_ilst_multiple_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<Vec<u
 fn read_ilst_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<u8>> {
     // Skip past the padding bytes
     skip(&mut src.content, src.head.offset as usize)?;
-    let size =  src.content.limit() as usize;
+    let size = src.content.limit() as usize;
     read_buf(&mut src.content, size)
 }
 
