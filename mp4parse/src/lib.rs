@@ -2504,57 +2504,57 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
-            BoxType::AlbumEntry => meta.album = read_string_data(&mut b)?,
+            BoxType::AlbumEntry => meta.album = read_ilst_string_data(&mut b)?,
             BoxType::ArtistEntry | BoxType::ArtistLowercaseEntry =>
-                meta.artist = read_string_data(&mut b)?,
-            BoxType::AlbumArtistEntry => meta.album_artist = read_string_data(&mut b)?,
-            BoxType::CommentEntry => meta.comment = read_string_data(&mut b)?,
-            BoxType::DateEntry => meta.year = read_string_data(&mut b)?,
-            BoxType::TitleEntry => meta.title = read_string_data(&mut b)?,
-            BoxType::CustomGenreEntry => meta.genre = read_string_data(&mut b)?
+                meta.artist = read_ilst_string_data(&mut b)?,
+            BoxType::AlbumArtistEntry => meta.album_artist = read_ilst_string_data(&mut b)?,
+            BoxType::CommentEntry => meta.comment = read_ilst_string_data(&mut b)?,
+            BoxType::DateEntry => meta.year = read_ilst_string_data(&mut b)?,
+            BoxType::TitleEntry => meta.title = read_ilst_string_data(&mut b)?,
+            BoxType::CustomGenreEntry => meta.genre = read_ilst_string_data(&mut b)?
                 .map(|s| Genre::CustomGenre(s)),
-            BoxType::StandardGenreEntry => meta.genre = read_u8_data(&mut b)?
+            BoxType::StandardGenreEntry => meta.genre = read_ilst_u8_data(&mut b)?
                 .and_then(|gnre| Some(Genre::StandardGenre(gnre.get(1).copied()?))),
-            BoxType::ComposerEntry => meta.composer = read_string_data(&mut b)?,
-            BoxType::EncoderEntry => meta.encoder = read_string_data(&mut b)?,
-            BoxType::EncodedByEntry => meta.encoded_by = read_string_data(&mut b)?,
-            BoxType::CopyrightEntry => meta.copyright = read_string_data(&mut b)?,
-            BoxType::GroupingEntry => meta.grouping = read_string_data(&mut b)?,
-            BoxType::CategoryEntry => meta.category = read_string_data(&mut b)?,
-            BoxType::KeywordEntry => meta.keyword = read_string_data(&mut b)?,
-            BoxType::PodcastUrlEntry => meta.podcast_url = read_string_data(&mut b)?,
-            BoxType::PodcastGuidEntry => meta.podcast_guid = read_string_data(&mut b)?,
-            BoxType::DescriptionEntry => meta.description = read_string_data(&mut b)?,
-            BoxType::LongDescriptionEntry => meta.long_description = read_string_data(&mut b)?,
-            BoxType::LyricsEntry => meta.lyrics = read_string_data(&mut b)?,
-            BoxType::TVNetworkNameEntry => meta.tv_network_name = read_string_data(&mut b)?,
-            BoxType::TVEpisodeNameEntry => meta.tv_episode_name = read_string_data(&mut b)?,
-            BoxType::TVShowNameEntry => meta.tv_show_name = read_string_data(&mut b)?,
-            BoxType::PurchaseDateEntry => meta.purchase_date = read_string_data(&mut b)?,
-            BoxType::RatingEntry => meta.rating = read_string_data(&mut b)?,
-            BoxType::OwnerEntry => meta.owner = read_string_data(&mut b)?,
-            BoxType::HDVideoEntry => meta.hd_video = read_bool_data(&mut b)?,
-            BoxType::SortNameEntry => meta.sort_name = read_string_data(&mut b)?,
-            BoxType::SortArtistEntry => meta.sort_artist = read_string_data(&mut b)?,
-            BoxType::SortAlbumEntry => meta.sort_album = read_string_data(&mut b)?,
-            BoxType::SortAlbumArtistEntry => meta.sort_album_artist = read_string_data(&mut b)?,
-            BoxType::SortComposerEntry => meta.sort_composer = read_string_data(&mut b)?,
+            BoxType::ComposerEntry => meta.composer = read_ilst_string_data(&mut b)?,
+            BoxType::EncoderEntry => meta.encoder = read_ilst_string_data(&mut b)?,
+            BoxType::EncodedByEntry => meta.encoded_by = read_ilst_string_data(&mut b)?,
+            BoxType::CopyrightEntry => meta.copyright = read_ilst_string_data(&mut b)?,
+            BoxType::GroupingEntry => meta.grouping = read_ilst_string_data(&mut b)?,
+            BoxType::CategoryEntry => meta.category = read_ilst_string_data(&mut b)?,
+            BoxType::KeywordEntry => meta.keyword = read_ilst_string_data(&mut b)?,
+            BoxType::PodcastUrlEntry => meta.podcast_url = read_ilst_string_data(&mut b)?,
+            BoxType::PodcastGuidEntry => meta.podcast_guid = read_ilst_string_data(&mut b)?,
+            BoxType::DescriptionEntry => meta.description = read_ilst_string_data(&mut b)?,
+            BoxType::LongDescriptionEntry => meta.long_description = read_ilst_string_data(&mut b)?,
+            BoxType::LyricsEntry => meta.lyrics = read_ilst_string_data(&mut b)?,
+            BoxType::TVNetworkNameEntry => meta.tv_network_name = read_ilst_string_data(&mut b)?,
+            BoxType::TVEpisodeNameEntry => meta.tv_episode_name = read_ilst_string_data(&mut b)?,
+            BoxType::TVShowNameEntry => meta.tv_show_name = read_ilst_string_data(&mut b)?,
+            BoxType::PurchaseDateEntry => meta.purchase_date = read_ilst_string_data(&mut b)?,
+            BoxType::RatingEntry => meta.rating = read_ilst_string_data(&mut b)?,
+            BoxType::OwnerEntry => meta.owner = read_ilst_string_data(&mut b)?,
+            BoxType::HDVideoEntry => meta.hd_video = read_ilst_bool_data(&mut b)?,
+            BoxType::SortNameEntry => meta.sort_name = read_ilst_string_data(&mut b)?,
+            BoxType::SortArtistEntry => meta.sort_artist = read_ilst_string_data(&mut b)?,
+            BoxType::SortAlbumEntry => meta.sort_album = read_ilst_string_data(&mut b)?,
+            BoxType::SortAlbumArtistEntry => meta.sort_album_artist = read_ilst_string_data(&mut b)?,
+            BoxType::SortComposerEntry => meta.sort_composer = read_ilst_string_data(&mut b)?,
             BoxType::TrackNumberEntry => {
-                if let Some(trkn) = read_u8_data(&mut b)? {
+                if let Some(trkn) = read_ilst_u8_data(&mut b)? {
                     meta.track_number = trkn.get(3).copied();
                     meta.total_tracks = trkn.get(5).copied();
                 };
             },
             BoxType::DiskNumberEntry => {
-                if let Some(disk) = read_u8_data(&mut b)? {
+                if let Some(disk) = read_ilst_u8_data(&mut b)? {
                     meta.disc_number = disk.get(3).copied();
                     meta.total_discs = disk.get(5).copied();
                 };
             },
-            BoxType::TempoEntry => meta.beats_per_minute = read_u8_data(&mut b)?
+            BoxType::TempoEntry => meta.beats_per_minute = read_ilst_u8_data(&mut b)?
                 .and_then(|tmpo| tmpo.get(1).copied()),
-            BoxType::CompilationEntry => meta.compilation = read_bool_data(&mut b)?,
-            BoxType::AdvisoryEntry => meta.advisory = read_u8_data(&mut b)?
+            BoxType::CompilationEntry => meta.compilation = read_ilst_bool_data(&mut b)?,
+            BoxType::AdvisoryEntry => meta.advisory = read_ilst_u8_data(&mut b)?
                 .and_then(|rtng| {
                     Some(match rtng.get(0)? {
                         2 => AdvisoryRating::Clean,
@@ -2562,7 +2562,7 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
                         r => AdvisoryRating::Explicit(*r),
                     })
                 }),
-            BoxType::MediaTypeEntry => meta.media_type = read_u8_data(&mut b)?
+            BoxType::MediaTypeEntry => meta.media_type = read_ilst_u8_data(&mut b)?
                 .and_then(|stik| {
                     Some(match stik.get(0)? {
                         0 => MediaType::Movie,
@@ -2576,13 +2576,13 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
                         s => MediaType::Unknown(*s)
                     })
                 }),
-            BoxType::PodcastEntry => meta.podcast = read_bool_data(&mut b)?,
-            BoxType::TVSeasonNumberEntry => meta.tv_season = read_u8_data(&mut b)?
+            BoxType::PodcastEntry => meta.podcast = read_ilst_bool_data(&mut b)?,
+            BoxType::TVSeasonNumberEntry => meta.tv_season = read_ilst_u8_data(&mut b)?
                 .and_then(|tvsn| tvsn.get(3).copied()),
-            BoxType::TVEpisodeNumberEntry => meta.tv_episode_number = read_u8_data(&mut b)?
+            BoxType::TVEpisodeNumberEntry => meta.tv_episode_number = read_ilst_u8_data(&mut b)?
                 .and_then(|tves| tves.get(3).copied()),
-            BoxType::GaplessPlaybackEntry => meta.gapless_playback = read_bool_data(&mut b)?,
-            BoxType::CoverArtEntry => meta.cover_art = read_multiple_u8_data(&mut b).ok(),
+            BoxType::GaplessPlaybackEntry => meta.gapless_playback = read_ilst_bool_data(&mut b)?,
+            BoxType::CoverArtEntry => meta.cover_art = read_ilst_multiple_u8_data(&mut b).ok(),
             _ => skip_box_content(&mut b)?,
 
         };
@@ -2591,12 +2591,12 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
     Ok(())
 }
 
-fn read_bool_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<bool>> {
-    Ok(read_u8_data(src)?.and_then(|d| Some(d.get(0)? == &1)))
+fn read_ilst_bool_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<bool>> {
+    Ok(read_ilst_u8_data(src)?.and_then(|d| Some(d.get(0)? == &1)))
 }
 
-fn read_string_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<String>> {
-    read_u8_data(src)?
+fn read_ilst_string_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<String>> {
+    read_ilst_u8_data(src)?
         .map_or(Ok(None),
                 |d| String::from_utf8(d)
                     .map_err(From::from)
@@ -2604,30 +2604,18 @@ fn read_string_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<String>> {
         )
 }
 
-
-fn read_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<Vec<u8>>> {
-    let mut iter = src.box_iter();
-    let mut data = None;
-    while let Some(mut b) = iter.next_box()? {
-        match b.head.name {
-            BoxType::MetadataItemDataEntry => {
-                data = Some(read_data(&mut b)?);
-            }
-            _ => skip_box_content(&mut b)?,
-        };
-        check_parser_state!(b.content);
-    }
-    Ok(data)
+fn read_ilst_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<Vec<u8>>> {
+    // For all non-covr atoms, there must only be one data atom.
+    Ok(read_ilst_multiple_u8_data(src)?.pop())
 }
 
-
-fn read_multiple_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<Vec<u8>>> {
+fn read_ilst_multiple_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<Vec<u8>>> {
     let mut iter = src.box_iter();
     let mut data = Vec::new();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::MetadataItemDataEntry => {
-                data.push(read_data(&mut b)?);
+                data.push(read_ilst_data(&mut b)?);
             }
             _ => skip_box_content(&mut b)?,
         };
@@ -2636,7 +2624,7 @@ fn read_multiple_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<Vec<u8>>> 
     Ok(data)
 }
 
-fn read_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<u8>> {
+fn read_ilst_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<u8>> {
     // Skip past the padding bytes
     skip(&mut src.content, src.head.offset as usize)?;
     let size =  src.content.limit() as usize;
