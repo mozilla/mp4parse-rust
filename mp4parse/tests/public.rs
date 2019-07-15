@@ -152,7 +152,8 @@ fn public_metadata() {
     let mut c = Cursor::new(&buf);
     let mut context = mp4::MediaContext::new();
     mp4::read_mp4(&mut c, &mut context).expect("read_mp4 failed");
-    let udta = context.userdata.expect("didn't find udta");
+    let udta = context.userdata.expect("didn't find udta")
+        .expect("failed to parse udta");
     let meta = udta.meta.expect("didn't find meta");
     assert_eq!(meta.title.unwrap(), "Title");
     assert_eq!(meta.artist.unwrap(), "Artist");
@@ -214,7 +215,8 @@ fn public_metadata_gnre() {
     let mut c = Cursor::new(&buf);
     let mut context = mp4::MediaContext::new();
     mp4::read_mp4(&mut c, &mut context).expect("read_mp4 failed");
-    let udta = context.userdata.expect("didn't find udta");
+    let udta = context.userdata.expect("didn't find udta")
+        .expect("failed to parse udta");
     let meta = udta.meta.expect("didn't find meta");
     assert_eq!(meta.title.unwrap(), "Title");
     assert_eq!(meta.artist.unwrap(), "Artist");
