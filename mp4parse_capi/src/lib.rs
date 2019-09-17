@@ -137,11 +137,26 @@ pub struct Mp4parseTrackInfo {
 #[repr(C)]
 #[derive(Default, Debug, PartialEq)]
 pub struct Mp4parseIndice {
+    /// The byte offset in the file where the indexed sample begins.
     pub start_offset: u64,
+    /// The byte offset in the file where the indexed sample ends. This is
+    /// equivalent to `start_offset` + the length in bytes of the indexed
+    /// sample. Typically this will be the `start_offset` of the next sample
+    /// in the file.
     pub end_offset: u64,
+    /// The time in microseconds when the indexed sample should be displayed.
+    /// Analogous to the concept of presentation time stamp (pts).
     pub start_composition: i64,
+    /// The time in microseconds when the indexed sample should stop being
+    /// displayed. Typically this would be the `start_composition` time of the
+    /// next sample if samples were ordered by composition time.
     pub end_composition: i64,
+    /// The time in microseconds that the indexed sample should be decoded at.
+    /// Analogous to the concept of decode time stamp (dts).
     pub start_decode: i64,
+    /// Set if the indexed sample is a sync sample. The meaning of sync is
+    /// somewhat codec specific, but essentially amounts to if the sample is a
+    /// key frame.
     pub sync: bool,
 }
 
