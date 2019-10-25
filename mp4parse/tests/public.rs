@@ -71,7 +71,7 @@ fn public_api() {
                     mp4::VideoCodecSpecific::VPxConfig(ref vpx) => {
                         // We don't enter in here, we just check if fields are public.
                         assert!(vpx.bit_depth > 0);
-                        assert!(vpx.color_space > 0);
+                        assert!(vpx.colour_primaries > 0);
                         assert!(vpx.chroma_subsampling > 0);
                         assert!(!vpx.codec_init.is_empty());
                         "VPx"
