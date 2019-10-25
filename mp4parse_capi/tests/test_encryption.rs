@@ -12,6 +12,7 @@ extern fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_voi
 }
 
 #[test]
+#[allow(clippy::cognitive_complexity)] // TODO: Consider simplifying this
 fn parse_cenc() {
     let mut file = std::fs::File::open("tests/short-cenc.mp4").expect("Unknown file");
     let io = Mp4parseIo {
@@ -57,7 +58,7 @@ fn parse_cenc() {
         let expected_kid = [0x7e, 0x57, 0x1d, 0x01, 0x7e, 0x57, 0x1d, 0x01,
                             0x7e, 0x57, 0x1d, 0x01, 0x7e, 0x57, 0x1d, 0x01];
         for (i, expected_byte) in expected_kid.iter().enumerate() {
-            assert_eq!(&(*protected_data.kid.data.offset(i as isize)), expected_byte);
+            assert_eq!(&(*protected_data.kid.data.add(i)), expected_byte);
         }
         assert_eq!(protected_data.crypt_byte_block, 0);
         assert_eq!(protected_data.skip_byte_block, 0);
@@ -79,7 +80,7 @@ fn parse_cenc() {
         let expected_kid = [0x7e, 0x57, 0x1d, 0x02, 0x7e, 0x57, 0x1d, 0x02,
                             0x7e, 0x57, 0x1d, 0x02, 0x7e, 0x57, 0x1d, 0x02];
         for (i, expected_byte) in expected_kid.iter().enumerate() {
-            assert_eq!(&(*protected_data.kid.data.offset(i as isize)), expected_byte);
+            assert_eq!(&(*protected_data.kid.data.add(i)), expected_byte);
         }
         assert_eq!(protected_data.crypt_byte_block, 0);
         assert_eq!(protected_data.skip_byte_block, 0);
@@ -127,7 +128,7 @@ fn parse_cbcs() {
         let expected_kid = [0x7e, 0x57, 0x1d, 0x04, 0x7e, 0x57, 0x1d, 0x04,
                             0x7e, 0x57, 0x1d, 0x04, 0x7e, 0x57, 0x1d, 0x21];
         for (i, expected_byte) in expected_kid.iter().enumerate() {
-            assert_eq!(&(*protected_data.kid.data.offset(i as isize)), expected_byte);
+            assert_eq!(&(*protected_data.kid.data.add(i)), expected_byte);
         }
         assert_eq!(protected_data.crypt_byte_block, 1);
         assert_eq!(protected_data.skip_byte_block, 9);
@@ -135,7 +136,7 @@ fn parse_cbcs() {
         let expected_iv = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
                            0x99, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66];
         for (i, expected_byte) in expected_iv.iter().enumerate() {
-            assert_eq!(&(*protected_data.constant_iv.data.offset(i as isize)), expected_byte);
+            assert_eq!(&(*protected_data.constant_iv.data.add(i)), expected_byte);
         }
     }
 }
