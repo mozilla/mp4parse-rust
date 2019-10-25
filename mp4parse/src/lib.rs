@@ -329,18 +329,32 @@ pub struct VideoSampleEntry {
     pub protection_info: Vec<ProtectionSchemeInfoBox>,
 }
 
-/// Represent a Video Partition Codec Configuration 'vpcC' box (aka vp9).
+/// Represent a Video Partition Codec Configuration 'vpcC' box (aka vp9). The meaning of each
+/// field is covered in detail in "VP Codec ISO Media File Format Binding".
 #[derive(Debug, Clone)]
 pub struct VPxConfigBox {
+    /// An integer that specifies the VP codec profile.
     profile: u8,
+    /// An integer that specifies a VP codec level all samples conform to the following table.
+    /// For a description of the various levels, please refer to the VP9 Bitstream Specification.
     level: u8,
+    /// An integer that specifies the bit depth of the luma and color components. Valid values
+    /// are 8, 10, and 12.
     pub bit_depth: u8,
-    pub color_space: u8, // Really an enum
+    /// Really an enum defined by the "Colour primaries" section of ISO/IEC 23001-8:2016.
+    pub colour_primaries: u8,
+    /// Really an enum defined by "VP Codec ISO Media File Format Binding".
     pub chroma_subsampling: u8,
-    transfer_function: u8,
-    matrix: Option<u8>, // Available in 'VP Codec ISO Media File Format' version 1 only.
-    video_full_range: bool,
-    pub codec_init: Vec<u8>, // Empty for vp8/vp9.
+    /// Really an enum defined by the "Transfer characteristics" section of ISO/IEC 23001-8:2016.
+    transfer_characteristics: u8,
+    /// Really an enum defined by the "Matrix coefficients" section of ISO/IEC 23001-8:2016.
+    /// Available in 'VP Codec ISO Media File Format' version 1 only.
+    matrix_coefficients: Option<u8>,
+    /// Indicates the black level and range of the luma and chroma signals. 0 = legal range
+    /// (e.g. 16-235 for 8 bit sample depth); 1 = full range (e.g. 0-255 for 8-bit sample depth).
+    video_full_range_flag: bool,
+    /// This is not used for VP8 and VP9 . Intended for binary codec initialization data.
+    pub codec_init: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -1528,28 +1542,49 @@ fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
 
     let profile = src.read_u8()?;
     let level = src.read_u8()?;
-    let (bit_depth, color_space, chroma_subsampling, transfer_function, matrix, video_full_range) =
-        if version == 0 {
-            let (bit_depth, color_space) = {
-                let byte = src.read_u8()?;
-                ((byte >> 4) & 0x0f, byte & 0x0f)
-            };
-            let (chroma_subsampling, transfer_function, video_full_range) = {
-                let byte = src.read_u8()?;
-                ((byte >> 4) & 0x0f, (byte >> 1) & 0x07, (byte & 1) == 1)
-            };
-            (bit_depth, color_space, chroma_subsampling, transfer_function, None, video_full_range)
-        } else {
-            let (bit_depth, chroma_subsampling, video_full_range) = {
-                let byte = src.read_u8()?;
-                ((byte >> 4) & 0x0f, (byte >> 1) & 0x07, (byte & 1) == 1)
-            };
-            let color_space = src.read_u8()?;
-            let transfer_function = src.read_u8()?;
-            let matrix = src.read_u8()?;
-
-            (bit_depth, color_space, chroma_subsampling, transfer_function, Some(matrix), video_full_range)
+    let (
+        bit_depth,
+        colour_primaries,
+        chroma_subsampling,
+        transfer_characteristics,
+        matrix_coefficients,
+        video_full_range_flag
+    ) = if version == 0 {
+        let (bit_depth, colour_primaries) = {
+            let byte = src.read_u8()?;
+            ((byte >> 4) & 0x0f, byte & 0x0f)
         };
+        // Note, transfer_characteristics was known as transfer_function in v0
+        let (chroma_subsampling, transfer_characteristics, video_full_range_flag) = {
+            let byte = src.read_u8()?;
+            ((byte >> 4) & 0x0f, (byte >> 1) & 0x07, (byte & 1) == 1)
+        };
+        (
+            bit_depth,
+            colour_primaries,
+            chroma_subsampling,
+            transfer_characteristics,
+            None,
+            video_full_range_flag
+        )
+    } else {
+        let (bit_depth, chroma_subsampling, video_full_range_flag) = {
+            let byte = src.read_u8()?;
+            ((byte >> 4) & 0x0f, (byte >> 1) & 0x07, (byte & 1) == 1)
+        };
+        let colour_primaries = src.read_u8()?;
+        let transfer_characteristics = src.read_u8()?;
+        let matrix_coefficients = src.read_u8()?;
+
+        (
+            bit_depth,
+            colour_primaries,
+            chroma_subsampling,
+            transfer_characteristics,
+            Some(matrix_coefficients),
+            video_full_range_flag
+        )
+    };
 
     let codec_init_size = be_u16(src)?;
     let codec_init = read_buf(src, codec_init_size as usize)?;
@@ -1559,11 +1594,11 @@ fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
         profile: profile,
         level: level,
         bit_depth: bit_depth,
-        color_space: color_space,
+        colour_primaries: colour_primaries,
         chroma_subsampling: chroma_subsampling,
-        transfer_function: transfer_function,
-        matrix: matrix,
-        video_full_range: video_full_range,
+        transfer_characteristics: transfer_characteristics,
+        matrix_coefficients: matrix_coefficients,
+        video_full_range_flag: video_full_range_flag,
         codec_init: codec_init,
     })
 }
