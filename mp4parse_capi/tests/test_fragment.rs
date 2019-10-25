@@ -58,7 +58,7 @@ fn parse_fragment() {
         let mut fragment_info = Mp4parseFragmentInfo::default();
         rv = mp4parse_get_fragment_info(parser, &mut fragment_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(fragment_info.fragment_duration, 10032000);
+        assert_eq!(fragment_info.fragment_duration, 10_032_000);
 
         mp4parse_free(parser);
     }

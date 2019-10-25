@@ -46,8 +46,8 @@ fn parse_sample_table() {
         assert_eq!(rv, Mp4parseStatus::Ok);
 
         // Compare the value from stagefright.
-        let audio_indice_0 =  Mp4parseIndice { start_offset: 27046, end_offset: 27052, start_composition: 0, end_composition: 46439, start_decode: 0, sync: true };
-        let audio_indice_215 =  Mp4parseIndice { start_offset: 283550, end_offset: 283556, start_composition: 9984580, end_composition: 10031020, start_decode: 9984580, sync: true };
+        let audio_indice_0 =  Mp4parseIndice { start_offset: 27_046, end_offset: 27_052, start_composition: 0, end_composition: 46_439, start_decode: 0, sync: true };
+        let audio_indice_215 =  Mp4parseIndice { start_offset: 283_550, end_offset: 283_556, start_composition: 9_984_580, end_composition: 10_031_020, start_decode: 9_984_580, sync: true };
         assert_eq!(indice.length, 216);
         assert_eq!(*indice.indices.offset(0), audio_indice_0);
         assert_eq!(*indice.indices.offset(215), audio_indice_215);
@@ -67,14 +67,14 @@ fn parse_sample_table() {
         assert_eq!(rv, Mp4parseStatus::Ok);
 
         // Compare the last few data from stagefright.
-        let video_indice_291 = Mp4parseIndice { start_offset: 280226, end_offset: 280855, start_composition: 9838333, end_composition: 9871677, start_decode: 9710000, sync: false };
-        let video_indice_292 = Mp4parseIndice { start_offset: 280855, end_offset: 281297, start_composition: 9805011, end_composition: 9838333, start_decode: 9710011, sync: false };
+        let video_indice_291 = Mp4parseIndice { start_offset: 280_226, end_offset: 280_855, start_composition: 9_838_333, end_composition: 9_871_677, start_decode: 9_710_000, sync: false };
+        let video_indice_292 = Mp4parseIndice { start_offset: 280_855, end_offset: 281_297, start_composition: 9_805_011, end_composition: 9_838_333, start_decode: 9_710_011, sync: false };
         // TODO: start_composition time in stagefright is 9905000, but it is 9904999 in parser, it
         //       could be rounding error.
-        //let video_indice_293 = Mp4parseIndice { start_offset: 281297, end_offset: 281919, start_composition: 9905000, end_composition: 9938344, start_decode: 9776666, sync: false };
-        //let video_indice_294 = Mp4parseIndice { start_offset: 281919, end_offset: 282391, start_composition: 9871677, end_composition: 9905000, start_decode: 9776677, sync: false };
-        let video_indice_295 = Mp4parseIndice { start_offset: 282391, end_offset: 283032, start_composition: 9971666, end_composition: 9971677, start_decode: 9843333, sync: false };
-        let video_indice_296 = Mp4parseIndice { start_offset: 283092, end_offset: 283526, start_composition: 9938344, end_composition: 9971666, start_decode: 9843344, sync: false };
+        //let video_indice_293 = Mp4parseIndice { start_offset: 281_297, end_offset: 281_919, start_composition: 9_905_000, end_composition: 9_938_344, start_decode: 9_776_666, sync: false };
+        //let video_indice_294 = Mp4parseIndice { start_offset: 281_919, end_offset: 282_391, start_composition: 9_871_677, end_composition: 9_905_000, start_decode: 9_776_677, sync: false };
+        let video_indice_295 = Mp4parseIndice { start_offset: 282_391, end_offset: 283_032, start_composition: 9_971_666, end_composition: 9_971_677, start_decode: 9_843_333, sync: false };
+        let video_indice_296 = Mp4parseIndice { start_offset: 283_092, end_offset: 283_526, start_composition: 9_938_344, end_composition: 9_971_666, start_decode: 9_843_344, sync: false };
 
         assert_eq!(indice.length, 297);
         assert_eq!(*indice.indices.offset(291), video_indice_291);
@@ -171,10 +171,10 @@ fn parse_sample_table_with_negative_ctts() {
         assert_eq!(rv, Mp4parseStatus::Ok);
 
         // There are negative value in 'ctts' table.
-        let video_indice_0 = Mp4parseIndice { start_offset: 48, end_offset: 890, start_composition: 0, end_composition: 33333, start_decode: 0, sync: true };
-        let video_indice_1 = Mp4parseIndice { start_offset: 890, end_offset: 913, start_composition: 133333, end_composition: 166666, start_decode: 33333, sync: false };
-        let video_indice_2 = Mp4parseIndice { start_offset: 913, end_offset: 934, start_composition: 66666, end_composition: 100000, start_decode: 66666, sync: false };
-        let video_indice_3 = Mp4parseIndice { start_offset: 934, end_offset: 955, start_composition: 33333, end_composition: 66666, start_decode: 100000, sync: false };
+        let video_indice_0 = Mp4parseIndice { start_offset: 48, end_offset: 890, start_composition: 0, end_composition: 33_333, start_decode: 0, sync: true };
+        let video_indice_1 = Mp4parseIndice { start_offset: 890, end_offset: 913, start_composition: 133_333, end_composition: 166_666, start_decode: 33_333, sync: false };
+        let video_indice_2 = Mp4parseIndice { start_offset: 913, end_offset: 934, start_composition: 66_666, end_composition: 100_000, start_decode: 66_666, sync: false };
+        let video_indice_3 = Mp4parseIndice { start_offset: 934, end_offset: 955, start_composition: 33_333, end_composition: 66_666, start_decode: 100_000, sync: false };
         assert_eq!(indice.length, 300);
         assert_eq!(*indice.indices.offset(0), video_indice_0);
         assert_eq!(*indice.indices.offset(1), video_indice_1);
