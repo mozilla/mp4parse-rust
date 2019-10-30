@@ -13,6 +13,11 @@ env:
     - RELEASE=
     - RELEASE=--release
 
+# Make sure clippy is installed, if it fails on nightly fall back to installing from repo.
+before_script:
+   - rustup component add clippy || cargo install --git https://github.com/rust-lang/rust-clippy/ --force clippy
+
 script:
+  - cargo clippy --all --all-targets $RELEASE -- -D warnings
   - cargo test --all --verbose $RELEASE
   - cargo doc --package mp4parse_capi
