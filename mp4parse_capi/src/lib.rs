@@ -355,6 +355,14 @@ impl Read for Mp4parseIo {
 // C API wrapper functions.
 
 /// Allocate an `Mp4parseParser*` to read from the supplied `Mp4parseIo`.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences the io pointer given to it.
+/// The caller should ensure that the `Mp4ParseIo` struct passed in is a valid
+/// pointer. The caller should also ensure the members of io are valid: the
+/// `read` function should be sanely implemented, and the `userdata` pointer
+/// should be valid.
 #[no_mangle]
 pub unsafe extern fn mp4parse_new(io: *const Mp4parseIo) -> *mut Mp4parseParser {
     if io.is_null() || (*io).userdata.is_null() {
@@ -378,6 +386,12 @@ pub unsafe extern fn mp4parse_new(io: *const Mp4parseIo) -> *mut Mp4parseParser 
 }
 
 /// Free an `Mp4parseParser*` allocated by `mp4parse_new()`.
+///
+/// # Safety
+///
+/// This function is unsafe because it creates a box from a raw pointer.
+/// Callers should ensure that the parser pointer points to a valid
+/// `Mp4parseParser` created by `mp4parse_new`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_free(parser: *mut Mp4parseParser) {
     assert!(!parser.is_null());
@@ -385,6 +399,12 @@ pub unsafe extern fn mp4parse_free(parser: *mut Mp4parseParser) {
 }
 
 /// Run the `Mp4parseParser*` allocated by `mp4parse_new()` until EOF or error.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences the raw parser pointer
+/// passed to it. Callers should ensure that the parser pointer points to a
+/// valid `Mp4parseParser`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_read(parser: *mut Mp4parseParser) -> Mp4parseStatus {
     // Validate arguments from C.
@@ -418,6 +438,13 @@ pub unsafe extern fn mp4parse_read(parser: *mut Mp4parseParser) -> Mp4parseStatu
 }
 
 /// Return the number of tracks parsed by previous `mp4parse_read()` call.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences both the parser and count
+/// raw pointers passed into it. Callers should ensure the parser pointer
+/// points to a valid `Mp4parseParser`, and that the count pointer points an
+/// appropriate memory location to have a `u32` written to.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_count(parser: *const Mp4parseParser, count: *mut u32) -> Mp4parseStatus {
     // Validate arguments from C.
@@ -472,6 +499,13 @@ fn track_time_to_us<T>(time: TrackScaledTime<T>, scale: TrackTimeScale<T>) -> Op
 }
 
 /// Fill the supplied `Mp4parseTrackInfo` with metadata for `track`.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences the the parser and info raw
+/// pointers passed to it. Callers should ensure the parser pointer points to a
+/// valid `Mp4parseParser` and that the info pointer points to a valid
+/// `Mp4parseTrackInfo`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_info(parser: *mut Mp4parseParser, track_index: u32, info: *mut Mp4parseTrackInfo) -> Mp4parseStatus {
     if parser.is_null() || info.is_null() || (*parser).poisoned() {
@@ -537,6 +571,13 @@ pub unsafe extern fn mp4parse_get_track_info(parser: *mut Mp4parseParser, track_
 }
 
 /// Fill the supplied `Mp4parseTrackAudioInfo` with metadata for `track`.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences the the parser and info raw
+/// pointers passed to it. Callers should ensure the parser pointer points to a
+/// valid `Mp4parseParser` and that the info pointer points to a valid
+/// `Mp4parseTrackAudioInfo`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut Mp4parseParser, track_index: u32, info: *mut Mp4parseTrackAudioInfo) -> Mp4parseStatus {
     if parser.is_null() || info.is_null() || (*parser).poisoned() {
@@ -711,6 +752,13 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut Mp4parseParser, 
 }
 
 /// Fill the supplied `Mp4parseTrackVideoInfo` with metadata for `track`.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences the the parser and info raw
+/// pointers passed to it. Callers should ensure the parser pointer points to a
+/// valid `Mp4parseParser` and that the info pointer points to a valid
+/// `Mp4parseTrackVideoInfo`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut Mp4parseParser, track_index: u32, info: *mut Mp4parseTrackVideoInfo) -> Mp4parseStatus {
     if parser.is_null() || info.is_null() || (*parser).poisoned() {
@@ -840,6 +888,14 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut Mp4parseParser, 
     Mp4parseStatus::Ok
 }
 
+/// Fill the supplied `Mp4parseByteData` with index information from `track`.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences the the parser and indices
+/// raw pointers passed to it. Callers should ensure the parser pointer points
+/// to a valid `Mp4parseParser` and that the indices pointer points to a valid
+/// `Mp4parseByteData`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_indice_table(parser: *mut Mp4parseParser, track_id: u32, indices: *mut Mp4parseByteData) -> Mp4parseStatus {
     if parser.is_null() || (*parser).poisoned() {
@@ -1025,7 +1081,7 @@ impl<'a> Iterator for SampleToChunkIterator<'a> {
                 })
             });
 
-        has_chunk.and_then(|id| { Some((id, self.sample_count)) })
+        has_chunk.map(|id| { (id, self.sample_count) })
     }
 }
 
@@ -1215,6 +1271,14 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<Mp4p
 }
 
 /// Fill the supplied `Mp4parseFragmentInfo` with metadata from fragmented file.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences the the parser and
+/// info raw pointers passed to it. Callers should ensure the parser
+/// pointer points to a valid `Mp4parseParser` and that the info pointer points
+/// to a valid `Mp4parseFragmentInfo`.
+
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_fragment_info(parser: *mut Mp4parseParser, info: *mut Mp4parseFragmentInfo) -> Mp4parseStatus {
     if parser.is_null() || info.is_null() || (*parser).poisoned() {
@@ -1244,7 +1308,15 @@ pub unsafe extern fn mp4parse_get_fragment_info(parser: *mut Mp4parseParser, inf
     Mp4parseStatus::Ok
 }
 
-/// A fragmented file needs mvex table and contains no data in stts, stsc, and stco boxes.
+/// Determine if an mp4 file is fragmented. A fragmented file needs mvex table
+/// and contains no data in stts, stsc, and stco boxes.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences the the parser and
+/// fragmented raw pointers passed to it. Callers should ensure the parser
+/// pointer points to a valid `Mp4parseParser` and that the fragmented pointer
+/// points to an appropriate memory location to have a `u8` written to.
 #[no_mangle]
 pub unsafe extern fn mp4parse_is_fragmented(parser: *mut Mp4parseParser, track_id: u32, fragmented: *mut u8) -> Mp4parseStatus {
     if parser.is_null() || (*parser).poisoned() {
@@ -1278,6 +1350,13 @@ pub unsafe extern fn mp4parse_is_fragmented(parser: *mut Mp4parseParser, track_i
 /// - system id (16 byte uuid)
 /// - pssh box size (32-bit native endian)
 /// - pssh box content (including header)
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences the the parser and
+/// info raw pointers passed to it. Callers should ensure the parser
+/// pointer points to a valid `Mp4parseParser` and that the fragmented pointer
+/// points to a valid `Mp4parsePsshInfo`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_get_pssh_info(parser: *mut Mp4parseParser, info: *mut Mp4parsePsshInfo) -> Mp4parseStatus {
     if parser.is_null() || info.is_null() || (*parser).poisoned() {
