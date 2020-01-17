@@ -36,7 +36,7 @@ use boxes::{BoxType, FourCC};
 mod tests;
 
 // Arbitrary buffer size limit used for raw read_bufs on a box.
-const BUF_SIZE_LIMIT: usize = 1024 * 1024;
+const BUF_SIZE_LIMIT: usize = 10 * 1024 * 1024;
 
 // Max table length. Calculating in worth case for one week long video, one
 // frame per table entry in 30 fps.
