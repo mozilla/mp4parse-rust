@@ -174,6 +174,7 @@ const char * tracktype2str(Mp4parseTrackType type)
   switch (type) {
     case MP4PARSE_TRACK_TYPE_VIDEO: return "video";
     case MP4PARSE_TRACK_TYPE_AUDIO: return "audio";
+    case MP4PARSE_TRACK_TYPE_METADATA: return "metadata";
   }
   return "unknown";
 }
@@ -232,23 +233,6 @@ int main(int argc, char* argv[])
 {
   // Parse command line options.
   std::vector<std::string> args(argv + 1, argv + argc);
-  args.erase(
-    std::remove_if(args.begin(), args.end(), [](std::string& arg){
-      if (!arg.compare("-v")) {
-        fprintf(stderr, "Enabling debug logging.\n");
-        const char* LOG_ENV = "RUST_LOG";
-        auto logger = std::string(getenv(LOG_ENV));
-        if (!logger.empty()) {
-          logger.append(",");
-        }
-        logger.append("debug");
-        setenv(LOG_ENV, logger.c_str(), 1);
-        return true;
-      }
-      return false;
-    }),
-    args.end()
-  );
 
   test_new_parser();
   test_arg_validation();
