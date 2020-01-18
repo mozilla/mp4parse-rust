@@ -1330,7 +1330,7 @@ fn read_stsd_lpcm() {
         #[allow(clippy::float_cmp)] // The float comparison below is valid and intended.
         super::SampleEntry::Audio(a) => {
             assert_eq!(a.codec_type, super::CodecType::LPCM);
-            assert_eq!(a.samplerate, 96000.0); 
+            assert_eq!(a.samplerate, 96000.0);
             assert_eq!(a.channelcount, 1);
             match a.codec_specific {
                 super::AudioCodecSpecific::LPCM => (),
