@@ -2,6 +2,7 @@
 use libfuzzer_sys::fuzz_target;
 
 use mp4parse_capi::*;
+use std::convert::TryInto;
 use std::io::Read;
 
 type CursorType<'a> = std::io::Cursor<&'a [u8]>;
@@ -11,7 +12,7 @@ extern "C" fn vec_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c
 
     let mut buf = unsafe { std::slice::from_raw_parts_mut(buf, size) };
     match input.read(&mut buf) {
-        Ok(n) => n as isize,
+        Ok(n) => n.try_into().expect("invalid conversion"),
         Err(_) => -1,
     }
 }
