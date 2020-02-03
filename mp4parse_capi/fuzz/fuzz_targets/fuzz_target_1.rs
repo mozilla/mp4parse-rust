@@ -27,6 +27,7 @@ fuzz_target!(|data: &[u8]| {
         let context = mp4parse_new(&io);
 
         if mp4parse_read(context) != Mp4parseStatus::Ok {
+            mp4parse_free(context);
             return;
         }
 
