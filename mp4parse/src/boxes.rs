@@ -94,6 +94,11 @@ impl fmt::Display for FourCC {
 
 box_database!(
     FileTypeBox                       0x6674_7970, // "ftyp"
+    MediaDataBox                      0x6d64_6174, // "mdat"
+    PrimaryItemBox                    0x7069_746d, // "pitm"
+    ItemInfoBox                       0x6969_6e66, // "iinf"
+    ItemInfoEntry                     0x696e_6665, // "infe"
+    ItemLocationBox                   0x696c_6f63, // "iloc"
     MovieBox                          0x6d6f_6f76, // "moov"
     MovieHeaderBox                    0x6d76_6864, // "mvhd"
     TrackBox                          0x7472_616b, // "trak"
