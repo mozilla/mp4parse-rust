@@ -5,7 +5,6 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /// These all caused panics at some point during development.
-
 extern crate mp4parse;
 
 use std::io::Cursor;
@@ -25,7 +24,8 @@ fn fuzz_2() {
 /// Test a large (64 bit) box header with zero declared size.
 #[test]
 fn fuzz_4() {
-    let mut c = Cursor::new(b"\x00\x00\x00\x01\x30\x30\x30\x30\x00\x00\x00\x00\x00\x00\x00\x00".to_vec());
+    let mut c =
+        Cursor::new(b"\x00\x00\x00\x01\x30\x30\x30\x30\x00\x00\x00\x00\x00\x00\x00\x00".to_vec());
     let mut context = mp4parse::MediaContext::new();
     let _ = mp4parse::read_mp4(&mut c, &mut context);
 }
@@ -36,7 +36,8 @@ fn fuzz_4() {
 /// verifying read is properly bounded at the end of the stream.
 #[test]
 fn fuzz_5() {
-    let mut c = Cursor::new(b"\x30\x30\x30\x30\x66\x74\x79\x70\x30\x30\x30\x30\x30\x30\x30\x30".to_vec());
+    let mut c =
+        Cursor::new(b"\x30\x30\x30\x30\x66\x74\x79\x70\x30\x30\x30\x30\x30\x30\x30\x30".to_vec());
     let mut context = mp4parse::MediaContext::new();
     let _ = mp4parse::read_mp4(&mut c, &mut context);
 }
@@ -47,7 +48,8 @@ fn fuzz_5() {
 /// brand and excludes the extra 3 bytes from the stream.
 #[test]
 fn fuzz_6() {
-    let mut c = Cursor::new(b"\x00\x00\x00\x13\x66\x74\x79\x70\x30\x30\x30\x30\x30\x30\x30\x30".to_vec());
+    let mut c =
+        Cursor::new(b"\x00\x00\x00\x13\x66\x74\x79\x70\x30\x30\x30\x30\x30\x30\x30\x30".to_vec());
     let mut context = mp4parse::MediaContext::new();
     let _ = mp4parse::read_mp4(&mut c, &mut context);
 }
