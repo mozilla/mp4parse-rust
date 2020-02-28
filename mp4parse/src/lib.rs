@@ -140,6 +140,60 @@ fn allocate_read_buf(size: usize) -> std::result::Result<Vec<u8>, ()> {
     Ok(vec![0; size])
 }
 
+fn vec_with_capacity<T>(capacity: usize) -> std::result::Result<Vec<T>, ()> {
+    #[cfg(feature = "mp4parse_fallible")]
+    {
+        let mut v = Vec::new();
+        FallibleVec::try_reserve(&mut v, capacity)?;
+        Ok(v)
+    }
+    #[cfg(not(feature = "mp4parse_fallible"))]
+    {
+        Ok(Vec::with_capacity(capacity))
+    }
+}
+
+pub fn extend_from_slice<T: Clone>(vec: &mut Vec<T>, other: &[T]) -> std::result::Result<(), ()> {
+    #[cfg(feature = "mp4parse_fallible")]
+    {
+        FallibleVec::try_extend_from_slice(vec, other)
+    }
+    #[cfg(not(feature = "mp4parse_fallible"))]
+    {
+        vec.extend_from_slice(other);
+        Ok(())
+    }
+}
+
+/// With the `mp4parse_fallible` feature enabled, this function reserves the
+/// upper limit of what `src` can generate before reading all bytes until EOF
+/// in this source, placing them into buf. If the allocation is unsuccessful,
+/// or reading from the source generates an error before reaching EOF, this
+/// will return an error. Otherwise, it will return the number of bytes read.
+///
+/// Since `src.limit()` may return a value greater than the number of bytes
+/// which can be read from the source, it's possible this function may fail
+/// in the allocation phase even though allocating the number of bytes available
+/// to read would have succeeded. In general, it is assumed that the callers
+/// have accurate knowledge of the number of bytes of interest and have created
+/// `src` accordingly.
+///
+/// With the `mp4parse_fallible` feature disabled, this is wrapper around
+/// `std::io::Read::read_to_end()`.
+fn read_to_end<T: Read>(src: &mut Take<T>, buf: &mut Vec<u8>) -> std::result::Result<usize, ()> {
+    #[cfg(feature = "mp4parse_fallible")]
+    {
+        let limit: usize = src.limit().try_into().map_err(|_| ())?;
+        FallibleVec::try_reserve(buf, limit)?;
+        let bytes_read = src.read_to_end(buf).map_err(|_| ())?;
+        Ok(bytes_read)
+    }
+    #[cfg(not(feature = "mp4parse_fallible"))]
+    {
+        src.read_to_end(buf).map_err(|_| ())
+    }
+}
+
 /// Describes parser failures.
 ///
 /// This enum wraps the standard `io::Error` type, unified with
@@ -735,14 +789,14 @@ impl AvifContext {
 
 /// A Media Data Box
 /// See ISO 14496-12:2015 § 8.1.1
-struct Mdat {
+struct MediaDataBox {
     /// Offset of `data` from the beginning of the file. See ConstructionMethod::FileOffset
     offset: u64,
     data: Vec<u8>,
 }
 
-impl Mdat {
-    /// Check whether the beginning of `extent` is within the bounds of the `Mdat`.
+impl MediaDataBox {
+    /// Check whether the beginning of `extent` is within the bounds of the `MediaDataBox`.
     /// We assume extents to not cross box boundaries. If so, this will cause an error
     /// in `read_extent`.
     fn contains_extent(&self, extent: &ExtentRange) -> bool {
@@ -754,7 +808,7 @@ impl Mdat {
         }
     }
 
-    /// Check whether `extent` covers the `Mdat` exactly.
+    /// Check whether `extent` covers the `MediaDataBox` exactly.
     fn matches_extent(&self, extent: &ExtentRange) -> bool {
         if self.offset == extent.start() {
             match extent {
@@ -773,7 +827,7 @@ impl Mdat {
     }
 
     /// Copy the range specified by `extent` to the end of `buf` or return an error if the range
-    /// is not fully contained within `Mdat`.
+    /// is not fully contained within `MediaDataBox`.
     fn read_extent(&mut self, extent: &ExtentRange, buf: &mut Vec<u8>) -> Result<()> {
         let start_offset = extent.start().checked_sub(self.offset).expect("mdat does not contain extent");
         let slice = match extent {
@@ -787,7 +841,7 @@ impl Mdat {
             }
         };
         let slice = slice.ok_or(Error::InvalidData("extent crosses box boundary"))?;
-        buf.extend_from_slice(slice);
+        extend_from_slice(buf, slice)?;
         Ok(())
     }
 
@@ -869,7 +923,7 @@ struct ItemLocationBoxItem {
 enum ConstructionMethod {
     FileOffset,
     IdatOffset,
-    #[allow(dead_code)] // Not yet implemented
+    #[allow(dead_code)] // TODO: see https://github.com/mozilla/mp4parse-rust/issues/196
     ItemOffset,
 }
 
@@ -1057,10 +1111,10 @@ impl<'a, T: Read + Offset> BMFFBox<'a, T> {
                 if len > self.bytes_left() {
                     return Err(Error::InvalidData("extent crosses box boundary"));
                 }
-                self.take(len).read_to_end(buf)?;
+                read_to_end(&mut self.take(len), buf)?;
             }
             ExtentRange::ToEnd(_) => {
-                self.read_to_end(buf)?;
+                read_to_end(&mut self.take(self.bytes_left()), buf)?;
             }
         }
         Ok(())
@@ -1229,9 +1283,9 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
                 // Store any remaining data for potential later extraction
                 if b.bytes_left() > 0 {
                     let offset = b.offset();
-                    let mut data = Vec::with_capacity(b.bytes_left().try_into()?);
-                    let _bytes_read = b.read_to_end(&mut data)?;
-                    mdats.push(Mdat { offset, data });
+                    let mut data = vec_with_capacity(b.bytes_left().try_into()?)?;
+                    b.read_to_end(&mut data)?;
+                    vec_push(&mut mdats, MediaDataBox { offset, data })?;
                 }
             }
             _ => skip_box_content(&mut b)?,
@@ -1306,7 +1360,7 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<ItemLocation
 
     if let Some(item_info) = item_infos.iter().flatten().find(|x| x.item_id == primary_item_id) {
         if &item_info.item_type.to_be_bytes() != b"av01" {
-            warn!("primary_item_id type: {}", u32_to_string(item_info.item_type));
+            warn!("primary_item_id type: {}", be_u32_to_string(item_info.item_type));
             return Err(Error::InvalidData("primary_item_id type is not av01"));
         }
     } else {
@@ -1349,7 +1403,7 @@ fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemInfoEntry>> {
     } else {
         be_u32(src)?.to_usize()
     };
-    let mut item_infos = Vec::with_capacity(entry_count);
+    let mut item_infos = vec_with_capacity(entry_count)?;
 
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
@@ -1357,7 +1411,7 @@ fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemInfoEntry>> {
             return Err(Error::InvalidData("iinf box should contain only infe boxes"));
         }
 
-        item_infos.push(read_infe(&mut b)?);
+        vec_push(&mut item_infos, read_infe(&mut b)?)?;
 
         check_parser_state!(b.content);
     }
@@ -1365,7 +1419,7 @@ fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemInfoEntry>> {
     Ok(item_infos)
 }
 
-fn u32_to_string(src: u32) -> String {
+fn be_u32_to_string(src: u32) -> String {
     String::from_utf8(src.to_be_bytes().to_vec()).unwrap_or(format!("{:x?}", src))
 }
 
@@ -1374,7 +1428,7 @@ fn u32_to_string(src: u32) -> String {
 fn read_infe<T: Read>(src: &mut BMFFBox<T>) -> Result<ItemInfoEntry> {
     // According to the standard, it seems the flags field should be 0, but
     // at least one sample AVIF image has a nonzero value.
-    let (version, _flags) = read_fullbox_extra(src)?;
+    let (version, _) = read_fullbox_extra(src)?;
 
     // mif1 brand (see ISO 23008-12:2017 § 10.2.1) only requires v2 and 3
     let item_id = match version {
@@ -1390,7 +1444,7 @@ fn read_infe<T: Read>(src: &mut BMFFBox<T>) -> Result<ItemInfoEntry> {
     }
 
     let item_type = be_u32(src)?;
-    debug!("infe item_id {} item_type: {}", item_id, u32_to_string(item_type));
+    debug!("infe item_id {} item_type: {}", item_id, be_u32_to_string(item_type));
 
     // There are some additional fields here, but they're not of interest to us
     skip_box_remain(src)?;
@@ -1403,7 +1457,7 @@ fn read_infe<T: Read>(src: &mut BMFFBox<T>) -> Result<ItemInfoEntry> {
 fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> {
     let version: IlocVersion = read_fullbox_version_no_flags(src)?.try_into()?;
 
-    let mut iloc = Vec::with_capacity(src.bytes_left().try_into()?);
+    let mut iloc = vec_with_capacity(src.bytes_left().try_into()?)?;
     src.read_to_end(&mut iloc)?;
     let mut iloc = BitReader::new(iloc.as_slice());
 
@@ -1424,7 +1478,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> 
         IlocVersion::Two => iloc.read_u32(32)?,
     };
 
-    let mut items = Vec::with_capacity(item_count.to_usize());
+    let mut items = vec_with_capacity(item_count.to_usize())?;
 
     for _ in 0..item_count {
         let item_id = match version {
@@ -1461,7 +1515,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> 
 
         debug_assert!(extent_count >= 1, "extent_count must have a value 1 or greater per ISO 14496-12:2015 § 8.11.3.3");
 
-        let mut extents = Vec::with_capacity(extent_count.to_usize());
+        let mut extents = vec_with_capacity(extent_count.to_usize())?;
 
         for _ in 0..extent_count {
             // Parsed but currently ignored, see `ItemLocationBoxExtent`
@@ -1490,14 +1544,14 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> 
                 ExtentRange::WithLength(Range { start, end })
             };
 
-            extents.push(ItemLocationBoxExtent { extent_range });
+            vec_push(&mut extents, ItemLocationBoxExtent { extent_range })?;
         }
 
-        items.push(ItemLocationBoxItem {
+        vec_push(&mut items, ItemLocationBoxItem {
             item_id,
             construction_method,
             extents
-        })
+        })?;
     }
 
     debug_assert_eq!(iloc.remaining(), 0);
@@ -2820,7 +2874,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 let esds = read_buf(&mut b.content, esds_size.try_into()?)?;
                 codec_specific = Some(VideoCodecSpecific::ESDSConfig(esds));
             }
-            BoxType::ProtectionSchemeInformationBox => {
+            BoxType::ProtectionSchemeInfoBox => {
                 if name != BoxType::ProtectedVisualSampleEntry {
                     return Err(Error::InvalidData("malformed video sample entry"));
                 }
@@ -2960,7 +3014,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 codec_type = qt_esds.audio_codec;
                 codec_specific = Some(AudioCodecSpecific::ES_Descriptor(qt_esds));
             }
-            BoxType::ProtectionSchemeInformationBox => {
+            BoxType::ProtectionSchemeInfoBox => {
                 if name != BoxType::ProtectedAudioSampleEntry {
                     return Err(Error::InvalidData("malformed audio sample entry"));
                 }
@@ -3285,7 +3339,7 @@ fn read_ilst_multiple_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<Vec<u
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::MetadataItemDataEntry => {
-                data.push(read_ilst_data(&mut b)?);
+                vec_push(&mut data, read_ilst_data(&mut b)?)?;
             }
             _ => skip_box_content(&mut b)?,
         };

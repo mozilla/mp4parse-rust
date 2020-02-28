@@ -6,6 +6,9 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use std::io::Cursor;
+use std::io::Read as _;
+#[cfg(feature = "mp4parse_fallible")]
+use std::convert::TryInto as _;
 use super::read_mp4;
 use super::MediaContext;
 use super::Error;
@@ -1340,4 +1343,21 @@ fn read_stsd_lpcm() {
         _ => panic!("it should be a audio sample entry!"),
     }
 
+}
+
+#[test]
+fn read_to_end_() {
+    let mut src = b"1234567890".take(5);
+    let mut buf = vec![];
+    let bytes_read = super::read_to_end(&mut src, &mut buf).unwrap();
+    assert_eq!(bytes_read, 5);
+    assert_eq!(buf, b"12345");
+}
+
+#[test]
+#[cfg(feature = "mp4parse_fallible")]
+fn read_to_end_oom() {
+    let mut src = b"1234567890".take(std::usize::MAX.try_into().expect("usize < u64"));
+    let mut buf = vec![];
+    assert!(super::read_to_end(&mut src, &mut buf).is_err());
 }

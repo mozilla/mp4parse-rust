@@ -61,6 +61,7 @@ use mp4parse::serialize_opus_header;
 use mp4parse::CodecType;
 use mp4parse::Track;
 use mp4parse::vec_push;
+use mp4parse::extend_from_slice;
 
 #[repr(C)]
 #[derive(PartialEq, Debug)]
@@ -488,7 +489,7 @@ pub unsafe extern fn mp4parse_read(parser: *mut Mp4parseParser) -> Mp4parseStatu
     match r {
         Ok(_) => Mp4parseStatus::Ok,
         Err(Error::NoMoov) | Err(Error::InvalidData(_)) => {
-            // Block further calls. We've probable lost sync.
+            // Block further calls. We've probably lost sync.
             (*parser).set_poisoned(true);
             Mp4parseStatus::Invalid
         }
@@ -527,7 +528,7 @@ pub unsafe extern fn mp4parse_avif_read(parser: *mut Mp4parseAvifParser) -> Mp4p
     match r {
         Ok(_) => Mp4parseStatus::Ok,
         Err(Error::NoMoov) | Err(Error::InvalidData(_)) => { // Add Error::NoPitm or something
-            // Block further calls. We've probable lost sync.
+            // Block further calls. We've probably lost sync.
             (*parser).set_poisoned(true);
             Mp4parseStatus::Invalid
         }
@@ -839,7 +840,10 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut Mp4parseParser, 
                 };
             }
         }
-        audio_sample_infos.push(sample_info);
+        let res = vec_push(&mut audio_sample_infos, sample_info);
+        if res.is_err() {
+            return Mp4parseStatus::Oom;
+        }
     }
 
     (*parser).audio_track_sample_descriptions.insert(track_index, audio_sample_infos);
@@ -977,7 +981,10 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut Mp4parseParser, 
                 };
             }
         }
-        video_sample_infos.push(sample_info);
+        let res = vec_push(&mut video_sample_infos, sample_info);
+        if res.is_err() {
+            return Mp4parseStatus::Oom;
+        }
     }
 
     (*parser).video_track_sample_descriptions.insert(track_index, video_sample_infos);
@@ -1017,7 +1024,7 @@ pub unsafe extern fn mp4parse_avif_get_primary_item(parser: *mut Mp4parseAvifPar
 
     let context = (*parser).context();
 
-    // maybe a check for a validly parsed context?
+    // TODO: check for a valid parsed context. See https://github.com/mozilla/mp4parse-rust/issues/195
     (*primary_item).set_data(&context.primary_item);
 
     return Mp4parseStatus::Ok;
@@ -1517,7 +1524,13 @@ pub unsafe extern fn mp4parse_get_pssh_info(parser: *mut Mp4parseParser, info: *
         }
         pssh_data.extend_from_slice(pssh.system_id.as_slice());
         pssh_data.extend_from_slice(data_len.as_slice());
-        pssh_data.extend_from_slice(pssh.box_content.as_slice());
+        // The previous two calls have known, small sizes, but pssh_data has
+        // arbitrary size based on untrusted input, so use fallible allocation
+        let res = extend_from_slice(pssh_data, pssh.box_content.as_slice());
+
+        if res.is_err() {
+            return Mp4parseStatus::Oom;
+        }
     }
 
     info.data.set_data(pssh_data);
