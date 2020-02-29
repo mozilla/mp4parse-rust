@@ -12,7 +12,9 @@ env:
   matrix:
     - RELEASE=
     - RELEASE=--release
+    - FEATURES=
+    - FEATURES=--all-features
 
 script:
-  - cargo test --all --verbose $RELEASE
+  - cargo test --all --verbose $RELEASE $FEATURES
   - cargo doc --package mp4parse_capi
