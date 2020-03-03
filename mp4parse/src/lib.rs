@@ -37,7 +37,7 @@ mod tests;
 // Arbitrary buffer size limit used for raw read_bufs on a box.
 const BUF_SIZE_LIMIT: usize = 10 * 1024 * 1024;
 
-// Max table length. Calculating in worth case for one week long video, one
+// Max table length. Calculating in worst case for one week long video, one
 // frame per table entry in 30 fps.
 const TABLE_SIZE_LIMIT: u32 = 30 * 60 * 60 * 24 * 7;
 
