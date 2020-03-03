@@ -10,11 +10,13 @@ os:
   
 env:
   matrix:
-    - RELEASE= FEATURES=
-    - RELEASE=--release FEATURES=
-    - RELEASE= FEATURES=--all-features
-    - RELEASE=--release FEATURES=--all-features
+    - RELEASE=
+    - RELEASE=--release
 
 script:
-  - cargo test --all --verbose $RELEASE $FEATURES
+  # We cannot run `cargo test` with the mp4parse_infallible feature enabled
+  # (see comment where the feature is defined in Cargo.toml), but we can at
+  # least check for changes behind features that would break the build.
+  - cargo check --all --verbose $RELEASE --tests --all-features
+  - cargo test --all --verbose $RELEASE
   - cargo doc --package mp4parse_capi
