@@ -25,7 +25,6 @@ travis-ci = { repository = "https://github.com/mozilla/mp4parse-rust" }
 
 [dependencies]
 byteorder = "1.2.1"
-afl = { version = "0.3", optional = true }
 abort_on_panic = { version = "1.0.0", optional = true }
 bitreader = { version = "0.3.2" }
 num-traits = "0.2.0"
@@ -36,6 +35,3 @@ static_assertions = "1.1.0"
 [dev-dependencies]
 test-assembler = "0.1.2"
 env_logger = "0.7.1"
-
-[features]
-fuzz = ["afl", "abort_on_panic"]
