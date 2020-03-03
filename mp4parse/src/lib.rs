@@ -1354,7 +1354,7 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<ItemLocation
         check_parser_state!(b.content);
     }
 
-    let primary_item_id = primary_item_id.ok_or(Error::InvalidData("primary_item_id not present in iinf box"))?;
+    let primary_item_id = primary_item_id.ok_or(Error::InvalidData("Required pitm box not present in meta box"))?;
 
     if let Some(item_info) = item_infos.iter().flatten().find(|x| x.item_id == primary_item_id) {
         if &item_info.item_type.to_be_bytes() != b"av01" {
@@ -1511,7 +1511,9 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> 
         let base_offset = iloc.read_u64(base_offset_size.to_bits())?;
         let extent_count = iloc.read_u16(16)?;
 
-        debug_assert!(extent_count >= 1, "extent_count must have a value 1 or greater per ISO 14496-12:2015 § 8.11.3.3");
+        if extent_count < 1 {
+            return Err(Error::InvalidData("extent_count must have a value 1 or greater per ISO 14496-12:2015 § 8.11.3.3"));
+        }
 
         let mut extents = vec_with_capacity(extent_count.to_usize())?;
 

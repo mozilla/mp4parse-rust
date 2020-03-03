@@ -610,7 +610,7 @@ fn public_avif_primary_item() {
 }
 
 #[test]
-#[ignore] // Remove when we add support
+#[ignore] // Remove when we add support; see https://github.com/mozilla/mp4parse-rust/issues/198
 fn public_avif_primary_item_is_grid() {
     let context = &mut mp4::AvifContext::new();
     let input = &mut File::open(IMAGE_AVIF_GRID).expect("Unknown file");
