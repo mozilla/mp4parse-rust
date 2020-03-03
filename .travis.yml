@@ -10,10 +10,10 @@ os:
   
 env:
   matrix:
-    - RELEASE=
-    - RELEASE=--release
-    - FEATURES=
-    - FEATURES=--all-features
+    - RELEASE= FEATURES=
+    - RELEASE=--release FEATURES=
+    - RELEASE= FEATURES=--all-features
+    - RELEASE=--release FEATURES=--all-features
 
 script:
   - cargo test --all --verbose $RELEASE $FEATURES
