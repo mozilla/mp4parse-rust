@@ -35,7 +35,7 @@ use boxes::{BoxType, FourCC};
 mod tests;
 
 // Arbitrary buffer size limit used for raw read_bufs on a box.
-const BUF_SIZE_LIMIT: usize = 10 * 1024 * 1024;
+const BUF_SIZE_LIMIT: u64 = 10 * 1024 * 1024;
 
 // Max table length. Calculating in worst case for one week long video, one
 // frame per table entry in 30 fps.
@@ -1663,7 +1663,7 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: &mut MediaContext) -> Result<
 }
 
 fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHeaderBox> {
-    let len = src.bytes_left().try_into()?;
+    let len = src.bytes_left();
     let mut box_content = read_buf(src, len)?;
     let (system_id, kid, data) = {
         let pssh = &mut Cursor::new(box_content.as_slice());
@@ -1681,8 +1681,8 @@ fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHe
             }
         }
 
-        let data_size = be_u32_with_limit(pssh)?.to_usize();
-        let data = read_buf(pssh, data_size)?;
+        let data_size = be_u32_with_limit(pssh)?;
+        let data = read_buf(pssh, data_size.into())?;
 
         (system_id, kid, data)
     };
@@ -2277,7 +2277,7 @@ fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
     };
 
     let codec_init_size = be_u16(src)?;
-    let codec_init = read_buf(src, codec_init_size.to_usize())?;
+    let codec_init = read_buf(src, codec_init_size.into())?;
 
     // TODO(rillian): validate field value ranges.
     Ok(VPxConfigBox {
@@ -2325,7 +2325,7 @@ fn read_av1c<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1ConfigBox> {
         };
 
     let config_obus_size = src.bytes_left();
-    let config_obus = read_buf(src, config_obus_size.try_into()?)?;
+    let config_obus = read_buf(src, config_obus_size)?;
 
     Ok(AV1ConfigBox {
         profile,
@@ -2345,12 +2345,12 @@ fn read_av1c<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1ConfigBox> {
 fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock> {
     let temp = src.read_u8()?;
     let block_type = temp & 0x7f;
-    let length = be_u24(src)?;
-    if u64::from(length) > src.bytes_left() {
+    let length = be_u24(src)?.into();
+    if length > src.bytes_left() {
         return Err(Error::InvalidData(
                 "FLACMetadataBlock larger than parent box"));
     }
-    let data = read_buf(src, length.to_usize())?;
+    let data = read_buf(src, length)?;
     Ok(FLACMetadataBlock {
         block_type,
         data,
@@ -2632,7 +2632,7 @@ fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
     // Subtract 4 extra to offset the members of fullbox not accounted for in
     // head.offset
     let esds_size = src.head.size.checked_sub(src.head.offset + 4).expect("offset invalid");
-    let esds_array = read_buf(src, esds_size.try_into()?)?;
+    let esds_array = read_buf(src, esds_size)?;
 
     let mut es_data = ES_Descriptor::default();
     find_descriptor(&esds_array, &mut es_data)?;
@@ -2691,7 +2691,7 @@ fn read_dops<T: Read>(src: &mut BMFFBox<T>) -> Result<OpusSpecificBox> {
     } else {
         let stream_count = src.read_u8()?;
         let coupled_count = src.read_u8()?;
-        let channel_mapping = read_buf(src, output_channel_count.to_usize())?;
+        let channel_mapping = read_buf(src, output_channel_count.into())?;
 
         Some(ChannelMappingTable {
             stream_count,
@@ -2766,7 +2766,7 @@ fn read_alac<T: Read>(src: &mut BMFFBox<T>) -> Result<ALACSpecificBox> {
     }
 
     let length = match src.bytes_left() {
-        x @ 24 | x @ 48 => x.try_into().expect("infallible conversion to usize"),
+        x @ 24 | x @ 48 => x,
         _ => return Err(Error::InvalidData("ALACSpecificBox magic cookie is the wrong size")),
     };
     let data = read_buf(src, length)?;
@@ -2841,7 +2841,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                         return Err(Error::InvalidData("malformed video sample entry"));
                     }
                 let avcc_size = b.head.size.checked_sub(b.head.offset).expect("offset invalid");
-                let avcc = read_buf(&mut b.content, avcc_size.try_into()?)?;
+                let avcc = read_buf(&mut b.content, avcc_size)?;
                 debug!("{:?} (avcc)", avcc);
                 // TODO(kinetik): Parse avcC box?  For now we just stash the data.
                 codec_specific = Some(VideoCodecSpecific::AVCConfig(avcc));
@@ -2871,7 +2871,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 // Subtract 4 extra to offset the members of fullbox not
                 // accounted for in head.offset
                 let esds_size = b.head.size.checked_sub(b.head.offset + 4).expect("offset invalid");
-                let esds = read_buf(&mut b.content, esds_size.try_into()?)?;
+                let esds = read_buf(&mut b.content, esds_size)?;
                 codec_specific = Some(VideoCodecSpecific::ESDSConfig(esds));
             }
             BoxType::ProtectionSchemeInfoBox => {
@@ -3156,7 +3156,7 @@ fn read_tenc<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackEncryptionBox> {
     let default_constant_iv = match (default_is_encrypted, default_iv_size) {
         (1, 0) => {
             let default_constant_iv_size = src.read_u8()?;
-            Some(read_buf(src, default_constant_iv_size.to_usize())?)
+            Some(read_buf(src, default_constant_iv_size.into())?)
         },
         _ => None,
     };
@@ -3351,7 +3351,7 @@ fn read_ilst_multiple_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<Vec<u
 fn read_ilst_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<u8>> {
     // Skip past the padding bytes
     skip(&mut src.content, src.head.offset)?;
-    let size = src.content.limit().try_into()?;
+    let size = src.content.limit();
     read_buf(&mut src.content, size)
 }
 
@@ -3362,13 +3362,13 @@ fn skip<T: Read>(src: &mut T, bytes: u64) -> Result<()> {
 }
 
 /// Read size bytes into a Vector or return error.
-fn read_buf<T: ReadBytesExt>(src: &mut T, size: usize) -> Result<Vec<u8>> {
+fn read_buf<T: Read>(src: &mut T, size: u64) -> Result<Vec<u8>> {
     if size > BUF_SIZE_LIMIT {
         return Err(Error::InvalidData("read_buf size exceeds BUF_SIZE_LIMIT"));
     }
-    if let Ok(mut buf) = allocate_read_buf(size) {
+    if let Ok(mut buf) = allocate_read_buf(size.try_into()?) {
         let r = src.read(&mut buf)?;
-        if r != size {
+        if r != size.try_into()? {
           return Err(Error::InvalidData("failed buffer read"));
         }
         return Ok(buf);
