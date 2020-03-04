@@ -94,6 +94,11 @@ impl fmt::Display for FourCC {
 
 box_database!(
     FileTypeBox                       0x6674_7970, // "ftyp"
+    MediaDataBox                      0x6d64_6174, // "mdat"
+    PrimaryItemBox                    0x7069_746d, // "pitm"
+    ItemInfoBox                       0x6969_6e66, // "iinf"
+    ItemInfoEntry                     0x696e_6665, // "infe"
+    ItemLocationBox                   0x696c_6f63, // "iloc"
     MovieBox                          0x6d6f_6f76, // "moov"
     MovieHeaderBox                    0x6d76_6864, // "mvhd"
     TrackBox                          0x7472_616b, // "trak"
@@ -135,7 +140,7 @@ box_database!(
     ProtectionSystemSpecificHeaderBox 0x7073_7368, // "pssh"
     SchemeInformationBox              0x7363_6869, // "schi"
     TrackEncryptionBox                0x7465_6e63, // "tenc"
-    ProtectionSchemeInformationBox    0x7369_6e66, // "sinf"
+    ProtectionSchemeInfoBox           0x7369_6e66, // "sinf"
     OriginalFormatBox                 0x6672_6d61, // "frma"
     SchemeTypeBox                     0x7363_686d, // "schm"
     MP3AudioSampleEntry               0x2e6d_7033, // ".mp3" - from F4V.
@@ -149,7 +154,6 @@ box_database!(
     MetadataItemListEntry             0x696c_7374, // "ilst"
     MetadataItemDataEntry             0x6461_7461, // "data"
     MetadataItemNameBox               0x6e61_6d65, // "name"
-    MetadataItemInformationBox        0x6974_6966, // "itif"
     UserdataBox                       0x7564_7461, // "udta"
     AlbumEntry                        0xa961_6c62, // "©alb"
     ArtistEntry                       0xa941_5254, // "©ART"

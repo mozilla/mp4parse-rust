@@ -45,8 +45,10 @@ use num_traits::{PrimInt, Zero};
 
 // Symbols we need from our rust api.
 use mp4parse::MediaContext;
+use mp4parse::AvifContext;
 use mp4parse::TrackType;
 use mp4parse::read_mp4;
+use mp4parse::read_avif;
 use mp4parse::Error;
 use mp4parse::SampleEntry;
 use mp4parse::AudioCodecSpecific;
@@ -59,6 +61,7 @@ use mp4parse::serialize_opus_header;
 use mp4parse::CodecType;
 use mp4parse::Track;
 use mp4parse::vec_push;
+use mp4parse::extend_from_slice;
 
 #[repr(C)]
 #[derive(PartialEq, Debug)]
@@ -331,6 +334,34 @@ impl Mp4parseParser {
     }
 }
 
+pub struct Mp4parseAvifParser {
+    context: AvifContext,
+    io: Mp4parseIo,
+    poisoned: bool,
+}
+
+impl Mp4parseAvifParser {
+    fn context(&self) -> &AvifContext {
+        &self.context
+    }
+
+    fn context_mut(&mut self) -> &mut AvifContext {
+        &mut self.context
+    }
+
+    fn io_mut(&mut self) -> &mut Mp4parseIo {
+        &mut self.io
+    }
+
+    fn poisoned(&self) -> bool {
+        self.poisoned
+    }
+
+    fn set_poisoned(&mut self, poisoned: bool) {
+        self.poisoned = poisoned;
+    }
+}
+
 #[repr(C)]
 #[derive(Clone)]
 pub struct Mp4parseIo {
@@ -385,6 +416,32 @@ pub unsafe extern fn mp4parse_new(io: *const Mp4parseIo) -> *mut Mp4parseParser 
     Box::into_raw(parser)
 }
 
+/// Allocate an `Mp4parseAvifParser*` to read from the supplied `Mp4parseIo`.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences the io pointer given to it.
+/// The caller should ensure that the `Mp4ParseIo` struct passed in is a valid
+/// pointer. The caller should also ensure the members of io are valid: the
+/// `read` function should be sanely implemented, and the `userdata` pointer
+/// should be valid.
+#[no_mangle]
+pub unsafe extern fn mp4parse_avif_new(io: *const Mp4parseIo) -> *mut Mp4parseAvifParser {
+    if io.is_null() || (*io).userdata.is_null() {
+        return std::ptr::null_mut();
+    }
+    if (*io).read.is_none() {
+        return std::ptr::null_mut();
+    }
+    let parser = Box::new(Mp4parseAvifParser {
+        context: AvifContext::new(),
+        io: (*io).clone(),
+        poisoned: false,
+    });
+
+    Box::into_raw(parser)
+}
+
 /// Free an `Mp4parseParser*` allocated by `mp4parse_new()`.
 ///
 /// # Safety
@@ -394,6 +451,19 @@ pub unsafe extern fn mp4parse_new(io: *const Mp4parseIo) -> *mut Mp4parseParser 
 /// `Mp4parseParser` created by `mp4parse_new`.
 #[no_mangle]
 pub unsafe extern fn mp4parse_free(parser: *mut Mp4parseParser) {
+    assert!(!parser.is_null());
+    let _ = Box::from_raw(parser);
+}
+
+/// Free an `Mp4parseAvifParser*` allocated by `mp4parse_avif_new()`.
+///
+/// # Safety
+///
+/// This function is unsafe because it creates a box from a raw pointer.
+/// Callers should ensure that the parser pointer points to a valid
+/// `Mp4parseAvifParser` created by `mp4parse_avif_new`.
+#[no_mangle]
+pub unsafe extern fn mp4parse_avif_free(parser: *mut Mp4parseAvifParser) {
     assert!(!parser.is_null());
     let _ = Box::from_raw(parser);
 }
@@ -419,7 +489,46 @@ pub unsafe extern fn mp4parse_read(parser: *mut Mp4parseParser) -> Mp4parseStatu
     match r {
         Ok(_) => Mp4parseStatus::Ok,
         Err(Error::NoMoov) | Err(Error::InvalidData(_)) => {
-            // Block further calls. We've probable lost sync.
+            // Block further calls. We've probably lost sync.
+            (*parser).set_poisoned(true);
+            Mp4parseStatus::Invalid
+        }
+        Err(Error::Unsupported(_)) => Mp4parseStatus::Unsupported,
+        Err(Error::UnexpectedEOF) => Mp4parseStatus::Eof,
+        Err(Error::Io(_)) => {
+            // Block further calls after a read failure.
+            // Getting std::io::ErrorKind::UnexpectedEof is normal
+            // but our From trait implementation should have converted
+            // those to our Error::UnexpectedEOF variant.
+            (*parser).set_poisoned(true);
+            Mp4parseStatus::Io
+        },
+        Err(Error::OutOfMemory) => Mp4parseStatus::Oom,
+    }
+}
+
+/// Run the `Mp4parseAvifParser*` allocated by `mp4parse_avif_new()` until EOF or error.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences the raw parser pointer
+/// passed to it. Callers should ensure that the parser pointer points to a
+/// valid `Mp4parseAvifParser`.
+#[no_mangle]
+pub unsafe extern fn mp4parse_avif_read(parser: *mut Mp4parseAvifParser) -> Mp4parseStatus {
+    // Validate arguments from C.
+    if parser.is_null() || (*parser).poisoned() {
+        return Mp4parseStatus::BadArg;
+    }
+
+    let context = (*parser).context_mut();
+    let io = (*parser).io_mut();
+
+    let r = read_avif(io, context);
+    match r {
+        Ok(_) => Mp4parseStatus::Ok,
+        Err(Error::NoMoov) | Err(Error::InvalidData(_)) => { // Add Error::NoPitm or something
+            // Block further calls. We've probably lost sync.
             (*parser).set_poisoned(true);
             Mp4parseStatus::Invalid
         }
@@ -731,7 +840,10 @@ pub unsafe extern fn mp4parse_get_track_audio_info(parser: *mut Mp4parseParser, 
                 };
             }
         }
-        audio_sample_infos.push(sample_info);
+        let res = vec_push(&mut audio_sample_infos, sample_info);
+        if res.is_err() {
+            return Mp4parseStatus::Oom;
+        }
     }
 
     (*parser).audio_track_sample_descriptions.insert(track_index, audio_sample_infos);
@@ -869,7 +981,10 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut Mp4parseParser, 
                 };
             }
         }
-        video_sample_infos.push(sample_info);
+        let res = vec_push(&mut video_sample_infos, sample_info);
+        if res.is_err() {
+            return Mp4parseStatus::Oom;
+        }
     }
 
     (*parser).video_track_sample_descriptions.insert(track_index, video_sample_infos);
@@ -886,6 +1001,33 @@ pub unsafe extern fn mp4parse_get_track_video_info(parser: *mut Mp4parseParser, 
         None => return Mp4parseStatus::Invalid, // Shouldn't happen, we just inserted the info!
     }
     Mp4parseStatus::Ok
+}
+
+/// Return a pointer to the primary item parsed by previous `mp4parse_avif_read()` call.
+///
+/// # Safety
+///
+/// This function is unsafe because it dereferences both the parser and
+/// primary_item raw pointers passed into it. Callers should ensure the parser
+/// pointer points to a valid `Mp4parseAvifParser`, and that the primary_item
+/// pointer points to a valid `Mp4parseByteData`. If there was not a previous
+/// successful call to `mp4parse_avif_read()`, no guarantees are made as to
+/// the state of `primary_item`.
+#[no_mangle]
+pub unsafe extern fn mp4parse_avif_get_primary_item(parser: *mut Mp4parseAvifParser, primary_item: *mut Mp4parseByteData) -> Mp4parseStatus {
+    if parser.is_null() || (*parser).poisoned() {
+        return Mp4parseStatus::BadArg;
+    }
+
+    // Initialize fields to default values to ensure all fields are always valid.
+    *primary_item = Default::default();
+
+    let context = (*parser).context();
+
+    // TODO: check for a valid parsed context. See https://github.com/mozilla/mp4parse-rust/issues/195
+    (*primary_item).set_data(&context.primary_item);
+
+    return Mp4parseStatus::Ok;
 }
 
 /// Fill the supplied `Mp4parseByteData` with index information from `track`.
@@ -978,11 +1120,11 @@ impl<'a> Iterator for TimeOffsetIterator<'a> {
                 self.cur_sample_range = match iter.next() {
                     Some(v) => {
                         offset_version = v.time_offset;
-                        (0 .. v.sample_count)
+                        0 .. v.sample_count
                     },
                     _ => {
                         offset_version = mp4parse::TimeOffsetVersion::Version0(0);
-                        (0 .. 0)
+                        0 .. 0
                     },
                 };
 
@@ -1029,9 +1171,9 @@ impl<'a> Iterator for TimeToSampleIterator<'a> {
                 self.cur_sample_count = match self.stts_iter.next() {
                     Some(v) => {
                         self.cur_sample_delta = v.sample_delta;
-                        (0 .. v.sample_count)
+                        0 .. v.sample_count
                     },
-                    _ => (0 .. 0),
+                    _ => 0 .. 0,
                 };
 
                 self.cur_sample_count.next()
@@ -1382,7 +1524,13 @@ pub unsafe extern fn mp4parse_get_pssh_info(parser: *mut Mp4parseParser, info: *
         }
         pssh_data.extend_from_slice(pssh.system_id.as_slice());
         pssh_data.extend_from_slice(data_len.as_slice());
-        pssh_data.extend_from_slice(pssh.box_content.as_slice());
+        // The previous two calls have known, small sizes, but pssh_data has
+        // arbitrary size based on untrusted input, so use fallible allocation
+        let res = extend_from_slice(pssh_data, pssh.box_content.as_slice());
+
+        if res.is_err() {
+            return Mp4parseStatus::Oom;
+        }
     }
 
     info.data.set_data(pssh_data);

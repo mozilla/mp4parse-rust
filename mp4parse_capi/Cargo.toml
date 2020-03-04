@@ -34,7 +34,6 @@ env_logger = "0.5.3"
 cbindgen = "0.5.2"
 
 [features]
-fuzz = ["mp4parse/fuzz"]
 # Enable mp4parse_fallible to use fallible memory allocation rather than
 # panicking on OOM.  Note that this is only safe within Gecko where the system
 # allocator has been globally overridden (see BMO 1457359).

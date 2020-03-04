@@ -3,8 +3,6 @@
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
-#[cfg(feature = "fuzz")]
-extern crate afl;
 
 #[macro_use]
 extern crate log;
@@ -14,9 +12,10 @@ extern crate bitreader;
 extern crate num_traits;
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use bitreader::{BitReader, ReadInto};
-use std::convert::TryInto as _;
+use std::convert::{TryFrom, TryInto as _};
 use std::io::{Read, Take};
 use std::io::Cursor;
+use std::ops::{Range, RangeFrom};
 use num_traits::Num;
 
 #[cfg(feature = "mp4parse_fallible")]
@@ -36,9 +35,9 @@ use boxes::{BoxType, FourCC};
 mod tests;
 
 // Arbitrary buffer size limit used for raw read_bufs on a box.
-const BUF_SIZE_LIMIT: usize = 10 * 1024 * 1024;
+const BUF_SIZE_LIMIT: u64 = 10 * 1024 * 1024;
 
-// Max table length. Calculating in worth case for one week long video, one
+// Max table length. Calculating in worst case for one week long video, one
 // frame per table entry in 30 fps.
 const TABLE_SIZE_LIMIT: u32 = 30 * 60 * 60 * 24 * 7;
 
@@ -82,6 +81,37 @@ impl_to_usize_from!(u8);
 impl_to_usize_from!(u16);
 impl_to_usize_from!(u32);
 
+/// Indicate the current offset (i.e., bytes already read) in a reader
+trait Offset {
+    fn offset(&self) -> u64;
+}
+
+/// Wraps a reader to track the current offset
+struct OffsetReader<'a, T: 'a> {
+    reader: &'a mut T,
+    offset: u64,
+}
+
+impl<'a, T> OffsetReader<'a, T> {
+    fn new(reader: &'a mut T) -> Self {
+        Self { reader, offset: 0 }
+    }
+}
+
+impl<'a, T> Offset for OffsetReader<'a, T> {
+    fn offset(&self) -> u64 {
+        self.offset
+    }
+}
+
+impl<'a, T: Read> Read for OffsetReader<'a, T> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let bytes_read = self.reader.read(buf)?;
+        self.offset = self.offset.checked_add(bytes_read.to_u64()).expect("total bytes read too large for offset type");
+        Ok(bytes_read)
+    }
+}
+
 // TODO: vec_push() needs to be replaced when Rust supports fallible memory
 // allocation in raw_vec.
 #[allow(unreachable_code)]
@@ -95,17 +125,58 @@ pub fn vec_push<T>(vec: &mut Vec<T>, val: T) -> std::result::Result<(), ()> {
     Ok(())
 }
 
-#[allow(unreachable_code)]
-fn allocate_read_buf(size: usize) -> std::result::Result<Vec<u8>, ()> {
+fn vec_with_capacity<T>(capacity: usize) -> std::result::Result<Vec<T>, ()> {
     #[cfg(feature = "mp4parse_fallible")]
     {
-        let mut buf: Vec<u8> = Vec::new();
-        FallibleVec::try_reserve(&mut buf, size)?;
-        buf.extend(std::iter::repeat(0).take(size));
-        return Ok(buf);
+        let mut v = Vec::new();
+        FallibleVec::try_reserve(&mut v, capacity)?;
+        Ok(v)
     }
+    #[cfg(not(feature = "mp4parse_fallible"))]
+    {
+        Ok(Vec::with_capacity(capacity))
+    }
+}
 
-    Ok(vec![0; size])
+pub fn extend_from_slice<T: Clone>(vec: &mut Vec<T>, other: &[T]) -> std::result::Result<(), ()> {
+    #[cfg(feature = "mp4parse_fallible")]
+    {
+        FallibleVec::try_extend_from_slice(vec, other)
+    }
+    #[cfg(not(feature = "mp4parse_fallible"))]
+    {
+        vec.extend_from_slice(other);
+        Ok(())
+    }
+}
+
+/// With the `mp4parse_fallible` feature enabled, this function reserves the
+/// upper limit of what `src` can generate before reading all bytes until EOF
+/// in this source, placing them into buf. If the allocation is unsuccessful,
+/// or reading from the source generates an error before reaching EOF, this
+/// will return an error. Otherwise, it will return the number of bytes read.
+///
+/// Since `src.limit()` may return a value greater than the number of bytes
+/// which can be read from the source, it's possible this function may fail
+/// in the allocation phase even though allocating the number of bytes available
+/// to read would have succeeded. In general, it is assumed that the callers
+/// have accurate knowledge of the number of bytes of interest and have created
+/// `src` accordingly.
+///
+/// With the `mp4parse_fallible` feature disabled, this is wrapper around
+/// `std::io::Read::read_to_end()`.
+fn read_to_end<T: Read>(src: &mut Take<T>, buf: &mut Vec<u8>) -> std::result::Result<usize, ()> {
+    #[cfg(feature = "mp4parse_fallible")]
+    {
+        let limit: usize = src.limit().try_into().map_err(|_| ())?;
+        FallibleVec::try_reserve(buf, limit)?;
+        let bytes_read = src.read_to_end(buf).map_err(|_| ())?;
+        Ok(bytes_read)
+    }
+    #[cfg(not(feature = "mp4parse_fallible"))]
+    {
+        src.read_to_end(buf).map_err(|_| ())
+    }
 }
 
 /// Describes parser failures.
@@ -689,6 +760,180 @@ impl MediaContext {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct AvifContext {
+    /// The collected data indicated by the `pitm` box, See ISO 14496-12:2015 § 8.11.4
+    pub primary_item: Vec<u8>,
+}
+
+impl AvifContext {
+    pub fn new() -> Self {
+        Default::default()
+    }
+}
+
+/// A Media Data Box
+/// See ISO 14496-12:2015 § 8.1.1
+struct MediaDataBox {
+    /// Offset of `data` from the beginning of the file. See ConstructionMethod::FileOffset
+    offset: u64,
+    data: Vec<u8>,
+}
+
+impl MediaDataBox {
+    /// Check whether the beginning of `extent` is within the bounds of the `MediaDataBox`.
+    /// We assume extents to not cross box boundaries. If so, this will cause an error
+    /// in `read_extent`.
+    fn contains_extent(&self, extent: &ExtentRange) -> bool {
+        if self.offset <= extent.start() {
+            let start_offset = extent.start() - self.offset;
+            start_offset < self.data.len().to_u64()
+        } else {
+            false
+        }
+    }
+
+    /// Check whether `extent` covers the `MediaDataBox` exactly.
+    fn matches_extent(&self, extent: &ExtentRange) -> bool {
+        if self.offset == extent.start() {
+            match extent {
+                ExtentRange::WithLength(range) => {
+                    if let Some(end) = self.offset.checked_add(self.data.len().to_u64()) {
+                        end == range.end
+                    } else {
+                        false
+                    }
+                }
+                ExtentRange::ToEnd(_) => true,
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Copy the range specified by `extent` to the end of `buf` or return an error if the range
+    /// is not fully contained within `MediaDataBox`.
+    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut Vec<u8>) -> Result<()> {
+        let start_offset = extent.start().checked_sub(self.offset).expect("mdat does not contain extent");
+        let slice = match extent {
+            ExtentRange::WithLength(range) => {
+                let range_len = range.end.checked_sub(range.start).expect("range start > end");
+                let end = start_offset.checked_add(range_len).expect("extent end overflow");
+                self.data.get(start_offset.try_into()?..end.try_into()?)
+            }
+            ExtentRange::ToEnd(_) => {
+                self.data.get(start_offset.try_into()?..)
+            }
+        };
+        let slice = slice.ok_or(Error::InvalidData("extent crosses box boundary"))?;
+        extend_from_slice(buf, slice)?;
+        Ok(())
+    }
+
+}
+
+/// Used for 'infe' boxes within 'iinf' boxes
+/// See ISO 14496-12:2015 § 8.11.6
+/// Only versions {2, 3} are supported
+#[derive(Debug)]
+struct ItemInfoEntry {
+    item_id: u32,
+    item_type: u32,
+}
+
+/// Potential sizes (in bytes) of variable-sized fields of the 'iloc' box
+/// See ISO 14496-12:2015 § 8.11.3
+enum IlocFieldSize {
+    Zero,
+    Four,
+    Eight,
+}
+
+impl IlocFieldSize {
+    fn to_bits(&self) -> u8 {
+        match self {
+            IlocFieldSize::Zero => 0,
+            IlocFieldSize::Four => 32,
+            IlocFieldSize::Eight => 64,
+        }
+    }
+}
+
+impl TryFrom<u8> for IlocFieldSize {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self> {
+        match value {
+            0 => Ok(Self::Zero),
+            4 => Ok(Self::Four),
+            8 => Ok(Self::Eight),
+            _ => Err(Error::InvalidData("value must be in the set {0, 4, 8}")),
+        }
+    }
+}
+
+#[derive(PartialEq)]
+enum IlocVersion {
+    Zero,
+    One,
+    Two,
+}
+
+impl TryFrom<u8> for IlocVersion {
+    type Error = Error;
+
+    fn try_from(value: u8) -> Result<Self> {
+        match value {
+            0 => Ok(Self::Zero),
+            1 => Ok(Self::One),
+            2 => Ok(Self::Two),
+            _ => Err(Error::Unsupported("unsupported version in 'iloc' box")),
+        }
+    }
+}
+
+/// Used for 'iloc' boxes
+/// See ISO 14496-12:2015 § 8.11.3
+/// `base_offset` is omitted since it is integrated into the ranges in `extents`
+/// `data_reference_index` is omitted, since only 0 (i.e., this file) is supported
+#[derive(Clone, Debug)]
+struct ItemLocationBoxItem {
+    item_id: u32,
+    construction_method: ConstructionMethod,
+    /// Unused for ConstructionMethod::IdatOffset
+    extents: Vec<ItemLocationBoxExtent>,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ConstructionMethod {
+    FileOffset,
+    IdatOffset,
+    #[allow(dead_code)] // TODO: see https://github.com/mozilla/mp4parse-rust/issues/196
+    ItemOffset,
+}
+
+/// `extent_index` is omitted since it's only used for ConstructionMethod::ItemOffset which
+/// is currently not implemented.
+#[derive(Clone, Debug)]
+struct ItemLocationBoxExtent {
+    extent_range: ExtentRange,
+}
+
+#[derive(Clone, Debug)]
+enum ExtentRange {
+    WithLength(Range<u64>),
+    ToEnd(RangeFrom<u64>),
+}
+
+impl ExtentRange {
+    fn start(&self) -> u64 {
+        match self {
+            Self::WithLength(r) => r.start,
+            Self::ToEnd(r) => r.start
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum TrackType {
     Audio,
@@ -807,6 +1052,12 @@ impl<'a, T: Read> Read for BMFFBox<'a, T> {
     }
 }
 
+impl<'a, T: Offset> Offset for BMFFBox<'a, T> {
+    fn offset(&self) -> u64 {
+        self.content.get_ref().offset()
+    }
+}
+
 impl<'a, T: Read> BMFFBox<'a, T> {
     fn bytes_left(&self) -> u64 {
         self.content.limit()
@@ -818,6 +1069,40 @@ impl<'a, T: Read> BMFFBox<'a, T> {
 
     fn box_iter<'b>(&'b mut self) -> BoxIter<BMFFBox<'a, T>> {
         BoxIter::new(self)
+    }
+}
+
+impl<'a, T: Read + Offset> BMFFBox<'a, T> {
+    /// Check whether the beginning of `extent` is within the bounds of the `BMFFBox`.
+    /// We assume extents to not cross box boundaries. If so, this will cause an error
+    /// in `read_extent`.
+    fn contains_extent(&self, extent: &ExtentRange) -> bool {
+        if self.offset() <= extent.start() {
+            let start_offset = extent.start() - self.offset();
+            start_offset < self.bytes_left()
+        } else {
+            false
+        }
+    }
+
+    /// Read the range specified by `extent` into `buf` or return an error if the range is not
+    /// fully contained within the `BMFFBox`.
+    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut Vec<u8>) -> Result<()> {
+        let start_offset = extent.start().checked_sub(self.offset()).expect("box does not contain extent");
+        skip(self, start_offset)?;
+        match extent {
+            ExtentRange::WithLength(range) => {
+                let len = range.end.checked_sub(range.start).expect("range start > end");
+                if len > self.bytes_left() {
+                    return Err(Error::InvalidData("extent crosses box boundary"));
+                }
+                read_to_end(&mut self.take(len), buf)?;
+            }
+            ExtentRange::ToEnd(_) => {
+                read_to_end(&mut self.take(self.bytes_left()), buf)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -893,6 +1178,17 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> Result<(u8, u32)> {
         u32::from(flags_a) << 16 | u32::from(flags_b) << 8 | u32::from(flags_c)))
 }
 
+// Parse the extra fields for a full box whose flag fields must be zero.
+fn read_fullbox_version_no_flags<T: ReadBytesExt>(src: &mut T) -> Result<u8> {
+    let (version, flags) = read_fullbox_extra(src)?;
+
+    if flags != 0 {
+        return Err(Error::Unsupported("expected flags to be 0"));
+    }
+
+    Ok(version)
+}
+
 /// Skip over the entire contents of a box.
 fn skip_box_content<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
     // Skip the contents of unknown chunks.
@@ -914,6 +1210,340 @@ fn skip_box_remain<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
         len
     };
     skip(src, remain)
+}
+
+/// Read the contents of an AVIF file
+///
+/// Metadata is accumulated in the passed-through `AvifContext` struct,
+/// which can be examined later.
+pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
+    let mut f = OffsetReader::new(f);
+
+    let mut iter = BoxIter::new(&mut f);
+
+    // 'ftyp' box must occur first; see ISO 14496-12:2015 § 4.3.1
+    if let Some(mut b) = iter.next_box()? {
+        if b.head.name == BoxType::FileTypeBox {
+            let ftyp = read_ftyp(&mut b)?;
+            if !ftyp.compatible_brands.contains(&FourCC::from("mif1")) {
+                return Err(Error::InvalidData("compatible_brands must contain 'mif1'"));
+            }
+        } else {
+            return Err(Error::InvalidData("'ftyp' box must occur first"))
+        }
+    }
+
+    let mut read_meta = false;
+    let mut mdats = vec![];
+    let mut primary_item_extents = None;
+    let mut primary_item_extents_data: Vec<Vec<u8>> = vec![];
+
+    while let Some(mut b) = iter.next_box()? {
+        match b.head.name {
+            BoxType::MetadataBox => {
+                if read_meta {
+                    return Err(Error::InvalidData("There should be zero or one meta boxes per ISO 14496-12:2015 § 8.11.1.1"));
+                }
+                read_meta = true;
+                let primary_item_loc = read_avif_meta(&mut b)?;
+                match primary_item_loc.construction_method {
+                    ConstructionMethod::FileOffset => {
+                        primary_item_extents = Some(primary_item_loc.extents);
+                        primary_item_extents_data = primary_item_extents.iter().map(|_| vec![]).collect();
+                    }
+                    _ => return Err(Error::Unsupported("unsupported construction_method")),
+                }
+            }
+            BoxType::MediaDataBox => { // See ISO 14496-12:2015 § 8.1.1
+                // If we know our primary item location by this point, try to read it out of this
+                // mdat directly and avoid a copy
+                if let Some(extents) = &primary_item_extents {
+                    for (extent, data) in extents.iter().zip(primary_item_extents_data.iter_mut()) {
+                        if b.contains_extent(&extent.extent_range) {
+                            b.read_extent(&extent.extent_range, data)?;
+                        }
+                    }
+                }
+
+                // Store any remaining data for potential later extraction
+                if b.bytes_left() > 0 {
+                    let offset = b.offset();
+                    let mut data = vec_with_capacity(b.bytes_left().try_into()?)?;
+                    b.read_to_end(&mut data)?;
+                    vec_push(&mut mdats, MediaDataBox { offset, data })?;
+                }
+            }
+            _ => skip_box_content(&mut b)?,
+        }
+
+        check_parser_state!(b.content);
+    }
+
+    // If the `mdat` box came before the `meta` box, we need to fill in our primary item data
+    let primary_item_extents = primary_item_extents.ok_or(Error::InvalidData("primary item extents missing"))?;
+    for (extent, data) in primary_item_extents.iter().zip(primary_item_extents_data.iter_mut()) {
+        if data.is_empty()  {
+            // try to find an overlapping mdat
+            for mdat in &mut mdats {
+                if mdat.matches_extent(&extent.extent_range) {
+                    data.append(&mut mdat.data)
+                } else if mdat.contains_extent(&extent.extent_range) {
+                    mdat.read_extent(&extent.extent_range, data)?;
+                }
+            }
+        }
+    }
+
+    context.primary_item = primary_item_extents_data.into_iter().flatten().collect();
+
+    Ok(())
+}
+
+/// Parse a metadata box in the context of an AVIF
+/// Currently requires the primary item to be an av01 item type and generates
+/// an error otherwise.
+/// See ISO 14496-12:2015 § 8.11.1
+fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<ItemLocationBoxItem> {
+    let version = read_fullbox_version_no_flags(src)?;
+
+    if version != 0 {
+        return Err(Error::Unsupported("unsupported meta version"))
+    }
+
+    let mut primary_item_id = None;
+    let mut item_infos = None;
+    let mut iloc_items = None;
+
+    let mut iter = src.box_iter();
+    while let Some(mut b) = iter.next_box()? {
+        match b.head.name {
+            BoxType::ItemInfoBox => {
+                if item_infos.is_some() {
+                    return Err(Error::InvalidData("There should be zero or one iinf boxes per ISO 14496-12:2015 § 8.11.6.1"));
+                }
+                item_infos = Some(read_iinf(&mut b)?);
+            }
+            BoxType::ItemLocationBox => {
+                if iloc_items.is_some() {
+                    return Err(Error::InvalidData("There should be zero or one iloc boxes per ISO 14496-12:2015 § 8.11.3.1"));
+                }
+                iloc_items = Some(read_iloc(&mut b)?);
+            }
+            BoxType::PrimaryItemBox => {
+                if primary_item_id.is_some() {
+                    return Err(Error::InvalidData("There should be zero or one iloc boxes per ISO 14496-12:2015 § 8.11.4.1"));
+                }
+                primary_item_id = Some(read_pitm(&mut b)?);
+            }
+            _ => skip_box_content(&mut b)?,
+        }
+
+        check_parser_state!(b.content);
+    }
+
+    let primary_item_id = primary_item_id.ok_or(Error::InvalidData("Required pitm box not present in meta box"))?;
+
+    if let Some(item_info) = item_infos.iter().flatten().find(|x| x.item_id == primary_item_id) {
+        if &item_info.item_type.to_be_bytes() != b"av01" {
+            warn!("primary_item_id type: {}", be_u32_to_string(item_info.item_type));
+            return Err(Error::InvalidData("primary_item_id type is not av01"));
+        }
+    } else {
+        return Err(Error::InvalidData("primary_item_id not present in iinf box"));
+    }
+
+    if let Some(loc) = iloc_items.iter().flatten().find(|loc| loc.item_id == primary_item_id) {
+        Ok(loc.clone())
+    } else {
+        Err(Error::InvalidData("primary_item_id not present in iloc box"))
+    }
+}
+
+/// Parse a Primary Item Box
+/// See ISO 14496-12:2015 § 8.11.4
+fn read_pitm<T: Read>(src: &mut BMFFBox<T>) -> Result<u32> {
+    let version = read_fullbox_version_no_flags(src)?;
+
+    let item_id = match version {
+        0 => be_u16(src)?.into(),
+        1 => be_u32(src)?,
+        _ => return Err(Error::Unsupported("unsupported pitm version")),
+    };
+
+    Ok(item_id)
+}
+
+/// Parse an Item Information Box
+/// See ISO 14496-12:2015 § 8.11.6
+fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemInfoEntry>> {
+    let version = read_fullbox_version_no_flags(src)?;
+
+    match version {
+        0 | 1 => (),
+        _ => return Err(Error::Unsupported("unsupported iinf version")),
+    }
+
+    let entry_count = if version == 0 {
+        be_u16(src)?.to_usize()
+    } else {
+        be_u32(src)?.to_usize()
+    };
+    let mut item_infos = vec_with_capacity(entry_count)?;
+
+    let mut iter = src.box_iter();
+    while let Some(mut b) = iter.next_box()? {
+        if b.head.name != BoxType::ItemInfoEntry {
+            return Err(Error::InvalidData("iinf box should contain only infe boxes"));
+        }
+
+        vec_push(&mut item_infos, read_infe(&mut b)?)?;
+
+        check_parser_state!(b.content);
+    }
+
+    Ok(item_infos)
+}
+
+fn be_u32_to_string(src: u32) -> String {
+    String::from_utf8(src.to_be_bytes().to_vec()).unwrap_or(format!("{:x?}", src))
+}
+
+/// Parse an Item Info Entry
+/// See ISO 14496-12:2015 § 8.11.6.2
+fn read_infe<T: Read>(src: &mut BMFFBox<T>) -> Result<ItemInfoEntry> {
+    // According to the standard, it seems the flags field should be 0, but
+    // at least one sample AVIF image has a nonzero value.
+    let (version, _) = read_fullbox_extra(src)?;
+
+    // mif1 brand (see ISO 23008-12:2017 § 10.2.1) only requires v2 and 3
+    let item_id = match version {
+        2 => be_u16(src)?.into(),
+        3 => be_u32(src)?,
+        _ => return Err(Error::Unsupported("unsupported version in 'infe' box"))
+    };
+
+    let item_protection_index = be_u16(src)?;
+
+    if item_protection_index != 0 {
+        return Err(Error::Unsupported("protected items (infe.item_protection_index != 0) are not supported"));
+    }
+
+    let item_type = be_u32(src)?;
+    debug!("infe item_id {} item_type: {}", item_id, be_u32_to_string(item_type));
+
+    // There are some additional fields here, but they're not of interest to us
+    skip_box_remain(src)?;
+
+    Ok(ItemInfoEntry { item_id, item_type })
+}
+
+/// Parse an item location box inside a meta box
+/// See ISO 14496-12:2015 § 8.11.3
+fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> {
+    let version: IlocVersion = read_fullbox_version_no_flags(src)?.try_into()?;
+
+    let mut iloc = vec_with_capacity(src.bytes_left().try_into()?)?;
+    src.read_to_end(&mut iloc)?;
+    let mut iloc = BitReader::new(iloc.as_slice());
+
+    let offset_size: IlocFieldSize = iloc.read_u8(4)?.try_into()?;
+    let length_size: IlocFieldSize = iloc.read_u8(4)?.try_into()?;
+    let base_offset_size: IlocFieldSize = iloc.read_u8(4)?.try_into()?;
+
+    let index_size: Option<IlocFieldSize> = match version {
+        IlocVersion::One | IlocVersion::Two => Some(iloc.read_u8(4)?.try_into()?),
+        IlocVersion::Zero => {
+            let _reserved = iloc.read_u8(4)?;
+            None
+        }
+    };
+
+    let item_count = match version {
+        IlocVersion::Zero | IlocVersion::One => iloc.read_u32(16)?,
+        IlocVersion::Two => iloc.read_u32(32)?,
+    };
+
+    let mut items = vec_with_capacity(item_count.to_usize())?;
+
+    for _ in 0..item_count {
+        let item_id = match version {
+            IlocVersion::Zero | IlocVersion::One => iloc.read_u32(16)?,
+            IlocVersion::Two => iloc.read_u32(32)?,
+        };
+
+        // The spec isn't entirely clear how an `iloc` should be interpreted for version 0,
+        // which has no `construction_method` field. It does say:
+        // "For maximum compatibility, version 0 of this box should be used in preference to
+        //  version 1 with `construction_method==0`, or version 2 when possible."
+        // We take this to imply version 0 can be interpreted as using file offsets.
+        let construction_method = match version {
+            IlocVersion::Zero => ConstructionMethod::FileOffset,
+            IlocVersion::One | IlocVersion::Two => {
+                let _reserved = iloc.read_u16(12)?;
+                match iloc.read_u16(4)? {
+                    0 => ConstructionMethod::FileOffset,
+                    1 => ConstructionMethod::IdatOffset,
+                    2 => return Err(Error::Unsupported("construction_method 'item_offset' is not supported")),
+                    _ => return Err(Error::InvalidData("construction_method is taken from the set 0, 1 or 2 per ISO 14496-12:2015 § 8.11.3.3"))
+                }
+            }
+        };
+
+        let data_reference_index = iloc.read_u16(16)?;
+
+        if data_reference_index != 0 {
+            return Err(Error::Unsupported("external file references (iloc.data_reference_index != 0) are not supported"));
+        }
+
+        let base_offset = iloc.read_u64(base_offset_size.to_bits())?;
+        let extent_count = iloc.read_u16(16)?;
+
+        if extent_count < 1 {
+            return Err(Error::InvalidData("extent_count must have a value 1 or greater per ISO 14496-12:2015 § 8.11.3.3"));
+        }
+
+        let mut extents = vec_with_capacity(extent_count.to_usize())?;
+
+        for _ in 0..extent_count {
+            // Parsed but currently ignored, see `ItemLocationBoxExtent`
+            let _extent_index = match &index_size {
+                None | Some(IlocFieldSize::Zero) => None,
+                Some(index_size) => {
+                    debug_assert!(version == IlocVersion::One || version == IlocVersion::Two);
+                    Some(iloc.read_u64(index_size.to_bits())?)
+                }
+            };
+
+            // Per ISO 14496-12:2015 § 8.11.3.1:
+            // "If the offset is not identified (the field has a length of zero), then the
+            //  beginning of the source (offset 0) is implied"
+            // This behavior will follow from BitReader::read_u64(0) -> 0.
+            let extent_offset = iloc.read_u64(offset_size.to_bits())?;
+            let extent_length = iloc.read_u64(length_size.to_bits())?;
+
+            // "If the length is not specified, or specified as zero, then the entire length of
+            //  the source is implied" (ibid)
+            let start = base_offset.checked_add(extent_offset).ok_or(Error::InvalidData("offset calculation overflow"))?;
+            let extent_range = if extent_length == 0 {
+                ExtentRange::ToEnd(RangeFrom { start })
+            } else {
+                let end = start.checked_add(extent_length).ok_or(Error::InvalidData("end calculation overflow"))?;
+                ExtentRange::WithLength(Range { start, end })
+            };
+
+            vec_push(&mut extents, ItemLocationBoxExtent { extent_range })?;
+        }
+
+        vec_push(&mut items, ItemLocationBoxItem {
+            item_id,
+            construction_method,
+            extents
+        })?;
+    }
+
+    debug_assert_eq!(iloc.remaining(), 0);
+
+    Ok(items)
 }
 
 /// Read the contents of a box, including sub boxes.
@@ -1020,7 +1650,7 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: &mut MediaContext) -> Result<
 }
 
 fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHeaderBox> {
-    let len = src.bytes_left().try_into()?;
+    let len = src.bytes_left();
     let mut box_content = read_buf(src, len)?;
     let (system_id, kid, data) = {
         let pssh = &mut Cursor::new(box_content.as_slice());
@@ -1038,8 +1668,8 @@ fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHe
             }
         }
 
-        let data_size = be_u32_with_limit(pssh)?.to_usize();
-        let data = read_buf(pssh, data_size)?;
+        let data_size = be_u32_with_limit(pssh)?;
+        let data = read_buf(pssh, data_size.into())?;
 
         (system_id, kid, data)
     };
@@ -1634,7 +2264,7 @@ fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
     };
 
     let codec_init_size = be_u16(src)?;
-    let codec_init = read_buf(src, codec_init_size.to_usize())?;
+    let codec_init = read_buf(src, codec_init_size.into())?;
 
     // TODO(rillian): validate field value ranges.
     Ok(VPxConfigBox {
@@ -1682,7 +2312,7 @@ fn read_av1c<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1ConfigBox> {
         };
 
     let config_obus_size = src.bytes_left();
-    let config_obus = read_buf(src, config_obus_size.try_into()?)?;
+    let config_obus = read_buf(src, config_obus_size)?;
 
     Ok(AV1ConfigBox {
         profile,
@@ -1702,12 +2332,12 @@ fn read_av1c<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1ConfigBox> {
 fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock> {
     let temp = src.read_u8()?;
     let block_type = temp & 0x7f;
-    let length = be_u24(src)?;
-    if u64::from(length) > src.bytes_left() {
+    let length = be_u24(src)?.into();
+    if length > src.bytes_left() {
         return Err(Error::InvalidData(
                 "FLACMetadataBlock larger than parent box"));
     }
-    let data = read_buf(src, length.to_usize())?;
+    let data = read_buf(src, length)?;
     Ok(FLACMetadataBlock {
         block_type,
         data,
@@ -1989,7 +2619,7 @@ fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
     // Subtract 4 extra to offset the members of fullbox not accounted for in
     // head.offset
     let esds_size = src.head.size.checked_sub(src.head.offset + 4).expect("offset invalid");
-    let esds_array = read_buf(src, esds_size.try_into()?)?;
+    let esds_array = read_buf(src, esds_size)?;
 
     let mut es_data = ES_Descriptor::default();
     find_descriptor(&esds_array, &mut es_data)?;
@@ -2048,7 +2678,7 @@ fn read_dops<T: Read>(src: &mut BMFFBox<T>) -> Result<OpusSpecificBox> {
     } else {
         let stream_count = src.read_u8()?;
         let coupled_count = src.read_u8()?;
-        let channel_mapping = read_buf(src, output_channel_count.to_usize())?;
+        let channel_mapping = read_buf(src, output_channel_count.into())?;
 
         Some(ChannelMappingTable {
             stream_count,
@@ -2123,7 +2753,7 @@ fn read_alac<T: Read>(src: &mut BMFFBox<T>) -> Result<ALACSpecificBox> {
     }
 
     let length = match src.bytes_left() {
-        x @ 24 | x @ 48 => x.try_into().expect("infallible conversion to usize"),
+        x @ 24 | x @ 48 => x,
         _ => return Err(Error::InvalidData("ALACSpecificBox magic cookie is the wrong size")),
     };
     let data = read_buf(src, length)?;
@@ -2198,7 +2828,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                         return Err(Error::InvalidData("malformed video sample entry"));
                     }
                 let avcc_size = b.head.size.checked_sub(b.head.offset).expect("offset invalid");
-                let avcc = read_buf(&mut b.content, avcc_size.try_into()?)?;
+                let avcc = read_buf(&mut b.content, avcc_size)?;
                 debug!("{:?} (avcc)", avcc);
                 // TODO(kinetik): Parse avcC box?  For now we just stash the data.
                 codec_specific = Some(VideoCodecSpecific::AVCConfig(avcc));
@@ -2228,10 +2858,10 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 // Subtract 4 extra to offset the members of fullbox not
                 // accounted for in head.offset
                 let esds_size = b.head.size.checked_sub(b.head.offset + 4).expect("offset invalid");
-                let esds = read_buf(&mut b.content, esds_size.try_into()?)?;
+                let esds = read_buf(&mut b.content, esds_size)?;
                 codec_specific = Some(VideoCodecSpecific::ESDSConfig(esds));
             }
-            BoxType::ProtectionSchemeInformationBox => {
+            BoxType::ProtectionSchemeInfoBox => {
                 if name != BoxType::ProtectedVisualSampleEntry {
                     return Err(Error::InvalidData("malformed video sample entry"));
                 }
@@ -2371,7 +3001,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 codec_type = qt_esds.audio_codec;
                 codec_specific = Some(AudioCodecSpecific::ES_Descriptor(qt_esds));
             }
-            BoxType::ProtectionSchemeInformationBox => {
+            BoxType::ProtectionSchemeInfoBox => {
                 if name != BoxType::ProtectedAudioSampleEntry {
                     return Err(Error::InvalidData("malformed audio sample entry"));
                 }
@@ -2513,7 +3143,7 @@ fn read_tenc<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackEncryptionBox> {
     let default_constant_iv = match (default_is_encrypted, default_iv_size) {
         (1, 0) => {
             let default_constant_iv_size = src.read_u8()?;
-            Some(read_buf(src, default_constant_iv_size.to_usize())?)
+            Some(read_buf(src, default_constant_iv_size.into())?)
         },
         _ => None,
     };
@@ -2696,7 +3326,7 @@ fn read_ilst_multiple_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<Vec<u
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::MetadataItemDataEntry => {
-                data.push(read_ilst_data(&mut b)?);
+                vec_push(&mut data, read_ilst_data(&mut b)?)?;
             }
             _ => skip_box_content(&mut b)?,
         };
@@ -2708,7 +3338,7 @@ fn read_ilst_multiple_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<Vec<u
 fn read_ilst_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<u8>> {
     // Skip past the padding bytes
     skip(&mut src.content, src.head.offset)?;
-    let size = src.content.limit().try_into()?;
+    let size = src.content.limit();
     read_buf(&mut src.content, size)
 }
 
@@ -2719,19 +3349,18 @@ fn skip<T: Read>(src: &mut T, bytes: u64) -> Result<()> {
 }
 
 /// Read size bytes into a Vector or return error.
-fn read_buf<T: ReadBytesExt>(src: &mut T, size: usize) -> Result<Vec<u8>> {
+fn read_buf<T: Read>(src: &mut T, size: u64) -> Result<Vec<u8>> {
     if size > BUF_SIZE_LIMIT {
         return Err(Error::InvalidData("read_buf size exceeds BUF_SIZE_LIMIT"));
     }
-    if let Ok(mut buf) = allocate_read_buf(size) {
-        let r = src.read(&mut buf)?;
-        if r != size {
-          return Err(Error::InvalidData("failed buffer read"));
-        }
-        return Ok(buf);
+
+    let mut buf = vec![];
+    let r: u64 = read_to_end(&mut src.take(size), &mut buf)?.try_into()?;
+    if r != size {
+        return Err(Error::InvalidData("failed buffer read"));
     }
 
-    Err(Error::OutOfMemory)
+    Ok(buf)
 }
 
 fn be_i16<T: ReadBytesExt>(src: &mut T) -> Result<i16> {

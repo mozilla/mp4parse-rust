@@ -8,6 +8,7 @@ extern crate mp4parse as mp4;
 
 use std::io::{Cursor, Read};
 use std::fs::File;
+use std::path::Path;
 
 static MINI_MP4: &str = "tests/minimal.mp4";
 static MINI_MP4_WITH_METADATA: &str = "tests/metadata.mp4";
@@ -27,6 +28,10 @@ static VIDEO_EME_CENC_MP4: &str = "tests/bipbop_480wp_1001kbps-cenc-video-key1-i
 static AUDIO_EME_CBCS_MP4: &str = "tests/bipbop_cbcs_audio_init.mp4";
 static VIDEO_EME_CBCS_MP4: &str = "tests/bipbop_cbcs_video_init.mp4";
 static VIDEO_AV1_MP4: &str = "tests/tiny_av1.mp4";
+static IMAGE_AVIF: &str = "av1-avif/testFiles/Microsoft/Monochrome.avif";
+static IMAGE_AVIF_GRID: &str = "av1-avif/testFiles/Microsoft/Summer_in_Tomsk_720p_5x4_grid.avif";
+static MICROSOFT_AVIF_TEST_DIR: &str = "av1-avif/testFiles/Microsoft";
+static NETFLIX_AVIF_TEST_DIR: &str = "av1-avif/testFiles/Netflix/avif";
 
 // Adapted from https://github.com/GuillaumeGomez/audio-video-metadata/blob/9dff40f565af71d5502e03a2e78ae63df95cfd40/src/metadata.rs#L53
 #[test]
@@ -592,5 +597,44 @@ fn public_video_av1() {
             },
             _ => panic!("Invalid test condition"),
         }
+    }
+}
+
+#[test]
+fn public_avif_primary_item() {
+    let context = &mut mp4::AvifContext::new();
+    let input = &mut File::open(IMAGE_AVIF).expect("Unknown file");
+    mp4::read_avif(input, context).expect("read_avif failed");
+    assert_eq!(context.primary_item.len(), 6979);
+    assert_eq!(context.primary_item[0..4], [0x12, 0x00, 0x0a, 0x0a]);
+}
+
+#[test]
+#[ignore] // Remove when we add support; see https://github.com/mozilla/mp4parse-rust/issues/198
+fn public_avif_primary_item_is_grid() {
+    let context = &mut mp4::AvifContext::new();
+    let input = &mut File::open(IMAGE_AVIF_GRID).expect("Unknown file");
+    mp4::read_avif(input, context).expect("read_avif failed");
+    // Add some additional checks
+}
+
+#[test]
+fn public_avif_read_samples() {
+    env_logger::init();
+    let microsoft = Path::new(MICROSOFT_AVIF_TEST_DIR).read_dir().expect("Cannot read AVIF test dir");
+    let netflix = Path::new(NETFLIX_AVIF_TEST_DIR).read_dir().expect("Cannot read AVIF test dir");
+    for entry in microsoft.chain(netflix) {
+        let path = entry.expect("AVIF entry").path();
+        if path.extension().expect("no extension") != "avif" {
+            eprintln!("Skipping {:?}", path);
+            continue; // Skip ReadMe.txt, etc.
+        }
+        if path == Path::new(IMAGE_AVIF_GRID) {
+            eprintln!("Skipping {:?}", path);
+            continue; // Remove when public_avif_primary_item_is_grid passes
+        }
+        let context = &mut mp4::AvifContext::new();
+        let input = &mut File::open(path).expect("Unknow file");
+        mp4::read_avif(input, context).expect("read_avif failed");
     }
 }
