@@ -125,19 +125,6 @@ pub fn vec_push<T>(vec: &mut Vec<T>, val: T) -> std::result::Result<(), ()> {
     Ok(())
 }
 
-#[allow(unreachable_code)]
-fn allocate_read_buf(size: usize) -> std::result::Result<Vec<u8>, ()> {
-    #[cfg(feature = "mp4parse_fallible")]
-    {
-        let mut buf: Vec<u8> = Vec::new();
-        FallibleVec::try_reserve(&mut buf, size)?;
-        buf.extend(std::iter::repeat(0).take(size));
-        return Ok(buf);
-    }
-
-    Ok(vec![0; size])
-}
-
 fn vec_with_capacity<T>(capacity: usize) -> std::result::Result<Vec<T>, ()> {
     #[cfg(feature = "mp4parse_fallible")]
     {
@@ -3366,15 +3353,14 @@ fn read_buf<T: Read>(src: &mut T, size: u64) -> Result<Vec<u8>> {
     if size > BUF_SIZE_LIMIT {
         return Err(Error::InvalidData("read_buf size exceeds BUF_SIZE_LIMIT"));
     }
-    if let Ok(mut buf) = allocate_read_buf(size.try_into()?) {
-        let r = src.read(&mut buf)?;
-        if r != size.try_into()? {
-          return Err(Error::InvalidData("failed buffer read"));
-        }
-        return Ok(buf);
+
+    let mut buf = vec![];
+    let r: u64 = read_to_end(&mut src.take(size), &mut buf)?.try_into()?;
+    if r != size {
+        return Err(Error::InvalidData("failed buffer read"));
     }
 
-    Err(Error::OutOfMemory)
+    Ok(buf)
 }
 
 fn be_i16<T: ReadBytesExt>(src: &mut T) -> Result<i16> {
