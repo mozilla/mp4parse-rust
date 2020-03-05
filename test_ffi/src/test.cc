@@ -16,7 +16,7 @@
 
 #include "mp4parse.h"
 
-intptr_t error_read(uint8_t *buffer, uintptr_t size, void *userdata)
+intptr_t error_read(uint8_t *, uintptr_t, void *)
 {
   return -1;
 }
@@ -91,9 +91,9 @@ void test_arg_validation_with_parser()
   assert(dummy_value == 42);
 }
 
-void test_arg_validation_with_data(const std::string& filename)
+void test_arg_validation_with_data(const char* filename)
 {
-  FILE* f = fopen(filename.c_str(), "rb");
+  FILE* f = fopen(filename, "rb");
   assert(f != nullptr);
   Mp4parseIo io = { io_read, f };
   Mp4parseParser *parser = nullptr;
@@ -210,23 +210,20 @@ int32_t read_file(const char* filename)
   return MP4PARSE_STATUS_OK;
 }
 
-int main(int argc, char* argv[])
+extern "C"
+int test_main(const char* test_path)
 {
-  // Parse command line options.
-  std::vector<std::string> args(argv + 1, argv + argc);
-
   test_arg_validation();
   test_arg_validation_with_parser();
+  test_arg_validation_with_data(test_path);
+  return 0;
+}
 
-  // Find our test file relative to our executable file path.
-  char* real = realpath(argv[0], NULL);
-  std::string path(real);
-  free(real);
-  auto split = path.rfind('/');
-  path.replace(split, path.length() - split, "/../../mp4parse/tests/minimal.mp4");
-  test_arg_validation_with_data(path);
+extern "C"
+int run_main(int argc, char* argv[])
+{
+  std::vector<std::string> args(argv + 1, argv + argc);
 
-  // Run any other test files passed on the command line.
   for (auto arg: args) {
     read_file(arg.c_str());
   }

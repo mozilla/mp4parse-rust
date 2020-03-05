@@ -3,8 +3,6 @@ extern crate cbindgen;
 use cbindgen::{Config, RenameRule};
 
 fn main() {
-    let crate_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-
     println!("cargo:rerun-if-changed=src/lib.rs");
 
     let config = {
@@ -41,6 +39,7 @@ extern "C" {
     };
 
     // Generate mp4parse.h.
+    let crate_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     cbindgen::generate_with_config(&crate_dir, config)
         .expect("Could not generate header")
         .write_to_file("include/mp4parse.h");
