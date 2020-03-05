@@ -18,14 +18,12 @@ before_script:
 - if [[ "$TRAVIS_RUST_VERSION" != *nightly* ]]; then rustup component add rustfmt; fi
 
 script:
-  - cargo test --all --verbose $RELEASE
-  # We cannot run `cargo test` with the mp4parse_infallible feature enabled
+  # We cannot run `cargo test` with the mp4parse_fallible feature enabled
   # (see comment where the feature is defined in mp4parse_capi/Cargo.toml),
   # but we can at least check for changes behind features that would break the
-  # build. Also note that we can't run `cargo check` before `cargo test` or
-  # else it breaks `build_ffi_test` for complicated reasons.
-  # See https://github.com/mozilla/mp4parse-rust/issues/197
+  # build.
   - cargo check --all --verbose $RELEASE --tests --all-features
+  - cargo test --all --verbose $RELEASE
   - cargo doc --package mp4parse_capi
   # The `false` after `echo` is necessary to avoid false negatives due to `echo` returning success
   - if [[ "$TRAVIS_RUST_VERSION" != *nightly* ]]; then cargo fmt -- --check || (echo "Please reformat your code with 'cargo fmt' (version $(cargo fmt -- --version))"; false); fi
