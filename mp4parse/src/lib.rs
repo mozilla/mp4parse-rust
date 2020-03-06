@@ -775,7 +775,7 @@ impl AvifContext {
 /// A Media Data Box
 /// See ISO 14496-12:2015 § 8.1.1
 struct MediaDataBox {
-    /// Offset of `data` from the beginning of the file. See ConstructionMethod::FileOffset
+    /// Offset of `data` from the beginning of the file. See ConstructionMethod::File
     offset: u64,
     data: Vec<u8>,
 }
@@ -900,19 +900,19 @@ impl TryFrom<u8> for IlocVersion {
 struct ItemLocationBoxItem {
     item_id: u32,
     construction_method: ConstructionMethod,
-    /// Unused for ConstructionMethod::IdatOffset
+    /// Unused for ConstructionMethod::Idat
     extents: Vec<ItemLocationBoxExtent>,
 }
 
 #[derive(Clone, Copy, Debug)]
 enum ConstructionMethod {
-    FileOffset,
-    IdatOffset,
+    File,
+    Idat,
     #[allow(dead_code)] // TODO: see https://github.com/mozilla/mp4parse-rust/issues/196
-    ItemOffset,
+    Item,
 }
 
-/// `extent_index` is omitted since it's only used for ConstructionMethod::ItemOffset which
+/// `extent_index` is omitted since it's only used for ConstructionMethod::Item which
 /// is currently not implemented.
 #[derive(Clone, Debug)]
 struct ItemLocationBoxExtent {
@@ -1247,7 +1247,7 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
                 read_meta = true;
                 let primary_item_loc = read_avif_meta(&mut b)?;
                 match primary_item_loc.construction_method {
-                    ConstructionMethod::FileOffset => {
+                    ConstructionMethod::File => {
                         primary_item_extents = Some(primary_item_loc.extents);
                         primary_item_extents_data = primary_item_extents.iter().map(|_| vec![]).collect();
                     }
@@ -1477,12 +1477,12 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> 
         //  version 1 with `construction_method==0`, or version 2 when possible."
         // We take this to imply version 0 can be interpreted as using file offsets.
         let construction_method = match version {
-            IlocVersion::Zero => ConstructionMethod::FileOffset,
+            IlocVersion::Zero => ConstructionMethod::File,
             IlocVersion::One | IlocVersion::Two => {
                 let _reserved = iloc.read_u16(12)?;
                 match iloc.read_u16(4)? {
-                    0 => ConstructionMethod::FileOffset,
-                    1 => ConstructionMethod::IdatOffset,
+                    0 => ConstructionMethod::File,
+                    1 => ConstructionMethod::Idat,
                     2 => return Err(Error::Unsupported("construction_method 'item_offset' is not supported")),
                     _ => return Err(Error::InvalidData("construction_method is taken from the set 0, 1 or 2 per ISO 14496-12:2015 § 8.11.3.3"))
                 }

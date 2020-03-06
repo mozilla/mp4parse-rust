@@ -423,6 +423,10 @@ pub unsafe extern fn mp4parse_new(io: *const Mp4parseIo, status_out: *mut Mp4par
 /// See mp4parse_new; this function is identical except that it returns a
 /// pointer to an `Mp4parseAvifParser`, which (when non-null) must be paired
 /// with a call to mp4parse_avif_free.
+///
+/// # Safety
+///
+/// Same as mp4parse_new.
 #[no_mangle]
 pub unsafe extern fn mp4parse_avif_new(io: *const Mp4parseIo, status_out: *mut Mp4parseStatus) -> *mut Mp4parseAvifParser {
     mp4parse_new_common(io, status_out)
@@ -989,7 +993,7 @@ pub unsafe extern fn mp4parse_avif_get_primary_item(parser: *mut Mp4parseAvifPar
     // TODO: check for a valid parsed context. See https://github.com/mozilla/mp4parse-rust/issues/195
     (*primary_item).set_data(&context.primary_item);
 
-    return Mp4parseStatus::Ok;
+    Mp4parseStatus::Ok
 }
 
 /// Fill the supplied `Mp4parseByteData` with index information from `track`.
@@ -1652,83 +1656,125 @@ fn get_track_count_poisoned_parser() {
     }
 }
 
-// TODO: move unsafe into fn signature, split into multiple tests
+#[cfg(test)]
+fn parse_minimal_mp4() -> *mut Mp4parseParser {
+    let mut file = std::fs::File::open("../mp4parse/tests/minimal.mp4").unwrap();
+    let io = Mp4parseIo { read: Some(valid_read),
+                           userdata: &mut file as *mut _ as *mut std::os::raw::c_void };
+    let mut rv = Mp4parseStatus::Invalid;
+    let parser;
+    unsafe { parser = mp4parse_new(&io, &mut rv) }
+    assert_eq!(Mp4parseStatus::Ok, rv);
+    parser
+}
+
 #[test]
-#[allow(clippy::cognitive_complexity)] // TODO: Consider simplifying this
-fn arg_validation_with_data() {
+fn minimal_mp4_parse_ok() {
+    let parser = parse_minimal_mp4();
+
+    assert!(!parser.is_null());
+
+    unsafe { mp4parse_free(parser); }
+}
+
+#[test]
+fn minimal_mp4_get_track_cout() {
+    let parser = parse_minimal_mp4();
+
+    let mut count: u32 = 0;
+    assert_eq!(Mp4parseStatus::Ok, unsafe { mp4parse_get_track_count(parser, &mut count) });
+    assert_eq!(2, count);
+
+    unsafe { mp4parse_free(parser); }
+}
+
+#[test]
+fn minimal_mp4_get_track_info() {
+    let parser = parse_minimal_mp4();
+
+    let mut info = Mp4parseTrackInfo {
+        track_type: Mp4parseTrackType::Video,
+        track_id: 0,
+        duration: 0,
+        media_time: 0,
+    };
+    assert_eq!(Mp4parseStatus::Ok, unsafe { mp4parse_get_track_info(parser, 0, &mut info) });
+    assert_eq!(info.track_type, Mp4parseTrackType::Video);
+    assert_eq!(info.track_id, 1);
+    assert_eq!(info.duration, 40000);
+    assert_eq!(info.media_time, 0);
+
+    assert_eq!(Mp4parseStatus::Ok, unsafe { mp4parse_get_track_info(parser, 1, &mut info) });
+    assert_eq!(info.track_type, Mp4parseTrackType::Audio);
+    assert_eq!(info.track_id, 2);
+    assert_eq!(info.duration, 61333);
+    assert_eq!(info.media_time, 21333);
+
+    unsafe { mp4parse_free(parser); }
+}
+
+#[test]
+fn minimal_mp4_get_track_video_info() {
+    let parser = parse_minimal_mp4();
+
+    let mut video = Mp4parseTrackVideoInfo::default();
+    assert_eq!(Mp4parseStatus::Ok, unsafe { mp4parse_get_track_video_info(parser, 0, &mut video) });
+    assert_eq!(video.display_width, 320);
+    assert_eq!(video.display_height, 240);
+    assert_eq!(video.sample_info_count, 1);
+
     unsafe {
-        let mut file = std::fs::File::open("../mp4parse/tests/minimal.mp4").unwrap();
-        let io = Mp4parseIo { read: Some(valid_read),
-                               userdata: &mut file as *mut _ as *mut std::os::raw::c_void };
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
-        assert_eq!(Mp4parseStatus::Ok, rv);
-        assert!(!parser.is_null());
-
-        let mut count: u32 = 0;
-        assert_eq!(Mp4parseStatus::Ok, mp4parse_get_track_count(parser, &mut count));
-        assert_eq!(2, count);
-
-        let mut info = Mp4parseTrackInfo {
-            track_type: Mp4parseTrackType::Video,
-            track_id: 0,
-            duration: 0,
-            media_time: 0,
-        };
-        assert_eq!(Mp4parseStatus::Ok, mp4parse_get_track_info(parser, 0, &mut info));
-        assert_eq!(info.track_type, Mp4parseTrackType::Video);
-        assert_eq!(info.track_id, 1);
-        assert_eq!(info.duration, 40000);
-        assert_eq!(info.media_time, 0);
-
-        assert_eq!(Mp4parseStatus::Ok, mp4parse_get_track_info(parser, 1, &mut info));
-        assert_eq!(info.track_type, Mp4parseTrackType::Audio);
-        assert_eq!(info.track_id, 2);
-        assert_eq!(info.duration, 61333);
-        assert_eq!(info.media_time, 21333);
-
-        let mut video = Mp4parseTrackVideoInfo::default();
-        assert_eq!(Mp4parseStatus::Ok, mp4parse_get_track_video_info(parser, 0, &mut video));
-        assert_eq!(video.display_width, 320);
-        assert_eq!(video.display_height, 240);
-        assert_eq!(video.sample_info_count, 1);
-
         assert_eq!((*video.sample_info).image_width, 320);
         assert_eq!((*video.sample_info).image_height, 240);
+    }
 
-        let mut audio = Mp4parseTrackAudioInfo::default();
-        assert_eq!(Mp4parseStatus::Ok, mp4parse_get_track_audio_info(parser, 1, &mut audio));
-        assert_eq!(audio.sample_info_count, 1);
+    unsafe { mp4parse_free(parser); }
+}
 
+#[test]
+fn minimal_mp4_get_track_audio_info() {
+    let parser = parse_minimal_mp4();
+
+    let mut audio = Mp4parseTrackAudioInfo::default();
+    assert_eq!(Mp4parseStatus::Ok, unsafe { mp4parse_get_track_audio_info(parser, 1, &mut audio) });
+    assert_eq!(audio.sample_info_count, 1);
+
+    unsafe {
         assert_eq!((*audio.sample_info).channels, 1);
         assert_eq!((*audio.sample_info).bit_depth, 16);
         assert_eq!((*audio.sample_info).sample_rate, 48000);
-
-        // Test with an invalid track number.
-        let mut info = Mp4parseTrackInfo {
-            track_type: Mp4parseTrackType::Video,
-            track_id: 0,
-            duration: 0,
-            media_time: 0,
-        };
-        assert_eq!(Mp4parseStatus::BadArg, mp4parse_get_track_info(parser, 3, &mut info));
-        assert_eq!(info.track_type, Mp4parseTrackType::Video);
-        assert_eq!(info.track_id, 0);
-        assert_eq!(info.duration, 0);
-        assert_eq!(info.media_time, 0);
-
-        let mut video = Mp4parseTrackVideoInfo::default();
-        assert_eq!(Mp4parseStatus::BadArg, mp4parse_get_track_video_info(parser, 3, &mut video));
-        assert_eq!(video.display_width, 0);
-        assert_eq!(video.display_height, 0);
-        assert_eq!(video.sample_info_count, 0);
-
-        let mut audio = Default::default();
-        assert_eq!(Mp4parseStatus::BadArg, mp4parse_get_track_audio_info(parser, 3, &mut audio));
-        assert_eq!(audio.sample_info_count, 0);
-
-        mp4parse_free(parser);
     }
+
+    unsafe { mp4parse_free(parser); }
+}
+
+#[test]
+fn minimal_mp4_get_track_info_invalid_track_number() {
+    let parser = parse_minimal_mp4();
+
+    let mut info = Mp4parseTrackInfo {
+        track_type: Mp4parseTrackType::Video,
+        track_id: 0,
+        duration: 0,
+        media_time: 0,
+    };
+    assert_eq!(Mp4parseStatus::BadArg, unsafe { mp4parse_get_track_info(parser, 3, &mut info) });
+    assert_eq!(info.track_type, Mp4parseTrackType::Video);
+    assert_eq!(info.track_id, 0);
+    assert_eq!(info.duration, 0);
+    assert_eq!(info.media_time, 0);
+
+    let mut video = Mp4parseTrackVideoInfo::default();
+    assert_eq!(Mp4parseStatus::BadArg, unsafe { mp4parse_get_track_video_info(parser, 3, &mut video) });
+    assert_eq!(video.display_width, 0);
+    assert_eq!(video.display_height, 0);
+    assert_eq!(video.sample_info_count, 0);
+
+    let mut audio = Default::default();
+    assert_eq!(Mp4parseStatus::BadArg, unsafe { mp4parse_get_track_audio_info(parser, 3, &mut audio) });
+    assert_eq!(audio.sample_info_count, 0);
+
+    unsafe { mp4parse_free(parser); }
 }
 
 #[test]
