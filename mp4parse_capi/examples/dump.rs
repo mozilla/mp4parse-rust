@@ -28,9 +28,10 @@ fn dump_file(filename: &str) {
     };
 
     unsafe {
-        let parser = mp4parse_new(&io);
+        let mut rv = Mp4parseStatus::Invalid;
+        let parser = mp4parse_new(&io, &mut rv);
 
-        match mp4parse_read(parser) {
+        match rv {
             Mp4parseStatus::Ok => (),
             _ => {
                 println!("-- fail to parse, '-v' for more info");
