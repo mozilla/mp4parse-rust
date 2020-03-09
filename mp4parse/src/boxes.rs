@@ -42,7 +42,7 @@ macro_rules! box_database {
 
 #[derive(Default, PartialEq, Clone)]
 pub struct FourCC {
-    pub value: String
+    pub value: String,
 }
 
 impl From<u32> for FourCC {
@@ -59,9 +59,7 @@ impl From<u32> for FourCC {
             _ => String::from("null"), // error to retrieve fourcc
         };
 
-        FourCC {
-            value: box_string
-        }
+        FourCC { value: box_string }
     }
 }
 
@@ -75,7 +73,7 @@ impl From<BoxType> for FourCC {
 impl<'a> From<&'a str> for FourCC {
     fn from(v: &'a str) -> FourCC {
         FourCC {
-            value: v.to_owned()
+            value: v.to_owned(),
         }
     }
 }

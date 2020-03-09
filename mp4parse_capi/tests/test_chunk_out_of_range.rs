@@ -1,8 +1,8 @@
 extern crate mp4parse_capi;
-use std::io::Read;
 use mp4parse_capi::*;
+use std::io::Read;
 
-extern fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
+extern "C" fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
     let input: &mut std::fs::File = unsafe { &mut *(userdata as *mut _) };
     let mut buf = unsafe { std::slice::from_raw_parts_mut(buf, size) };
     match input.read(&mut buf) {
@@ -16,7 +16,7 @@ fn parse_out_of_chunk_range() {
     let mut file = std::fs::File::open("tests/chunk_out_of_range.mp4").expect("Unknown file");
     let io = Mp4parseIo {
         read: Some(buf_read),
-        userdata: &mut file as *mut _ as *mut std::os::raw::c_void
+        userdata: &mut file as *mut _ as *mut std::os::raw::c_void,
     };
 
     unsafe {
