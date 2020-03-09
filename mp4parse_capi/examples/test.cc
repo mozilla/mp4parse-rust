@@ -16,12 +16,6 @@
 
 #include "mp4parse.h"
 
-intptr_t abort_read(uint8_t *buffer, uintptr_t size, void *userdata)
-{
-  // This shouldn't be called when allocating a parser.
-  abort();
-}
-
 intptr_t error_read(uint8_t *buffer, uintptr_t size, void *userdata)
 {
   return -1;
@@ -50,12 +44,6 @@ void test_arg_validation()
   assert(parser == nullptr);
 
   Mp4parseIo io = { nullptr, nullptr };
-  rv = MP4PARSE_STATUS_INVALID;
-  parser = mp4parse_new(&io, &rv);
-  assert(rv == MP4PARSE_STATUS_BAD_ARG);
-  assert(parser == nullptr);
-
-  io = { abort_read, nullptr };
   rv = MP4PARSE_STATUS_INVALID;
   parser = mp4parse_new(&io, &rv);
   assert(rv == MP4PARSE_STATUS_BAD_ARG);

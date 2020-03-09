@@ -411,8 +411,8 @@ impl Read for Mp4parseIo {
 /// parsed data.
 ///
 /// To avoid leaking memory, any successful return of this function must be
-/// paired with a call to `mp4_parse_free`. In the event of error, no memory
-/// will be allocated and `mp4_parse_free` must *not* be called.
+/// paired with a call to `mp4parse_free`. In the event of error, no memory
+/// will be allocated and `mp4parse_free` must *not* be called.
 #[no_mangle]
 pub unsafe extern fn mp4parse_new(io: *const Mp4parseIo, status_out: *mut Mp4parseStatus) -> *mut Mp4parseParser {
     mp4parse_new_common(io, status_out)
@@ -1505,11 +1505,6 @@ pub unsafe extern fn mp4parse_get_pssh_info(parser: *mut Mp4parseParser, info: *
 }
 
 #[cfg(test)]
-extern fn panic_read(_: *mut u8, _: usize, _: *mut std::os::raw::c_void) -> isize {
-    panic!("panic_read shouldn't be called in these tests");
-}
-
-#[cfg(test)]
 extern fn error_read(_: *mut u8, _: usize, _: *mut std::os::raw::c_void) -> isize {
     -1
 }
@@ -1552,13 +1547,6 @@ fn arg_validation() {
 
         // Passing an Mp4parseIo with null members is an error.
         let io = Mp4parseIo { read: None,
-                               userdata: null_mut };
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
-        assert_eq!(rv, Mp4parseStatus::BadArg);
-        assert!(parser.is_null());
-
-        let io = Mp4parseIo { read: Some(panic_read),
                                userdata: null_mut };
         let mut rv = Mp4parseStatus::Invalid;
         let parser = mp4parse_new(&io, &mut rv);
