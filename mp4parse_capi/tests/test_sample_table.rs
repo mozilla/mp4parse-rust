@@ -20,10 +20,10 @@ fn parse_sample_table() {
     };
 
     unsafe {
-        let parser = mp4parse_new(&io);
-
-        let mut rv = mp4parse_read(parser);
+        let mut rv = Mp4parseStatus::Invalid;
+        let parser = mp4parse_new(&io, &mut rv);
         assert_eq!(rv, Mp4parseStatus::Ok);
+        assert!(!parser.is_null());
 
         let mut counts: u32 = 0;
         rv = mp4parse_get_track_count(parser, &mut counts);
@@ -97,10 +97,10 @@ fn parse_sample_table_with_elst() {
     };
 
     unsafe {
-        let parser = mp4parse_new(&io);
-
-        let mut rv = mp4parse_read(parser);
+        let mut rv = Mp4parseStatus::Invalid;
+        let parser = mp4parse_new(&io, &mut rv);
         assert_eq!(rv, Mp4parseStatus::Ok);
+        assert!(!parser.is_null());
 
         let mut counts: u32 = 0;
         rv = mp4parse_get_track_count(parser, &mut counts);
@@ -146,10 +146,10 @@ fn parse_sample_table_with_negative_ctts() {
     };
 
     unsafe {
-        let parser = mp4parse_new(&io);
-
-        let mut rv = mp4parse_read(parser);
+        let mut rv = Mp4parseStatus::Invalid;
+        let parser = mp4parse_new(&io, &mut rv);
         assert_eq!(rv, Mp4parseStatus::Ok);
+        assert!(!parser.is_null());
 
         let mut counts: u32 = 0;
         rv = mp4parse_get_track_count(parser, &mut counts);

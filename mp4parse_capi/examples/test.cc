@@ -16,12 +16,6 @@
 
 #include "mp4parse.h"
 
-intptr_t abort_read(uint8_t *buffer, uintptr_t size, void *userdata)
-{
-  // This shouldn't be called when allocating a parser.
-  abort();
-}
-
 intptr_t error_read(uint8_t *buffer, uintptr_t size, void *userdata)
 {
   return -1;
@@ -39,36 +33,28 @@ intptr_t io_read(uint8_t *buffer, uintptr_t size, void *userdata)
   return r;
 }
 
-void test_new_parser()
-{
-  int dummy_value = 42;
-  Mp4parseIo io = { abort_read, &dummy_value };
-  Mp4parseParser *parser = mp4parse_new(&io);
-  assert(parser != nullptr);
-  mp4parse_free(parser);
-  assert(dummy_value == 42);
-}
-
 void test_arg_validation()
 {
-  Mp4parseParser *parser = mp4parse_new(nullptr);
+  Mp4parseParser *parser = mp4parse_new(nullptr, nullptr);
+  assert(parser == nullptr);
+
+  Mp4parseStatus rv = MP4PARSE_STATUS_INVALID;
+  parser = mp4parse_new(nullptr, &rv);
+  assert(rv == MP4PARSE_STATUS_BAD_ARG);
   assert(parser == nullptr);
 
   Mp4parseIo io = { nullptr, nullptr };
-  parser = mp4parse_new(&io);
-  assert(parser == nullptr);
-
-  io = { abort_read, nullptr };
-  parser = mp4parse_new(&io);
+  rv = MP4PARSE_STATUS_INVALID;
+  parser = mp4parse_new(&io, &rv);
+  assert(rv == MP4PARSE_STATUS_BAD_ARG);
   assert(parser == nullptr);
 
   int dummy_value = 42;
   io = { nullptr, &dummy_value };
-  parser = mp4parse_new(&io);
-  assert(parser == nullptr);
-
-  int32_t rv = mp4parse_read(nullptr);
+  rv = MP4PARSE_STATUS_INVALID;
+  parser = mp4parse_new(&io, &rv);
   assert(rv == MP4PARSE_STATUS_BAD_ARG);
+  assert(parser == nullptr);
 
   Mp4parseTrackInfo info;
   rv = mp4parse_get_track_info(nullptr, 0, &info);
@@ -89,11 +75,10 @@ void test_arg_validation_with_parser()
 {
   int dummy_value = 42;
   Mp4parseIo io = { error_read, &dummy_value };
-  Mp4parseParser *parser = mp4parse_new(&io);
-  assert(parser != nullptr);
-
-  int32_t rv = mp4parse_read(parser);
+  Mp4parseStatus rv = MP4PARSE_STATUS_INVALID;
+  Mp4parseParser *parser = mp4parse_new(&io, &rv);
   assert(rv == MP4PARSE_STATUS_IO);
+  assert(parser == nullptr);
 
   rv = mp4parse_get_track_info(parser, 0, nullptr);
   assert(rv == MP4PARSE_STATUS_BAD_ARG);
@@ -104,7 +89,6 @@ void test_arg_validation_with_parser()
   rv = mp4parse_get_track_audio_info(parser, 0, nullptr);
   assert(rv == MP4PARSE_STATUS_BAD_ARG);
 
-  mp4parse_free(parser);
   assert(dummy_value == 42);
 }
 
@@ -113,11 +97,10 @@ void test_arg_validation_with_data(const std::string& filename)
   FILE* f = fopen(filename.c_str(), "rb");
   assert(f != nullptr);
   Mp4parseIo io = { io_read, f };
-  Mp4parseParser *parser = mp4parse_new(&io);
-  assert(parser != nullptr);
-
-  Mp4parseStatus rv = mp4parse_read(parser);
+  Mp4parseStatus rv = MP4PARSE_STATUS_INVALID;
+  Mp4parseParser *parser = mp4parse_new(&io, &rv);
   assert(rv == MP4PARSE_STATUS_OK);
+  assert(parser != nullptr);
 
   uint32_t tracks;
   rv = mp4parse_get_track_count(parser, &tracks);
@@ -198,14 +181,13 @@ int32_t read_file(const char* filename)
   FILE* f = fopen(filename, "rb");
   assert(f != nullptr);
 
-  Mp4parseIo io = { io_read, f };
-  Mp4parseParser *parser = mp4parse_new(&io);
-  assert(parser != nullptr);
-
   fprintf(stderr, "Parsing file '%s'.\n", filename);
-  Mp4parseStatus rv = mp4parse_read(parser);
+  Mp4parseIo io = { io_read, f };
+  Mp4parseStatus rv = MP4PARSE_STATUS_INVALID;
+  Mp4parseParser *parser = mp4parse_new(&io, &rv);
+
   if (rv != MP4PARSE_STATUS_OK) {
-    mp4parse_free(parser);
+    assert(parser == nullptr);
     fclose(f);
     fprintf(stderr, "Parsing failed: %s\n", errorstring(rv));
     return rv;
@@ -234,7 +216,6 @@ int main(int argc, char* argv[])
   // Parse command line options.
   std::vector<std::string> args(argv + 1, argv + argc);
 
-  test_new_parser();
   test_arg_validation();
   test_arg_validation_with_parser();
 
