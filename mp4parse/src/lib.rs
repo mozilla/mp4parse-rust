@@ -1338,7 +1338,7 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
         }
     }
 
-    context.primary_item = primary_item_extents_data.into_iter().flatten().collect();
+    context.primary_item = primary_item_extents_data.concat();
 
     Ok(())
 }
