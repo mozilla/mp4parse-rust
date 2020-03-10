@@ -35,24 +35,23 @@ intptr_t io_read(uint8_t *buffer, uintptr_t size, void *userdata)
 
 void test_arg_validation()
 {
-  Mp4parseParser *parser = mp4parse_new(nullptr, nullptr);
-  assert(parser == nullptr);
+  Mp4parseParser *parser = nullptr;
+  Mp4parseStatus rv = mp4parse_new(nullptr, nullptr);
+  assert(rv == MP4PARSE_STATUS_BAD_ARG);
 
-  Mp4parseStatus rv = MP4PARSE_STATUS_INVALID;
-  parser = mp4parse_new(nullptr, &rv);
+  rv = mp4parse_new(nullptr, &parser);
   assert(rv == MP4PARSE_STATUS_BAD_ARG);
   assert(parser == nullptr);
 
   Mp4parseIo io = { nullptr, nullptr };
-  rv = MP4PARSE_STATUS_INVALID;
-  parser = mp4parse_new(&io, &rv);
+  rv = mp4parse_new(&io, &parser);
   assert(rv == MP4PARSE_STATUS_BAD_ARG);
   assert(parser == nullptr);
 
   int dummy_value = 42;
   io = { nullptr, &dummy_value };
-  rv = MP4PARSE_STATUS_INVALID;
-  parser = mp4parse_new(&io, &rv);
+  parser = nullptr;
+  rv = mp4parse_new(&io, &parser);
   assert(rv == MP4PARSE_STATUS_BAD_ARG);
   assert(parser == nullptr);
 
@@ -75,8 +74,8 @@ void test_arg_validation_with_parser()
 {
   int dummy_value = 42;
   Mp4parseIo io = { error_read, &dummy_value };
-  Mp4parseStatus rv = MP4PARSE_STATUS_INVALID;
-  Mp4parseParser *parser = mp4parse_new(&io, &rv);
+  Mp4parseParser *parser = nullptr;
+  Mp4parseStatus rv = mp4parse_new(&io, &parser);
   assert(rv == MP4PARSE_STATUS_IO);
   assert(parser == nullptr);
 
@@ -97,8 +96,8 @@ void test_arg_validation_with_data(const std::string& filename)
   FILE* f = fopen(filename.c_str(), "rb");
   assert(f != nullptr);
   Mp4parseIo io = { io_read, f };
-  Mp4parseStatus rv = MP4PARSE_STATUS_INVALID;
-  Mp4parseParser *parser = mp4parse_new(&io, &rv);
+  Mp4parseParser *parser = nullptr;
+  Mp4parseStatus rv = mp4parse_new(&io, &parser);
   assert(rv == MP4PARSE_STATUS_OK);
   assert(parser != nullptr);
 
@@ -183,8 +182,8 @@ int32_t read_file(const char* filename)
 
   fprintf(stderr, "Parsing file '%s'.\n", filename);
   Mp4parseIo io = { io_read, f };
-  Mp4parseStatus rv = MP4PARSE_STATUS_INVALID;
-  Mp4parseParser *parser = mp4parse_new(&io, &rv);
+  Mp4parseParser *parser = nullptr;
+  Mp4parseStatus rv = mp4parse_new(&io, &parser);
 
   if (rv != MP4PARSE_STATUS_OK) {
     assert(parser == nullptr);

@@ -28,8 +28,8 @@ fn dump_file(filename: &str) {
     };
 
     unsafe {
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
+        let mut parser = std::ptr::null_mut();
+        let rv = mp4parse_new(&io, &mut parser);
 
         match rv {
             Mp4parseStatus::Ok => (),

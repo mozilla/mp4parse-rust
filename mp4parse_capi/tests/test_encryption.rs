@@ -21,8 +21,8 @@ fn parse_cenc() {
     };
 
     unsafe {
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
+        let mut parser = std::ptr::null_mut();
+        let mut rv = mp4parse_new(&io, &mut parser);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert!(!parser.is_null());
         let mut counts: u32 = 0;
@@ -104,8 +104,8 @@ fn parse_cbcs() {
     };
 
     unsafe {
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
+        let mut parser = std::ptr::null_mut();
+        let mut rv = mp4parse_new(&io, &mut parser);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert!(!parser.is_null());
         let mut counts: u32 = 0;
@@ -166,8 +166,8 @@ fn parse_unencrypted() {
     };
 
     unsafe {
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
+        let mut parser = std::ptr::null_mut();
+        let mut rv = mp4parse_new(&io, &mut parser);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert!(!parser.is_null());
 

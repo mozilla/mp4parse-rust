@@ -22,9 +22,9 @@
 //!     read: Some(buf_read),
 //!     userdata: &mut file as *mut _ as *mut std::os::raw::c_void
 //! };
-//! let mut rv = mp4parse_capi::Mp4parseStatus::Invalid;
+//! let mut parser = std::ptr::null_mut();
 //! unsafe {
-//!     let parser = mp4parse_capi::mp4parse_new(&io, &mut rv);
+//!     let rv = mp4parse_capi::mp4parse_new(&io, &mut parser);
 //!     assert_eq!(rv, mp4parse_capi::Mp4parseStatus::Ok);
 //!     assert!(!parser.is_null());
 //!     mp4parse_capi::mp4parse_free(parser);
@@ -417,19 +417,14 @@ impl Read for Mp4parseIo {
 ///
 /// # Safety
 ///
-/// This function is unsafe because it dereferences the io pointer given to it.
-/// The caller should ensure that the `Mp4ParseIo` struct passed in is a valid
-/// pointer. The caller should also ensure the members of io are valid: the
-/// `read` function should be sanely implemented, and the `userdata` pointer
-/// should be valid. The `status_out` is also dereferenced and must point to
-/// a valid Mp4parseStatus.
-///
-/// On a successful the variable pointed to by `status_out` will be set to
-/// `Mp4parseStatus::Ok` and the return value will be a non-NULL pointer to
-/// an `Mp4parseParser`. If there is any sort of error, the return value will
-/// be NULL and the type of error will be set in the variable pointed to by
-/// `status_out`, ensuring the consumer never has access to potentially invalid
-/// parsed data.
+/// This function is unsafe because it dereferences the `io` and `parser_out`
+/// pointers given to it. The caller should ensure that the `Mp4ParseIo`
+/// struct passed in is a valid pointer. The caller should also ensure the
+/// members of io are valid: the `read` function should be sanely implemented,
+/// and the `userdata` pointer should be valid. The `parser_out` should be a
+/// valid pointer to a location containing a null pointer. Upon successful
+/// return (`Mp4parseStatus::Ok`), that location will contain the address of
+/// an `Mp4parseParser` allocated by this function.
 ///
 /// To avoid leaking memory, any successful return of this function must be
 /// paired with a call to `mp4parse_free`. In the event of error, no memory
@@ -437,16 +432,16 @@ impl Read for Mp4parseIo {
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_new(
     io: *const Mp4parseIo,
-    status_out: *mut Mp4parseStatus,
-) -> *mut Mp4parseParser {
-    mp4parse_new_common(io, status_out)
+    parser_out: *mut *mut Mp4parseParser,
+) -> Mp4parseStatus {
+    mp4parse_new_common(io, parser_out)
 }
 
 /// Allocate an `Mp4parseAvifParser*` to read from the supplied `Mp4parseIo`.
 ///
-/// See mp4parse_new; this function is identical except that it returns a
-/// pointer to an `Mp4parseAvifParser`, which (when non-null) must be paired
-/// with a call to mp4parse_avif_free.
+/// See mp4parse_new; this function is identical except that it allocates an
+/// `Mp4parseAvifParser`, which (when successful) must be paired with a call
+/// to mp4parse_avif_free.
 ///
 /// # Safety
 ///
@@ -454,36 +449,31 @@ pub unsafe extern "C" fn mp4parse_new(
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_avif_new(
     io: *const Mp4parseIo,
-    status_out: *mut Mp4parseStatus,
-) -> *mut Mp4parseAvifParser {
-    mp4parse_new_common(io, status_out)
+    parser_out: *mut *mut Mp4parseAvifParser,
+) -> Mp4parseStatus {
+    mp4parse_new_common(io, parser_out)
 }
 
 unsafe fn mp4parse_new_common<P: ContextParser>(
     io: *const Mp4parseIo,
-    status_out: *mut Mp4parseStatus,
-) -> *mut P {
+    parser_out: *mut *mut P,
+) -> Mp4parseStatus {
     // Validate arguments from C.
-    if io.is_null() || (*io).userdata.is_null() || (*io).read.is_none() || status_out.is_null() {
-        set_if_non_null(status_out, Mp4parseStatus::BadArg);
-        std::ptr::null_mut()
+    if io.is_null()
+        || (*io).userdata.is_null()
+        || (*io).read.is_none()
+        || parser_out.is_null()
+        || !(*parser_out).is_null()
+    {
+        Mp4parseStatus::BadArg
     } else {
         match mp4parse_new_common_safe(&mut (*io).clone()) {
             Ok(parser) => {
-                set_if_non_null(status_out, Mp4parseStatus::Ok);
-                parser
+                *parser_out = parser;
+                Mp4parseStatus::Ok
             }
-            Err(status) => {
-                set_if_non_null(status_out, status);
-                std::ptr::null_mut()
-            }
+            Err(status) => status,
         }
-    }
-}
-
-unsafe fn set_if_non_null<T>(ptr: *mut T, val: T) {
-    if !ptr.is_null() {
-        *ptr = val;
     }
 }
 
@@ -1618,12 +1608,12 @@ fn get_track_count_null_parser() {
 #[test]
 fn arg_validation() {
     unsafe {
-        let parser = mp4parse_new(std::ptr::null(), std::ptr::null_mut());
-        assert!(parser.is_null());
+        let rv = mp4parse_new(std::ptr::null(), std::ptr::null_mut());
+        assert_eq!(rv, Mp4parseStatus::BadArg);
 
         // Passing a null Mp4parseIo is an error.
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(std::ptr::null(), &mut rv);
+        let mut parser = std::ptr::null_mut();
+        let rv = mp4parse_new(std::ptr::null(), &mut parser);
         assert_eq!(rv, Mp4parseStatus::BadArg);
         assert!(parser.is_null());
 
@@ -1634,8 +1624,8 @@ fn arg_validation() {
             read: None,
             userdata: null_mut,
         };
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
+        let mut parser = std::ptr::null_mut();
+        let rv = mp4parse_new(&io, &mut parser);
         assert_eq!(rv, Mp4parseStatus::BadArg);
         assert!(parser.is_null());
 
@@ -1644,8 +1634,8 @@ fn arg_validation() {
             read: None,
             userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
         };
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
+        let mut parser = std::ptr::null_mut();
+        let rv = mp4parse_new(&io, &mut parser);
         assert_eq!(rv, Mp4parseStatus::BadArg);
         assert!(parser.is_null());
 
@@ -1681,6 +1671,18 @@ fn arg_validation() {
 }
 
 #[test]
+fn parser_input_must_be_null() {
+    let mut dummy_value = 42;
+    let io = Mp4parseIo {
+        read: Some(error_read),
+        userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
+    };
+    let mut parser = 0xDEADBEEF as *mut _;
+    let rv = unsafe { mp4parse_new(&io, &mut parser) };
+    assert_eq!(rv, Mp4parseStatus::BadArg);
+}
+
+#[test]
 fn arg_validation_with_parser() {
     unsafe {
         let mut dummy_value = 42;
@@ -1688,8 +1690,8 @@ fn arg_validation_with_parser() {
             read: Some(error_read),
             userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
         };
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
+        let mut parser = std::ptr::null_mut();
+        let rv = mp4parse_new(&io, &mut parser);
         assert_eq!(rv, Mp4parseStatus::Io);
         assert!(parser.is_null());
 
@@ -1738,25 +1740,6 @@ fn arg_validation_with_parser() {
     }
 }
 
-#[test]
-fn get_track_count_poisoned_parser() {
-    unsafe {
-        let mut dummy_value = 42;
-        let io = Mp4parseIo {
-            read: Some(error_read),
-            userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
-        };
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
-        assert_eq!(rv, Mp4parseStatus::Io);
-        assert!(parser.is_null());
-
-        let mut count: u32 = 0;
-        let rv = mp4parse_get_track_count(parser, &mut count);
-        assert_eq!(rv, Mp4parseStatus::BadArg);
-    }
-}
-
 #[cfg(test)]
 fn parse_minimal_mp4() -> *mut Mp4parseParser {
     let mut file = std::fs::File::open("../mp4parse/tests/minimal.mp4").unwrap();
@@ -1764,9 +1747,8 @@ fn parse_minimal_mp4() -> *mut Mp4parseParser {
         read: Some(valid_read),
         userdata: &mut file as *mut _ as *mut std::os::raw::c_void,
     };
-    let mut rv = Mp4parseStatus::Invalid;
-    let parser;
-    unsafe { parser = mp4parse_new(&io, &mut rv) }
+    let mut parser = std::ptr::null_mut();
+    let rv = unsafe { mp4parse_new(&io, &mut parser) };
     assert_eq!(Mp4parseStatus::Ok, rv);
     parser
 }
