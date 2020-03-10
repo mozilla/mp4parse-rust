@@ -20,8 +20,8 @@ fn parse_invalid_stsc_table() {
     };
 
     unsafe {
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
+        let mut parser = std::ptr::null_mut();
+        let rv = mp4parse_new(&io, &mut parser);
 
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert!(!parser.is_null());

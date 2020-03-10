@@ -21,8 +21,8 @@ fn parse_sample_table() {
     };
 
     unsafe {
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
+        let mut parser = std::ptr::null_mut();
+        let mut rv = mp4parse_new(&io, &mut parser);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert!(!parser.is_null());
 
@@ -140,8 +140,8 @@ fn parse_sample_table_with_elst() {
     };
 
     unsafe {
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
+        let mut parser = std::ptr::null_mut();
+        let mut rv = mp4parse_new(&io, &mut parser);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert!(!parser.is_null());
 
@@ -210,8 +210,8 @@ fn parse_sample_table_with_negative_ctts() {
     };
 
     unsafe {
-        let mut rv = Mp4parseStatus::Invalid;
-        let parser = mp4parse_new(&io, &mut rv);
+        let mut parser = std::ptr::null_mut();
+        let mut rv = mp4parse_new(&io, &mut parser);
         assert_eq!(rv, Mp4parseStatus::Ok);
         assert!(!parser.is_null());
 
