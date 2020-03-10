@@ -28,7 +28,8 @@ use mp4parse_fallible::FallibleVec;
 mod macros;
 
 mod boxes;
-use boxes::{BoxType, FourCC};
+use boxes::{BoxType, FourCC
+};
 
 // Unit tests.
 #[cfg(test)]
