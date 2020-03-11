@@ -24,10 +24,8 @@ fuzz_target!(|data: &[u8]| {
         userdata: &mut cursor as *mut _ as *mut std::os::raw::c_void,
     };
     unsafe {
-        let context = mp4parse_new(&io);
-
-        if mp4parse_read(context) != Mp4parseStatus::Ok {
-            mp4parse_free(context);
+        let mut context = std::ptr::null_mut();
+        if mp4parse_new(&io, &mut context) != Mp4parseStatus::Ok {
             return;
         }
 
