@@ -35,9 +35,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-extern crate mp4parse;
-#[rustfmt::skip] // See https://github.com/mozilla/mp4parse-rust/issues/197#issuecomment-596910016
 extern crate byteorder;
+extern crate mp4parse;
 extern crate num_traits;
 
 use byteorder::WriteBytesExt;
