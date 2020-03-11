@@ -19,8 +19,8 @@ path = ".."
 members = ["."]
 
 [[bin]]
-name = "fuzz_target_1"
-path = "fuzz_targets/fuzz_target_1.rs"
+name = "mp4"
+path = "fuzz_targets/mp4.rs"
 
 [[bin]]
 name = "avif"
