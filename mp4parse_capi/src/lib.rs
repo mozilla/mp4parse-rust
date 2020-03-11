@@ -1277,7 +1277,7 @@ impl<'a> SampleToChunkIterator<'a> {
 fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<Vec<Mp4parseIndice>> {
     let timescale = match track.timescale {
         Some(ref t) => TrackTimeScale::<i64>(t.0 as i64, t.1),
-        _ => TrackTimeScale::<i64>(0, 0),
+        _ => return None,
     };
 
     let (stsc, stco, stsz, stts) = match (&track.stsc, &track.stco, &track.stsz, &track.stts) {
