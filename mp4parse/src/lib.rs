@@ -12,6 +12,7 @@ extern crate byteorder;
 extern crate num_traits;
 use bitreader::{BitReader, ReadInto};
 use byteorder::{ReadBytesExt, WriteBytesExt};
+use fallible::TryRead as _;
 use num_traits::Num;
 use std::convert::{TryFrom, TryInto as _};
 use std::io::Cursor;
@@ -122,8 +123,12 @@ impl<'a, T: Read> Read for OffsetReader<'a, T> {
     }
 }
 
-// TODO: vec_push() needs to be replaced when Rust supports fallible memory
-// allocation in raw_vec.
+// TODO: all the functions that rely on the mp4parse_fallible feature need to
+// be updated when Rust supports fallible memory allocation in raw_vec.
+// See https://github.com/mozilla/mp4parse-rust/issues/146
+
+// TODO remove all these free fns in favor of using TryVec
+
 #[allow(unreachable_code)]
 pub fn vec_push<T>(vec: &mut Vec<T>, val: T) -> std::result::Result<(), ()> {
     #[cfg(feature = "mp4parse_fallible")]
@@ -160,32 +165,205 @@ pub fn extend_from_slice<T: Clone>(vec: &mut Vec<T>, other: &[T]) -> std::result
     }
 }
 
-/// With the `mp4parse_fallible` feature enabled, this function reserves the
-/// upper limit of what `src` can generate before reading all bytes until EOF
-/// in this source, placing them into buf. If the allocation is unsuccessful,
-/// or reading from the source generates an error before reaching EOF, this
-/// will return an error. Otherwise, it will return the number of bytes read.
-///
-/// Since `src.limit()` may return a value greater than the number of bytes
-/// which can be read from the source, it's possible this function may fail
-/// in the allocation phase even though allocating the number of bytes available
-/// to read would have succeeded. In general, it is assumed that the callers
-/// have accurate knowledge of the number of bytes of interest and have created
-/// `src` accordingly.
-///
-/// With the `mp4parse_fallible` feature disabled, this is wrapper around
-/// `std::io::Read::read_to_end()`.
-fn read_to_end<T: Read>(src: &mut Take<T>, buf: &mut Vec<u8>) -> std::result::Result<usize, ()> {
+type TryVec<T> = fallible::TryVec<T>;
+
+mod fallible {
+    use extend_from_slice;
     #[cfg(feature = "mp4parse_fallible")]
-    {
-        let limit: usize = src.limit().try_into().map_err(|_| ())?;
-        FallibleVec::try_reserve(buf, limit)?;
-        let bytes_read = src.read_to_end(buf).map_err(|_| ())?;
+    use mp4parse_fallible::FallibleVec;
+    use std::convert::TryInto as _;
+    use std::io::Read;
+    use std::io::Take;
+    use std::iter::FromIterator;
+    use std::iter::IntoIterator;
+    use vec_push;
+    use vec_with_capacity;
+    use BMFFBox;
+
+    pub trait TryRead {
+        fn try_read_to_end(&mut self, buf: &mut TryVec<u8>) -> Result<usize, ()>;
+
+        fn read_into_try_vec(&mut self) -> Result<TryVec<u8>, ()> {
+            let mut buf = TryVec::new();
+            let _ = self.try_read_to_end(&mut buf)?;
+            Ok(buf)
+        }
+    }
+
+    impl<'a, T: Read> TryRead for BMFFBox<'a, T> {
+        fn try_read_to_end(&mut self, buf: &mut TryVec<u8>) -> Result<usize, ()> {
+            try_read_up_to(self, self.bytes_left(), buf)
+        }
+    }
+
+    impl<T: Read> TryRead for Take<T> {
+        /// With the `mp4parse_fallible` feature enabled, this function reserves the
+        /// upper limit of what `src` can generate before reading all bytes until EOF
+        /// in this source, placing them into buf. If the allocation is unsuccessful,
+        /// or reading from the source generates an error before reaching EOF, this
+        /// will return an error. Otherwise, it will return the number of bytes read.
+        ///
+        /// Since `Take::limit()` may return a value greater than the number of bytes
+        /// which can be read from the source, it's possible this function may fail
+        /// in the allocation phase even though allocating the number of bytes available
+        /// to read would have succeeded. In general, it is assumed that the callers
+        /// have accurate knowledge of the number of bytes of interest and have created
+        /// `src` accordingly.
+        ///
+        /// With the `mp4parse_fallible` feature disabled, this is essentially a wrapper
+        /// around `std::io::Read::read_to_end()`.
+        fn try_read_to_end(&mut self, buf: &mut TryVec<u8>) -> Result<usize, ()> {
+            try_read_up_to(self, self.limit(), buf)
+        }
+    }
+
+    fn try_read_up_to<R: Read>(src: &mut R, limit: u64, buf: &mut TryVec<u8>) -> Result<usize, ()> {
+        let additional = limit.try_into().map_err(|_| ())?;
+        buf.reserve(additional)?;
+        let bytes_read = src.read_to_end(&mut buf.inner).map_err(|_| ())?;
         Ok(bytes_read)
     }
-    #[cfg(not(feature = "mp4parse_fallible"))]
-    {
-        src.read_to_end(buf).map_err(|_| ())
+
+    #[derive(Debug, Default)] // TODO: make debug print like Vec instead of deriving
+    pub struct TryVec<T> {
+        inner: Vec<T>,
+    }
+
+    impl<T> TryVec<T> {
+        pub fn new() -> Self {
+            Self { inner: Vec::new() }
+        }
+
+        pub fn with_capacity(capacity: usize) -> Result<Self, ()> {
+            Ok(Self {
+                inner: vec_with_capacity(capacity)?,
+            })
+        }
+
+        pub fn append(&mut self, other: &mut Self) -> Result<(), ()> {
+            self.reserve(other.inner.len())?;
+            self.inner.append(&mut other.inner);
+            Ok(())
+        }
+
+        // TODO remove when all Vecs are converted to TryVec
+        pub fn into_inner(self) -> Vec<T> {
+            self.inner
+        }
+
+        pub fn is_empty(&self) -> bool {
+            self.inner.is_empty()
+        }
+
+        pub fn iter_mut(&mut self) -> IterMut<T> {
+            IterMut {
+                inner: self.inner.iter_mut(),
+            }
+        }
+
+        pub fn iter(&self) -> Iter<T> {
+            Iter {
+                inner: self.inner.iter(),
+            }
+        }
+
+        pub fn push(&mut self, value: T) -> Result<(), ()> {
+            vec_push(&mut self.inner, value)
+        }
+
+        fn reserve(&mut self, additional: usize) -> Result<(), ()> {
+            #[cfg(feature = "mp4parse_fallible")]
+            {
+                FallibleVec::try_reserve(&mut self.inner, additional)
+            }
+            #[cfg(not(feature = "mp4parse_fallible"))]
+            {
+                self.inner.reserve(additional);
+                Ok(())
+            }
+        }
+    }
+
+    impl<T: Clone> TryVec<TryVec<T>> {
+        pub fn concat(&self) -> Result<TryVec<T>, ()> {
+            let size = self.iter().map(|v| v.inner.len()).sum();
+            let mut result: TryVec<T> = TryVec::with_capacity(size)?;
+            for v in self.iter() {
+                result.extend_from_slice(&v.inner)?;
+            }
+            Ok(result)
+        }
+    }
+
+    impl<T: Clone> TryVec<T> {
+        pub fn extend_from_slice(&mut self, other: &[T]) -> Result<(), ()> {
+            extend_from_slice(&mut self.inner, other)
+        }
+    }
+
+    impl<T: Clone> Clone for TryVec<T> {
+        fn clone(&self) -> Self {
+            Self {
+                inner: self.inner.clone(),
+            }
+        }
+    }
+
+    impl<T> std::ops::Deref for TryVec<T> {
+        type Target = [T];
+
+        fn deref(&self) -> &[T] {
+            self.inner.deref()
+        }
+    }
+
+    impl<T> FromIterator<T> for TryVec<T> {
+        fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+            Self {
+                inner: Vec::from_iter(iter),
+            }
+        }
+    }
+
+    impl<'a, T> IntoIterator for &'a TryVec<T> {
+        type Item = &'a T;
+        type IntoIter = std::slice::Iter<'a, T>; // std:: necessary?
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.inner.iter()
+        }
+    }
+
+    pub struct Iter<'a, T> {
+        inner: std::slice::Iter<'a, T>,
+    }
+
+    impl<'a, T> Iterator for Iter<'a, T> {
+        type Item = &'a T;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next()
+        }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
+    }
+
+    pub struct IterMut<'a, T> {
+        inner: std::slice::IterMut<'a, T>,
+    }
+
+    impl<'a, T> Iterator for IterMut<'a, T> {
+        type Item = &'a mut T;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next()
+        }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
     }
 }
 
@@ -773,7 +951,7 @@ impl MediaContext {
 #[derive(Debug, Default)]
 pub struct AvifContext {
     /// The collected data indicated by the `pitm` box, See ISO 14496-12:2015 § 8.11.4
-    pub primary_item: Vec<u8>,
+    pub primary_item: TryVec<u8>,
 }
 
 impl AvifContext {
@@ -787,7 +965,7 @@ impl AvifContext {
 struct MediaDataBox {
     /// Offset of `data` from the beginning of the file. See ConstructionMethod::File
     offset: u64,
-    data: Vec<u8>,
+    data: TryVec<u8>,
 }
 
 impl MediaDataBox {
@@ -823,7 +1001,7 @@ impl MediaDataBox {
 
     /// Copy the range specified by `extent` to the end of `buf` or return an error if the range
     /// is not fully contained within `MediaDataBox`.
-    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut Vec<u8>) -> Result<()> {
+    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut TryVec<u8>) -> Result<()> {
         let start_offset = extent
             .start()
             .checked_sub(self.offset)
@@ -842,7 +1020,7 @@ impl MediaDataBox {
             ExtentRange::ToEnd(_) => self.data.get(start_offset.try_into()?..),
         };
         let slice = slice.ok_or(Error::InvalidData("extent crosses box boundary"))?;
-        extend_from_slice(buf, slice)?;
+        buf.extend_from_slice(slice)?;
         Ok(())
     }
 }
@@ -916,7 +1094,7 @@ struct ItemLocationBoxItem {
     item_id: u32,
     construction_method: ConstructionMethod,
     /// Unused for ConstructionMethod::Idat
-    extents: Vec<ItemLocationBoxExtent>,
+    extents: TryVec<ItemLocationBoxExtent>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1112,7 +1290,7 @@ impl<'a, T: Read + Offset> BMFFBox<'a, T> {
 
     /// Read the range specified by `extent` into `buf` or return an error if the range is not
     /// fully contained within the `BMFFBox`.
-    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut Vec<u8>) -> Result<()> {
+    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut TryVec<u8>) -> Result<()> {
         let start_offset = extent
             .start()
             .checked_sub(self.offset())
@@ -1127,10 +1305,10 @@ impl<'a, T: Read + Offset> BMFFBox<'a, T> {
                 if len > self.bytes_left() {
                     return Err(Error::InvalidData("extent crosses box boundary"));
                 }
-                read_to_end(&mut self.take(len), buf)?;
+                self.take(len).try_read_to_end(buf)?;
             }
             ExtentRange::ToEnd(_) => {
-                read_to_end(&mut self.take(self.bytes_left()), buf)?;
+                self.try_read_to_end(buf)?;
             }
         }
         Ok(())
@@ -1270,9 +1448,9 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
     }
 
     let mut read_meta = false;
-    let mut mdats = vec![];
+    let mut mdats = TryVec::new();
     let mut primary_item_extents = None;
-    let mut primary_item_extents_data: Vec<Vec<u8>> = vec![];
+    let mut primary_item_extents_data: TryVec<TryVec<u8>> = TryVec::new();
 
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
@@ -1288,7 +1466,7 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
                     ConstructionMethod::File => {
                         primary_item_extents = Some(primary_item_loc.extents);
                         primary_item_extents_data =
-                            primary_item_extents.iter().map(|_| vec![]).collect();
+                            primary_item_extents.iter().map(|_| TryVec::new()).collect();
                     }
                     _ => return Err(Error::Unsupported("unsupported construction_method")),
                 }
@@ -1308,9 +1486,8 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
                 // Store any remaining data for potential later extraction
                 if b.bytes_left() > 0 {
                     let offset = b.offset();
-                    let mut data = vec_with_capacity(b.bytes_left().try_into()?)?;
-                    b.read_to_end(&mut data)?;
-                    vec_push(&mut mdats, MediaDataBox { offset, data })?;
+                    let data = b.read_into_try_vec()?;
+                    mdats.push(MediaDataBox { offset, data })?;
                 }
             }
             _ => skip_box_content(&mut b)?,
@@ -1328,9 +1505,9 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
     {
         if data.is_empty() {
             // try to find an overlapping mdat
-            for mdat in &mut mdats {
+            for mdat in mdats.iter_mut() {
                 if mdat.matches_extent(&extent.extent_range) {
-                    data.append(&mut mdat.data)
+                    data.append(&mut mdat.data)?;
                 } else if mdat.contains_extent(&extent.extent_range) {
                     mdat.read_extent(&extent.extent_range, data)?;
                 }
@@ -1338,7 +1515,7 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
         }
     }
 
-    context.primary_item = primary_item_extents_data.concat();
+    context.primary_item = primary_item_extents_data.concat()?;
 
     Ok(())
 }
@@ -1442,7 +1619,7 @@ fn read_pitm<T: Read>(src: &mut BMFFBox<T>) -> Result<u32> {
 
 /// Parse an Item Information Box
 /// See ISO 14496-12:2015 § 8.11.6
-fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemInfoEntry>> {
+fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemInfoEntry>> {
     let version = read_fullbox_version_no_flags(src)?;
 
     match version {
@@ -1455,7 +1632,7 @@ fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemInfoEntry>> {
     } else {
         be_u32(src)?.to_usize()
     };
-    let mut item_infos = vec_with_capacity(entry_count)?;
+    let mut item_infos = TryVec::with_capacity(entry_count)?;
 
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
@@ -1465,7 +1642,7 @@ fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemInfoEntry>> {
             ));
         }
 
-        vec_push(&mut item_infos, read_infe(&mut b)?)?;
+        item_infos.push(read_infe(&mut b)?)?;
 
         check_parser_state!(b.content);
     }
@@ -1514,12 +1691,11 @@ fn read_infe<T: Read>(src: &mut BMFFBox<T>) -> Result<ItemInfoEntry> {
 
 /// Parse an item location box inside a meta box
 /// See ISO 14496-12:2015 § 8.11.3
-fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> {
+fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemLocationBoxItem>> {
     let version: IlocVersion = read_fullbox_version_no_flags(src)?.try_into()?;
 
-    let mut iloc = vec_with_capacity(src.bytes_left().try_into()?)?;
-    src.read_to_end(&mut iloc)?;
-    let mut iloc = BitReader::new(iloc.as_slice());
+    let iloc = src.read_into_try_vec()?;
+    let mut iloc = BitReader::new(&iloc);
 
     let offset_size: IlocFieldSize = iloc.read_u8(4)?.try_into()?;
     let length_size: IlocFieldSize = iloc.read_u8(4)?.try_into()?;
@@ -1538,7 +1714,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> 
         IlocVersion::Two => iloc.read_u32(32)?,
     };
 
-    let mut items = vec_with_capacity(item_count.to_usize())?;
+    let mut items = TryVec::with_capacity(item_count.to_usize())?;
 
     for _ in 0..item_count {
         let item_id = match version {
@@ -1581,7 +1757,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> 
             ));
         }
 
-        let mut extents = vec_with_capacity(extent_count.to_usize())?;
+        let mut extents = TryVec::with_capacity(extent_count.to_usize())?;
 
         for _ in 0..extent_count {
             // Parsed but currently ignored, see `ItemLocationBoxExtent`
@@ -1614,17 +1790,14 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> 
                 ExtentRange::WithLength(Range { start, end })
             };
 
-            vec_push(&mut extents, ItemLocationBoxExtent { extent_range })?;
+            extents.push(ItemLocationBoxExtent { extent_range })?;
         }
 
-        vec_push(
-            &mut items,
-            ItemLocationBoxItem {
-                item_id,
-                construction_method,
-                extents,
-            },
-        )?;
+        items.push(ItemLocationBoxItem {
+            item_id,
+            construction_method,
+            extents,
+        })?;
     }
 
     debug_assert_eq!(iloc.remaining(), 0);
@@ -3498,13 +3671,12 @@ fn read_buf<T: Read>(src: &mut T, size: u64) -> Result<Vec<u8>> {
         return Err(Error::InvalidData("read_buf size exceeds BUF_SIZE_LIMIT"));
     }
 
-    let mut buf = vec![];
-    let r: u64 = read_to_end(&mut src.take(size), &mut buf)?.try_into()?;
-    if r != size {
+    let buf = src.take(size).read_into_try_vec()?;
+    if buf.len().to_u64() != size {
         return Err(Error::InvalidData("failed buffer read"));
     }
 
-    Ok(buf)
+    Ok(buf.into_inner()) // TODO change to TryVec
 }
 
 fn be_i16<T: ReadBytesExt>(src: &mut T) -> Result<i16> {
