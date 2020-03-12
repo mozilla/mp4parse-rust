@@ -302,7 +302,8 @@ mod fallible {
         }
 
         pub fn resize_with<F>(&mut self, new_len: usize, f: F) -> Result<(), ()>
-            where F: FnMut() -> T
+        where
+            F: FnMut() -> T,
         {
             self.reserve(new_len)?;
             self.inner.resize_with(new_len, f);
@@ -1484,7 +1485,8 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
                 let primary_item_loc = read_avif_meta(&mut b)?;
                 match primary_item_loc.construction_method {
                     ConstructionMethod::File => {
-                        primary_item_extents_data.resize_with(primary_item_loc.extents.len(), Default::default)?;
+                        primary_item_extents_data
+                            .resize_with(primary_item_loc.extents.len(), Default::default)?;
                         primary_item_extents = Some(primary_item_loc.extents);
                     }
                     _ => return Err(Error::Unsupported("unsupported construction_method")),
