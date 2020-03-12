@@ -174,7 +174,6 @@ mod fallible {
     use std::convert::TryInto as _;
     use std::io::Read;
     use std::io::Take;
-    use std::iter::FromIterator;
     use std::iter::IntoIterator;
     use vec_push;
     use vec_with_capacity;
@@ -229,6 +228,25 @@ mod fallible {
         inner: Vec<T>,
     }
 
+    /// TryVec is a thin wrapper around std::vec::Vec to provide support for
+    /// fallible allocation. Though the fallible allocator is only enabled
+    /// with the mp4parse_fallible feature, the API differences from stdlib
+    /// Vec ensure that all operations which allocate return a Result. For the
+    /// most part, this simply means adding a Result return value to Vec
+    /// functions which return nothing or a non-Result value. However, Vec
+    /// implements some traits whose API cannot communicate failure, but which
+    /// do require allocation, so it is important that TryVec does not
+    /// implement these traits.
+    ///
+    /// Specifically, do not implement any of the following traits:
+    /// - Clone
+    /// - Extend
+    /// - From
+    /// - FromIterator
+    ///
+    /// This list may not be exhaustive. Exercise caution when implementing
+    /// any new traits to ensure they won't potentially allocate in a way that
+    /// can't return a Result to indicate allocation failure.
     impl<T> TryVec<T> {
         pub fn new() -> Self {
             Self { inner: Vec::new() }
@@ -282,12 +300,20 @@ mod fallible {
                 Ok(())
             }
         }
+
+        pub fn resize_with<F>(&mut self, new_len: usize, f: F) -> Result<(), ()>
+            where F: FnMut() -> T
+        {
+            self.reserve(new_len)?;
+            self.inner.resize_with(new_len, f);
+            Ok(())
+        }
     }
 
     impl<T: Clone> TryVec<TryVec<T>> {
         pub fn concat(&self) -> Result<TryVec<T>, ()> {
             let size = self.iter().map(|v| v.inner.len()).sum();
-            let mut result: TryVec<T> = TryVec::with_capacity(size)?;
+            let mut result = TryVec::with_capacity(size)?;
             for v in self.iter() {
                 result.extend_from_slice(&v.inner)?;
             }
@@ -297,15 +323,8 @@ mod fallible {
 
     impl<T: Clone> TryVec<T> {
         pub fn extend_from_slice(&mut self, other: &[T]) -> Result<(), ()> {
+            self.reserve(other.len())?;
             extend_from_slice(&mut self.inner, other)
-        }
-    }
-
-    impl<T: Clone> Clone for TryVec<T> {
-        fn clone(&self) -> Self {
-            Self {
-                inner: self.inner.clone(),
-            }
         }
     }
 
@@ -317,11 +336,12 @@ mod fallible {
         }
     }
 
-    impl<T> FromIterator<T> for TryVec<T> {
-        fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-            Self {
-                inner: Vec::from_iter(iter),
-            }
+    impl<T> IntoIterator for TryVec<T> {
+        type Item = T;
+        type IntoIter = std::vec::IntoIter<T>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.inner.into_iter()
         }
     }
 
@@ -1089,7 +1109,7 @@ impl TryFrom<u8> for IlocVersion {
 /// See ISO 14496-12:2015 § 8.11.3
 /// `base_offset` is omitted since it is integrated into the ranges in `extents`
 /// `data_reference_index` is omitted, since only 0 (i.e., this file) is supported
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct ItemLocationBoxItem {
     item_id: u32,
     construction_method: ConstructionMethod,
@@ -1464,9 +1484,8 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
                 let primary_item_loc = read_avif_meta(&mut b)?;
                 match primary_item_loc.construction_method {
                     ConstructionMethod::File => {
+                        primary_item_extents_data.resize_with(primary_item_loc.extents.len(), Default::default)?;
                         primary_item_extents = Some(primary_item_loc.extents);
-                        primary_item_extents_data =
-                            primary_item_extents.iter().map(|_| TryVec::new()).collect();
                     }
                     _ => return Err(Error::Unsupported("unsupported construction_method")),
                 }
@@ -1591,11 +1610,11 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<ItemLocation
     }
 
     if let Some(loc) = iloc_items
-        .iter()
+        .into_iter()
         .flatten()
         .find(|loc| loc.item_id == primary_item_id)
     {
-        Ok(loc.clone())
+        Ok(loc)
     } else {
         Err(Error::InvalidData(
             "primary_item_id not present in iloc box",
