@@ -9,6 +9,7 @@ use super::fallible::TryRead as _;
 use super::read_mp4;
 use super::Error;
 use super::MediaContext;
+
 #[cfg(feature = "mp4parse_fallible")]
 use std::convert::TryInto as _;
 use std::io::Cursor;
@@ -681,7 +682,7 @@ fn serialize_opus_header() {
         channel_mapping_table: Some(super::ChannelMappingTable {
             stream_count: 4,
             coupled_count: 2,
-            channel_mapping: vec![0, 4, 1, 2, 3, 5],
+            channel_mapping: vec![0, 4, 1, 2, 3, 5].into(),
         }),
     };
     let mut v = Vec::<u8>::new();
@@ -1058,7 +1059,7 @@ fn read_stsd_mp4v() {
             assert_eq!(v.height, 480);
             match v.codec_specific {
                 super::VideoCodecSpecific::ESDSConfig(esds_data) => {
-                    assert_eq!(esds_data, esds_specific_data.to_vec());
+                    assert_eq!(esds_data.as_slice(), esds_specific_data);
                 }
                 _ => panic!("it should be ESDSConfig!"),
             }
