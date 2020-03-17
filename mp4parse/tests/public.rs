@@ -456,7 +456,7 @@ fn public_audio_cbcs() {
                             // to indicate full encryption.
                             assert_eq!(tenc.crypt_byte_block_count, Some(0));
                             assert_eq!(tenc.skip_byte_block_count, Some(0));
-                            assert_eq!(tenc.constant_iv, Some(default_iv.clone()));
+                            assert_eq!(tenc.constant_iv, Some(default_iv.clone().into()));
                         } else {
                             panic!("Invalid test condition");
                         }
@@ -538,7 +538,7 @@ fn public_video_cbcs() {
                             assert_eq!(tenc.kid, kid);
                             assert_eq!(tenc.crypt_byte_block_count, Some(1));
                             assert_eq!(tenc.skip_byte_block_count, Some(9));
-                            assert_eq!(tenc.constant_iv, Some(default_iv.clone()));
+                            assert_eq!(tenc.constant_iv, Some(default_iv.clone().into()));
                         } else {
                             panic!("Invalid test condition");
                         }

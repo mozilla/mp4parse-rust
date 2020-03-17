@@ -12,6 +12,7 @@ extern crate byteorder;
 extern crate num_traits;
 use bitreader::{BitReader, ReadInto};
 use byteorder::{ReadBytesExt, WriteBytesExt};
+use fallible::TryRead as _;
 use num_traits::Num;
 use std::convert::{TryFrom, TryInto as _};
 use std::io::Cursor;
@@ -20,9 +21,6 @@ use std::ops::{Range, RangeFrom};
 
 #[cfg(feature = "mp4parse_fallible")]
 extern crate mp4parse_fallible;
-
-#[cfg(feature = "mp4parse_fallible")]
-use mp4parse_fallible::FallibleVec;
 
 #[macro_use]
 mod macros;
@@ -122,70 +120,310 @@ impl<'a, T: Read> Read for OffsetReader<'a, T> {
     }
 }
 
-// TODO: vec_push() needs to be replaced when Rust supports fallible memory
-// allocation in raw_vec.
-#[allow(unreachable_code)]
-pub fn vec_push<T>(vec: &mut Vec<T>, val: T) -> std::result::Result<(), ()> {
+// TODO: all the functions that rely on the mp4parse_fallible feature need to
+// be updated when Rust supports fallible memory allocation in raw_vec.
+// See https://github.com/mozilla/mp4parse-rust/issues/146
+
+pub type TryVec<T> = fallible::TryVec<T>;
+
+#[allow(dead_code)]
+struct Vec; // To ensure we don't use any std::vec::Vec by accident
+
+mod fallible {
     #[cfg(feature = "mp4parse_fallible")]
-    {
-        return FallibleVec::try_push(vec, val);
+    use mp4parse_fallible::FallibleVec;
+    use std::cmp::PartialEq;
+    use std::convert::TryInto as _;
+    use std::io::Read;
+    use std::io::Take;
+    use std::iter::IntoIterator;
+    use BMFFBox;
+
+    type Result<T> = std::result::Result<T, super::Error>;
+
+    pub trait TryRead {
+        fn try_read_to_end(&mut self, buf: &mut TryVec<u8>) -> Result<usize>;
+
+        fn read_into_try_vec(&mut self) -> Result<TryVec<u8>> {
+            let mut buf = TryVec::new();
+            let _ = self.try_read_to_end(&mut buf)?;
+            Ok(buf)
+        }
     }
 
-    vec.push(val);
-    Ok(())
-}
+    impl<'a, T: Read> TryRead for BMFFBox<'a, T> {
+        fn try_read_to_end(&mut self, buf: &mut TryVec<u8>) -> Result<usize> {
+            try_read_up_to(self, self.bytes_left(), buf)
+        }
+    }
 
-fn vec_with_capacity<T>(capacity: usize) -> std::result::Result<Vec<T>, ()> {
-    #[cfg(feature = "mp4parse_fallible")]
-    {
-        let mut v = Vec::new();
-        FallibleVec::try_reserve(&mut v, capacity)?;
-        Ok(v)
+    impl<T: Read> TryRead for Take<T> {
+        /// With the `mp4parse_fallible` feature enabled, this function reserves the
+        /// upper limit of what `src` can generate before reading all bytes until EOF
+        /// in this source, placing them into buf. If the allocation is unsuccessful,
+        /// or reading from the source generates an error before reaching EOF, this
+        /// will return an error. Otherwise, it will return the number of bytes read.
+        ///
+        /// Since `Take::limit()` may return a value greater than the number of bytes
+        /// which can be read from the source, it's possible this function may fail
+        /// in the allocation phase even though allocating the number of bytes available
+        /// to read would have succeeded. In general, it is assumed that the callers
+        /// have accurate knowledge of the number of bytes of interest and have created
+        /// `src` accordingly.
+        ///
+        /// With the `mp4parse_fallible` feature disabled, this is essentially a wrapper
+        /// around `std::io::Read::read_to_end()`.
+        fn try_read_to_end(&mut self, buf: &mut TryVec<u8>) -> Result<usize> {
+            try_read_up_to(self, self.limit(), buf)
+        }
     }
-    #[cfg(not(feature = "mp4parse_fallible"))]
-    {
-        Ok(Vec::with_capacity(capacity))
-    }
-}
 
-pub fn extend_from_slice<T: Clone>(vec: &mut Vec<T>, other: &[T]) -> std::result::Result<(), ()> {
-    #[cfg(feature = "mp4parse_fallible")]
-    {
-        FallibleVec::try_extend_from_slice(vec, other)
-    }
-    #[cfg(not(feature = "mp4parse_fallible"))]
-    {
-        vec.extend_from_slice(other);
-        Ok(())
-    }
-}
-
-/// With the `mp4parse_fallible` feature enabled, this function reserves the
-/// upper limit of what `src` can generate before reading all bytes until EOF
-/// in this source, placing them into buf. If the allocation is unsuccessful,
-/// or reading from the source generates an error before reaching EOF, this
-/// will return an error. Otherwise, it will return the number of bytes read.
-///
-/// Since `src.limit()` may return a value greater than the number of bytes
-/// which can be read from the source, it's possible this function may fail
-/// in the allocation phase even though allocating the number of bytes available
-/// to read would have succeeded. In general, it is assumed that the callers
-/// have accurate knowledge of the number of bytes of interest and have created
-/// `src` accordingly.
-///
-/// With the `mp4parse_fallible` feature disabled, this is wrapper around
-/// `std::io::Read::read_to_end()`.
-fn read_to_end<T: Read>(src: &mut Take<T>, buf: &mut Vec<u8>) -> std::result::Result<usize, ()> {
-    #[cfg(feature = "mp4parse_fallible")]
-    {
-        let limit: usize = src.limit().try_into().map_err(|_| ())?;
-        FallibleVec::try_reserve(buf, limit)?;
-        let bytes_read = src.read_to_end(buf).map_err(|_| ())?;
+    fn try_read_up_to<R: Read>(src: &mut R, limit: u64, buf: &mut TryVec<u8>) -> Result<usize> {
+        let additional = limit.try_into()?;
+        buf.reserve(additional)?;
+        let bytes_read = src.read_to_end(&mut buf.inner)?;
         Ok(bytes_read)
     }
-    #[cfg(not(feature = "mp4parse_fallible"))]
-    {
-        src.read_to_end(buf).map_err(|_| ())
+
+    // TODO TryString, TryHashMap?
+
+    #[derive(Default, PartialEq)]
+    pub struct TryVec<T> {
+        inner: Vec<T>,
+    }
+
+    impl<T: std::fmt::Debug> std::fmt::Debug for TryVec<T> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{:?}", self.inner)
+        }
+    }
+
+    /// TryVec is a thin wrapper around std::vec::Vec to provide support for
+    /// fallible allocation. Though the fallible allocator is only enabled
+    /// with the mp4parse_fallible feature, the API differences from stdlib
+    /// Vec ensure that all operations which allocate return a Result. For the
+    /// most part, this simply means adding a Result return value to Vec
+    /// functions which return nothing or a non-Result value. However, Vec
+    /// implements some traits whose API cannot communicate failure, but which
+    /// do require allocation, so it is important that TryVec does not
+    /// implement these traits.
+    ///
+    /// Specifically, do not implement any of the following traits:
+    /// - Clone
+    /// - Extend
+    /// - From
+    /// - FromIterator
+    ///
+    /// This list may not be exhaustive. Exercise caution when implementing
+    /// any new traits to ensure they won't potentially allocate in a way that
+    /// can't return a Result to indicate allocation failure.
+    impl<T> TryVec<T> {
+        pub fn new() -> Self {
+            Self { inner: Vec::new() }
+        }
+
+        pub fn with_capacity(capacity: usize) -> Result<Self> {
+            let mut v = Self::new();
+            v.reserve(capacity)?;
+            Ok(v)
+        }
+
+        pub fn append(&mut self, other: &mut Self) -> Result<()> {
+            self.reserve(other.inner.len())?;
+            self.inner.append(&mut other.inner);
+            Ok(())
+        }
+
+        pub fn as_mut_slice(&mut self) -> &mut [T] {
+            self
+        }
+
+        pub fn as_slice(&self) -> &[T] {
+            self
+        }
+
+        pub fn clear(&mut self) {
+            self.inner.clear()
+        }
+
+        #[cfg(test)]
+        pub fn into_inner(self) -> Vec<T> {
+            self.inner
+        }
+
+        pub fn is_empty(&self) -> bool {
+            self.inner.is_empty()
+        }
+
+        pub fn iter_mut(&mut self) -> IterMut<T> {
+            IterMut {
+                inner: self.inner.iter_mut(),
+            }
+        }
+
+        pub fn iter(&self) -> Iter<T> {
+            Iter {
+                inner: self.inner.iter(),
+            }
+        }
+
+        pub fn pop(&mut self) -> Option<T> {
+            self.inner.pop()
+        }
+
+        pub fn push(&mut self, value: T) -> Result<()> {
+            self.reserve(if self.inner.capacity() == 0 { 4 } else { 1 })?;
+            self.inner.push(value);
+            Ok(())
+        }
+
+        fn reserve(&mut self, additional: usize) -> Result<()> {
+            #[cfg(feature = "mp4parse_fallible")]
+            {
+                FallibleVec::try_reserve(&mut self.inner, additional)
+                    .map_err(|_| super::Error::OutOfMemory)
+            }
+            #[cfg(not(feature = "mp4parse_fallible"))]
+            {
+                self.inner.reserve(additional);
+                Ok(())
+            }
+        }
+
+        pub fn resize_with<F>(&mut self, new_len: usize, f: F) -> Result<()>
+        where
+            F: FnMut() -> T,
+        {
+            self.reserve(new_len)?;
+            self.inner.resize_with(new_len, f);
+            Ok(())
+        }
+    }
+
+    impl<T: Clone> TryVec<TryVec<T>> {
+        pub fn concat(&self) -> Result<TryVec<T>> {
+            let size = self.iter().map(|v| v.inner.len()).sum();
+            let mut result = TryVec::with_capacity(size)?;
+            for v in self.iter() {
+                result.extend_from_slice(&v.inner)?;
+            }
+            Ok(result)
+        }
+    }
+
+    impl<T: Clone> TryVec<T> {
+        pub fn extend_from_slice(&mut self, other: &[T]) -> Result<()> {
+            self.reserve(other.len())?;
+            self.inner.extend_from_slice(other);
+            Ok(())
+        }
+    }
+
+    impl<T> IntoIterator for TryVec<T> {
+        type Item = T;
+        type IntoIter = std::vec::IntoIter<T>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.inner.into_iter()
+        }
+    }
+
+    impl<'a, T> IntoIterator for &'a TryVec<T> {
+        type Item = &'a T;
+        type IntoIter = std::slice::Iter<'a, T>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            self.inner.iter()
+        }
+    }
+
+    impl std::io::Write for TryVec<u8> {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.extend_from_slice(buf)?;
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<T: PartialEq> PartialEq<Vec<T>> for TryVec<T> {
+        fn eq(&self, other: &Vec<T>) -> bool {
+            self.inner.eq(other)
+        }
+    }
+
+    impl<'a, T: PartialEq> PartialEq<&'a [T]> for TryVec<T> {
+        fn eq(&self, other: &&[T]) -> bool {
+            self.inner.eq(other)
+        }
+    }
+
+    impl std::convert::AsRef<[u8]> for TryVec<u8> {
+        fn as_ref(&self) -> &[u8] {
+            self.inner.as_ref()
+        }
+    }
+
+    impl<T> std::convert::From<Vec<T>> for TryVec<T> {
+        fn from(value: Vec<T>) -> Self {
+            Self { inner: value }
+        }
+    }
+
+    impl std::convert::TryFrom<TryVec<u8>> for String {
+        type Error = std::string::FromUtf8Error;
+
+        fn try_from(value: TryVec<u8>) -> std::result::Result<String, Self::Error> {
+            String::from_utf8(value.inner)
+        }
+    }
+
+    impl<T> std::ops::Deref for TryVec<T> {
+        type Target = [T];
+
+        fn deref(&self) -> &[T] {
+            self.inner.deref()
+        }
+    }
+
+    impl<T> std::ops::DerefMut for TryVec<T> {
+        fn deref_mut(&mut self) -> &mut [T] {
+            self.inner.deref_mut()
+        }
+    }
+
+    pub struct Iter<'a, T> {
+        inner: std::slice::Iter<'a, T>,
+    }
+
+    impl<'a, T> Iterator for Iter<'a, T> {
+        type Item = &'a T;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next()
+        }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
+    }
+
+    pub struct IterMut<'a, T> {
+        inner: std::slice::IterMut<'a, T>,
+    }
+
+    impl<'a, T> Iterator for IterMut<'a, T> {
+        type Item = &'a mut T;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next()
+        }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
     }
 }
 
@@ -208,6 +446,14 @@ pub enum Error {
     /// Out of memory
     OutOfMemory,
 }
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl std::error::Error for Error {}
 
 impl From<bitreader::BitReaderError> for Error {
     fn from(_: bitreader::BitReaderError) -> Error {
@@ -236,9 +482,15 @@ impl From<std::num::TryFromIntError> for Error {
     }
 }
 
-impl From<()> for Error {
-    fn from(_: ()) -> Error {
-        Error::OutOfMemory
+impl From<Error> for std::io::Error {
+    fn from(err: Error) -> Self {
+        let kind = match err {
+            Error::InvalidData(_) => std::io::ErrorKind::InvalidData,
+            Error::UnexpectedEOF => std::io::ErrorKind::UnexpectedEof,
+            Error::Io(io_err) => return io_err,
+            _ => std::io::ErrorKind::Other,
+        };
+        Self::new(kind, err)
     }
 }
 
@@ -268,7 +520,7 @@ struct BoxHeader {
 struct FileTypeBox {
     major_brand: FourCC,
     minor_version: u32,
-    compatible_brands: Vec<FourCC>,
+    compatible_brands: TryVec<FourCC>,
 }
 
 /// Movie header box 'mvhd'.
@@ -305,7 +557,7 @@ pub struct TrackHeaderBox {
 /// Edit list box 'elst'
 #[derive(Debug)]
 struct EditListBox {
-    edits: Vec<Edit>,
+    edits: TryVec<Edit>,
 }
 
 #[derive(Debug)]
@@ -326,19 +578,19 @@ struct MediaHeaderBox {
 // Chunk offset box 'stco' or 'co64'
 #[derive(Debug)]
 pub struct ChunkOffsetBox {
-    pub offsets: Vec<u64>,
+    pub offsets: TryVec<u64>,
 }
 
 // Sync sample box 'stss'
 #[derive(Debug)]
 pub struct SyncSampleBox {
-    pub samples: Vec<u32>,
+    pub samples: TryVec<u32>,
 }
 
 // Sample to chunk box 'stsc'
 #[derive(Debug)]
 pub struct SampleToChunkBox {
-    pub samples: Vec<SampleToChunk>,
+    pub samples: TryVec<SampleToChunk>,
 }
 
 #[derive(Debug)]
@@ -352,13 +604,13 @@ pub struct SampleToChunk {
 #[derive(Debug)]
 pub struct SampleSizeBox {
     pub sample_size: u32,
-    pub sample_sizes: Vec<u32>,
+    pub sample_sizes: TryVec<u32>,
 }
 
 // Time to sample box 'stts'
 #[derive(Debug)]
 pub struct TimeToSampleBox {
-    pub samples: Vec<Sample>,
+    pub samples: TryVec<Sample>,
 }
 
 #[repr(C)]
@@ -382,7 +634,7 @@ pub struct TimeOffset {
 
 #[derive(Debug)]
 pub struct CompositionOffsetBox {
-    pub samples: Vec<TimeOffset>,
+    pub samples: TryVec<TimeOffset>,
 }
 
 // Handler reference box 'hdlr'
@@ -394,10 +646,10 @@ struct HandlerBox {
 // Sample description box 'stsd'
 #[derive(Debug)]
 pub struct SampleDescriptionBox {
-    pub descriptions: Vec<SampleEntry>,
+    pub descriptions: TryVec<SampleEntry>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum SampleEntry {
     Audio(AudioSampleEntry),
     Video(VideoSampleEntry),
@@ -405,19 +657,19 @@ pub enum SampleEntry {
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct ES_Descriptor {
     pub audio_codec: CodecType,
     pub audio_object_type: Option<u16>,
     pub extended_audio_object_type: Option<u16>,
     pub audio_sample_rate: Option<u32>,
     pub audio_channel_count: Option<u16>,
-    pub codec_esds: Vec<u8>,
-    pub decoder_specific_data: Vec<u8>, // Data in DECODER_SPECIFIC_TAG
+    pub codec_esds: TryVec<u8>,
+    pub decoder_specific_data: TryVec<u8>, // Data in DECODER_SPECIFIC_TAG
 }
 
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum AudioCodecSpecific {
     ES_Descriptor(ES_Descriptor),
     FLACSpecificBox(FLACSpecificBox),
@@ -427,7 +679,7 @@ pub enum AudioCodecSpecific {
     LPCM,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AudioSampleEntry {
     pub codec_type: CodecType,
     data_reference_index: u16,
@@ -435,30 +687,30 @@ pub struct AudioSampleEntry {
     pub samplesize: u16,
     pub samplerate: f64,
     pub codec_specific: AudioCodecSpecific,
-    pub protection_info: Vec<ProtectionSchemeInfoBox>,
+    pub protection_info: TryVec<ProtectionSchemeInfoBox>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum VideoCodecSpecific {
-    AVCConfig(Vec<u8>),
+    AVCConfig(TryVec<u8>),
     VPxConfig(VPxConfigBox),
     AV1Config(AV1ConfigBox),
-    ESDSConfig(Vec<u8>),
+    ESDSConfig(TryVec<u8>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct VideoSampleEntry {
     pub codec_type: CodecType,
     data_reference_index: u16,
     pub width: u16,
     pub height: u16,
     pub codec_specific: VideoCodecSpecific,
-    pub protection_info: Vec<ProtectionSchemeInfoBox>,
+    pub protection_info: TryVec<ProtectionSchemeInfoBox>,
 }
 
 /// Represent a Video Partition Codec Configuration 'vpcC' box (aka vp9). The meaning of each
 /// field is covered in detail in "VP Codec ISO Media File Format Binding".
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct VPxConfigBox {
     /// An integer that specifies the VP codec profile.
     profile: u8,
@@ -481,10 +733,10 @@ pub struct VPxConfigBox {
     /// (e.g. 16-235 for 8 bit sample depth); 1 = full range (e.g. 0-255 for 8-bit sample depth).
     video_full_range_flag: bool,
     /// This is not used for VP8 and VP9 . Intended for binary codec initialization data.
-    pub codec_init: Vec<u8>,
+    pub codec_init: TryVec<u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct AV1ConfigBox {
     pub profile: u8,
     pub level: u8,
@@ -496,31 +748,31 @@ pub struct AV1ConfigBox {
     pub chroma_sample_position: u8,
     pub initial_presentation_delay_present: bool,
     pub initial_presentation_delay_minus_one: u8,
-    pub config_obus: Vec<u8>,
+    pub config_obus: TryVec<u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FLACMetadataBlock {
     pub block_type: u8,
-    pub data: Vec<u8>,
+    pub data: TryVec<u8>,
 }
 
 /// Represents a FLACSpecificBox 'dfLa'
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FLACSpecificBox {
     version: u8,
-    pub blocks: Vec<FLACMetadataBlock>,
+    pub blocks: TryVec<FLACMetadataBlock>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct ChannelMappingTable {
     stream_count: u8,
     coupled_count: u8,
-    channel_mapping: Vec<u8>,
+    channel_mapping: TryVec<u8>,
 }
 
 /// Represent an OpusSpecificBox 'dOps'
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct OpusSpecificBox {
     pub version: u8,
     output_channel_count: u8,
@@ -532,10 +784,10 @@ pub struct OpusSpecificBox {
 }
 
 /// Represent an ALACSpecificBox 'alac'
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ALACSpecificBox {
     version: u8,
-    pub data: Vec<u8>,
+    pub data: TryVec<u8>,
 }
 
 #[derive(Debug)]
@@ -543,12 +795,12 @@ pub struct MovieExtendsBox {
     pub fragment_duration: Option<MediaScaledTime>,
 }
 
-pub type ByteData = Vec<u8>;
+pub type ByteData = TryVec<u8>;
 
 #[derive(Debug, Default)]
 pub struct ProtectionSystemSpecificHeaderBox {
     pub system_id: ByteData,
-    pub kid: Vec<ByteData>,
+    pub kid: TryVec<ByteData>,
     pub data: ByteData,
 
     // The entire pssh box (include header) required by Gecko.
@@ -561,19 +813,19 @@ pub struct SchemeTypeBox {
     pub scheme_version: u32,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct TrackEncryptionBox {
     pub is_encrypted: u8,
     pub iv_size: u8,
-    pub kid: Vec<u8>,
+    pub kid: TryVec<u8>,
     // Members for pattern encryption schemes
     pub crypt_byte_block_count: Option<u8>,
     pub skip_byte_block_count: Option<u8>,
-    pub constant_iv: Option<Vec<u8>>,
+    pub constant_iv: Option<TryVec<u8>>,
     // End pattern encryption scheme members
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct ProtectionSchemeInfoBox {
     pub code_name: String,
     pub scheme_type: Option<SchemeTypeBox>,
@@ -583,7 +835,7 @@ pub struct ProtectionSchemeInfoBox {
 /// Represents a userdata box 'udta'.
 /// Currently, only the metadata atom 'meta'
 /// is parsed.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct UserdataBox {
     pub meta: Option<MetadataBox>,
 }
@@ -641,7 +893,7 @@ pub enum AdvisoryRating {
 /// Represents the contents of 'ilst' atoms within
 /// a metadata box 'meta', parsed as iTunes metadata using
 /// the conventional tags.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct MetadataBox {
     /// The album name, '©alb'
     pub album: Option<String>,
@@ -736,7 +988,7 @@ pub struct MetadataBox {
     /// 'covr' is unique in that it may contain multiple 'data' sub-entries,
     /// each an image file. Here, each subentry's raw binary data is exposed,
     /// which may contain image data in JPEG or PNG format.
-    pub cover_art: Option<Vec<Vec<u8>>>,
+    pub cover_art: Option<TryVec<TryVec<u8>>>,
     /// The owner of the track 'ownr'
     pub owner: Option<String>,
     /// Whether or not this track is HD Video 'hdvd'
@@ -758,9 +1010,9 @@ pub struct MetadataBox {
 pub struct MediaContext {
     pub timescale: Option<MediaTimeScale>,
     /// Tracks found in the file.
-    pub tracks: Vec<Track>,
+    pub tracks: TryVec<Track>,
     pub mvex: Option<MovieExtendsBox>,
-    pub psshs: Vec<ProtectionSystemSpecificHeaderBox>,
+    pub psshs: TryVec<ProtectionSystemSpecificHeaderBox>,
     pub userdata: Option<Result<UserdataBox>>,
 }
 
@@ -773,7 +1025,7 @@ impl MediaContext {
 #[derive(Debug, Default)]
 pub struct AvifContext {
     /// The collected data indicated by the `pitm` box, See ISO 14496-12:2015 § 8.11.4
-    pub primary_item: Vec<u8>,
+    pub primary_item: TryVec<u8>,
 }
 
 impl AvifContext {
@@ -787,7 +1039,7 @@ impl AvifContext {
 struct MediaDataBox {
     /// Offset of `data` from the beginning of the file. See ConstructionMethod::File
     offset: u64,
-    data: Vec<u8>,
+    data: TryVec<u8>,
 }
 
 impl MediaDataBox {
@@ -823,7 +1075,7 @@ impl MediaDataBox {
 
     /// Copy the range specified by `extent` to the end of `buf` or return an error if the range
     /// is not fully contained within `MediaDataBox`.
-    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut Vec<u8>) -> Result<()> {
+    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut TryVec<u8>) -> Result<()> {
         let start_offset = extent
             .start()
             .checked_sub(self.offset)
@@ -842,7 +1094,7 @@ impl MediaDataBox {
             ExtentRange::ToEnd(_) => self.data.get(start_offset.try_into()?..),
         };
         let slice = slice.ok_or(Error::InvalidData("extent crosses box boundary"))?;
-        extend_from_slice(buf, slice)?;
+        buf.extend_from_slice(slice)?;
         Ok(())
     }
 }
@@ -911,12 +1163,12 @@ impl TryFrom<u8> for IlocVersion {
 /// See ISO 14496-12:2015 § 8.11.3
 /// `base_offset` is omitted since it is integrated into the ranges in `extents`
 /// `data_reference_index` is omitted, since only 0 (i.e., this file) is supported
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct ItemLocationBoxItem {
     item_id: u32,
     construction_method: ConstructionMethod,
     /// Unused for ConstructionMethod::Idat
-    extents: Vec<ItemLocationBoxExtent>,
+    extents: TryVec<ItemLocationBoxExtent>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1112,7 +1364,7 @@ impl<'a, T: Read + Offset> BMFFBox<'a, T> {
 
     /// Read the range specified by `extent` into `buf` or return an error if the range is not
     /// fully contained within the `BMFFBox`.
-    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut Vec<u8>) -> Result<()> {
+    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut TryVec<u8>) -> Result<()> {
         let start_offset = extent
             .start()
             .checked_sub(self.offset())
@@ -1127,10 +1379,10 @@ impl<'a, T: Read + Offset> BMFFBox<'a, T> {
                 if len > self.bytes_left() {
                     return Err(Error::InvalidData("extent crosses box boundary"));
                 }
-                read_to_end(&mut self.take(len), buf)?;
+                self.take(len).try_read_to_end(buf)?;
             }
             ExtentRange::ToEnd(_) => {
-                read_to_end(&mut self.take(self.bytes_left()), buf)?;
+                self.try_read_to_end(buf)?;
             }
         }
         Ok(())
@@ -1270,9 +1522,9 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
     }
 
     let mut read_meta = false;
-    let mut mdats = vec![];
+    let mut mdats = TryVec::new();
     let mut primary_item_extents = None;
-    let mut primary_item_extents_data: Vec<Vec<u8>> = vec![];
+    let mut primary_item_extents_data: TryVec<TryVec<u8>> = TryVec::new();
 
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
@@ -1286,9 +1538,9 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
                 let primary_item_loc = read_avif_meta(&mut b)?;
                 match primary_item_loc.construction_method {
                     ConstructionMethod::File => {
+                        primary_item_extents_data
+                            .resize_with(primary_item_loc.extents.len(), Default::default)?;
                         primary_item_extents = Some(primary_item_loc.extents);
-                        primary_item_extents_data =
-                            primary_item_extents.iter().map(|_| vec![]).collect();
                     }
                     _ => return Err(Error::Unsupported("unsupported construction_method")),
                 }
@@ -1308,9 +1560,8 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
                 // Store any remaining data for potential later extraction
                 if b.bytes_left() > 0 {
                     let offset = b.offset();
-                    let mut data = vec_with_capacity(b.bytes_left().try_into()?)?;
-                    b.read_to_end(&mut data)?;
-                    vec_push(&mut mdats, MediaDataBox { offset, data })?;
+                    let data = b.read_into_try_vec()?;
+                    mdats.push(MediaDataBox { offset, data })?;
                 }
             }
             _ => skip_box_content(&mut b)?,
@@ -1328,9 +1579,9 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
     {
         if data.is_empty() {
             // try to find an overlapping mdat
-            for mdat in &mut mdats {
+            for mdat in mdats.iter_mut() {
                 if mdat.matches_extent(&extent.extent_range) {
-                    data.append(&mut mdat.data)
+                    data.append(&mut mdat.data)?;
                 } else if mdat.contains_extent(&extent.extent_range) {
                     mdat.read_extent(&extent.extent_range, data)?;
                 }
@@ -1338,7 +1589,7 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
         }
     }
 
-    context.primary_item = primary_item_extents_data.concat();
+    context.primary_item = primary_item_extents_data.concat()?;
 
     Ok(())
 }
@@ -1414,11 +1665,11 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<ItemLocation
     }
 
     if let Some(loc) = iloc_items
-        .iter()
+        .into_iter()
         .flatten()
         .find(|loc| loc.item_id == primary_item_id)
     {
-        Ok(loc.clone())
+        Ok(loc)
     } else {
         Err(Error::InvalidData(
             "primary_item_id not present in iloc box",
@@ -1442,7 +1693,7 @@ fn read_pitm<T: Read>(src: &mut BMFFBox<T>) -> Result<u32> {
 
 /// Parse an Item Information Box
 /// See ISO 14496-12:2015 § 8.11.6
-fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemInfoEntry>> {
+fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemInfoEntry>> {
     let version = read_fullbox_version_no_flags(src)?;
 
     match version {
@@ -1455,7 +1706,7 @@ fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemInfoEntry>> {
     } else {
         be_u32(src)?.to_usize()
     };
-    let mut item_infos = vec_with_capacity(entry_count)?;
+    let mut item_infos = TryVec::with_capacity(entry_count)?;
 
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
@@ -1465,7 +1716,7 @@ fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemInfoEntry>> {
             ));
         }
 
-        vec_push(&mut item_infos, read_infe(&mut b)?)?;
+        item_infos.push(read_infe(&mut b)?)?;
 
         check_parser_state!(b.content);
     }
@@ -1514,12 +1765,11 @@ fn read_infe<T: Read>(src: &mut BMFFBox<T>) -> Result<ItemInfoEntry> {
 
 /// Parse an item location box inside a meta box
 /// See ISO 14496-12:2015 § 8.11.3
-fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> {
+fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemLocationBoxItem>> {
     let version: IlocVersion = read_fullbox_version_no_flags(src)?.try_into()?;
 
-    let mut iloc = vec_with_capacity(src.bytes_left().try_into()?)?;
-    src.read_to_end(&mut iloc)?;
-    let mut iloc = BitReader::new(iloc.as_slice());
+    let iloc = src.read_into_try_vec()?;
+    let mut iloc = BitReader::new(&iloc);
 
     let offset_size: IlocFieldSize = iloc.read_u8(4)?.try_into()?;
     let length_size: IlocFieldSize = iloc.read_u8(4)?.try_into()?;
@@ -1538,7 +1788,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> 
         IlocVersion::Two => iloc.read_u32(32)?,
     };
 
-    let mut items = vec_with_capacity(item_count.to_usize())?;
+    let mut items = TryVec::with_capacity(item_count.to_usize())?;
 
     for _ in 0..item_count {
         let item_id = match version {
@@ -1581,7 +1831,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> 
             ));
         }
 
-        let mut extents = vec_with_capacity(extent_count.to_usize())?;
+        let mut extents = TryVec::with_capacity(extent_count.to_usize())?;
 
         for _ in 0..extent_count {
             // Parsed but currently ignored, see `ItemLocationBoxExtent`
@@ -1614,17 +1864,14 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<ItemLocationBoxItem>> 
                 ExtentRange::WithLength(Range { start, end })
             };
 
-            vec_push(&mut extents, ItemLocationBoxExtent { extent_range })?;
+            extents.push(ItemLocationBoxExtent { extent_range })?;
         }
 
-        vec_push(
-            &mut items,
-            ItemLocationBoxItem {
-                item_id,
-                construction_method,
-                extents,
-            },
-        )?;
+        items.push(ItemLocationBoxItem {
+            item_id,
+            construction_method,
+            extents,
+        })?;
     }
 
     debug_assert_eq!(iloc.remaining(), 0);
@@ -1714,7 +1961,7 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: &mut MediaContext) -> Result<
             BoxType::TrackBox => {
                 let mut track = Track::new(context.tracks.len());
                 read_trak(&mut b, &mut track)?;
-                vec_push(&mut context.tracks, track)?;
+                context.tracks.push(track)?;
             }
             BoxType::MovieExtendsBox => {
                 let mvex = read_mvex(&mut b)?;
@@ -1724,7 +1971,7 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: &mut MediaContext) -> Result<
             BoxType::ProtectionSystemSpecificHeaderBox => {
                 let pssh = read_pssh(&mut b)?;
                 debug!("{:?}", pssh);
-                vec_push(&mut context.psshs, pssh)?;
+                context.psshs.push(pssh)?;
             }
             BoxType::UserdataBox => {
                 let udta = read_udta(&mut b);
@@ -1742,18 +1989,18 @@ fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHe
     let len = src.bytes_left();
     let mut box_content = read_buf(src, len)?;
     let (system_id, kid, data) = {
-        let pssh = &mut Cursor::new(box_content.as_slice());
+        let pssh = &mut Cursor::new(&box_content);
 
         let (version, _) = read_fullbox_extra(pssh)?;
 
         let system_id = read_buf(pssh, 16)?;
 
-        let mut kid: Vec<ByteData> = Vec::new();
+        let mut kid = TryVec::<ByteData>::new();
         if version > 0 {
             let count = be_u32_with_limit(pssh)?;
             for _ in 0..count {
                 let item = read_buf(pssh, 16)?;
-                vec_push(&mut kid, item)?;
+                kid.push(item)?;
             }
         }
 
@@ -1763,10 +2010,10 @@ fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHe
         (system_id, kid, data)
     };
 
-    let mut pssh_box = Vec::new();
+    let mut pssh_box = TryVec::new();
     write_be_u32(&mut pssh_box, src.head.size.try_into()?)?;
-    pssh_box.extend_from_slice(b"pssh");
-    pssh_box.append(&mut box_content);
+    pssh_box.extend_from_slice(b"pssh")?;
+    pssh_box.append(&mut box_content)?;
 
     Ok(ProtectionSystemSpecificHeaderBox {
         system_id,
@@ -1984,9 +2231,9 @@ fn read_ftyp<T: Read>(src: &mut BMFFBox<T>) -> Result<FileTypeBox> {
     }
     // Is a brand_count of zero valid?
     let brand_count = bytes_left / 4;
-    let mut brands = Vec::new();
+    let mut brands = TryVec::new();
     for _ in 0..brand_count {
-        vec_push(&mut brands, From::from(be_u32(src)?))?;
+        brands.push(be_u32(src)?.into())?;
     }
     Ok(FileTypeBox {
         major_brand: From::from(major),
@@ -2083,7 +2330,7 @@ fn read_tkhd<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackHeaderBox> {
 fn read_elst<T: Read>(src: &mut BMFFBox<T>) -> Result<EditListBox> {
     let (version, _) = read_fullbox_extra(src)?;
     let edit_count = be_u32_with_limit(src)?;
-    let mut edits = Vec::new();
+    let mut edits = TryVec::new();
     for _ in 0..edit_count {
         let (segment_duration, media_time) = match version {
             1 => {
@@ -2098,15 +2345,12 @@ fn read_elst<T: Read>(src: &mut BMFFBox<T>) -> Result<EditListBox> {
         };
         let media_rate_integer = be_i16(src)?;
         let media_rate_fraction = be_i16(src)?;
-        vec_push(
-            &mut edits,
-            Edit {
-                segment_duration,
-                media_time,
-                media_rate_integer,
-                media_rate_fraction,
-            },
-        )?;
+        edits.push(Edit {
+            segment_duration,
+            media_time,
+            media_rate_integer,
+            media_rate_fraction,
+        })?;
     }
 
     // Padding could be added in some contents.
@@ -2161,9 +2405,9 @@ fn read_mdhd<T: Read>(src: &mut BMFFBox<T>) -> Result<MediaHeaderBox> {
 fn read_stco<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let offset_count = be_u32_with_limit(src)?;
-    let mut offsets = Vec::new();
+    let mut offsets = TryVec::new();
     for _ in 0..offset_count {
-        vec_push(&mut offsets, u64::from(be_u32(src)?))?;
+        offsets.push(be_u32(src)?.into())?;
     }
 
     // Padding could be added in some contents.
@@ -2176,9 +2420,9 @@ fn read_stco<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
 fn read_co64<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let offset_count = be_u32_with_limit(src)?;
-    let mut offsets = Vec::new();
+    let mut offsets = TryVec::new();
     for _ in 0..offset_count {
-        vec_push(&mut offsets, be_u64(src)?)?;
+        offsets.push(be_u64(src)?)?;
     }
 
     // Padding could be added in some contents.
@@ -2191,9 +2435,9 @@ fn read_co64<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
 fn read_stss<T: Read>(src: &mut BMFFBox<T>) -> Result<SyncSampleBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let sample_count = be_u32_with_limit(src)?;
-    let mut samples = Vec::new();
+    let mut samples = TryVec::new();
     for _ in 0..sample_count {
-        vec_push(&mut samples, be_u32(src)?)?;
+        samples.push(be_u32(src)?)?;
     }
 
     // Padding could be added in some contents.
@@ -2206,19 +2450,16 @@ fn read_stss<T: Read>(src: &mut BMFFBox<T>) -> Result<SyncSampleBox> {
 fn read_stsc<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleToChunkBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let sample_count = be_u32_with_limit(src)?;
-    let mut samples = Vec::new();
+    let mut samples = TryVec::new();
     for _ in 0..sample_count {
         let first_chunk = be_u32(src)?;
         let samples_per_chunk = be_u32_with_limit(src)?;
         let sample_description_index = be_u32(src)?;
-        vec_push(
-            &mut samples,
-            SampleToChunk {
-                first_chunk,
-                samples_per_chunk,
-                sample_description_index,
-            },
-        )?;
+        samples.push(SampleToChunk {
+            first_chunk,
+            samples_per_chunk,
+            sample_description_index,
+        })?;
     }
 
     // Padding could be added in some contents.
@@ -2236,7 +2477,7 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
         return Err(Error::InvalidData("insufficient data in 'ctts' box"));
     }
 
-    let mut offsets = Vec::new();
+    let mut offsets = TryVec::new();
     for _ in 0..counts {
         let (sample_count, time_offset) = match version {
             // According to spec, Version0 shoule be used when version == 0;
@@ -2251,13 +2492,10 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
                 return Err(Error::InvalidData("unsupported version in 'ctts' box"));
             }
         };
-        vec_push(
-            &mut offsets,
-            TimeOffset {
-                sample_count,
-                time_offset,
-            },
-        )?;
+        offsets.push(TimeOffset {
+            sample_count,
+            time_offset,
+        })?;
     }
 
     skip_box_remain(src)?;
@@ -2270,10 +2508,10 @@ fn read_stsz<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleSizeBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let sample_size = be_u32(src)?;
     let sample_count = be_u32_with_limit(src)?;
-    let mut sample_sizes = Vec::new();
+    let mut sample_sizes = TryVec::new();
     if sample_size == 0 {
         for _ in 0..sample_count {
-            vec_push(&mut sample_sizes, be_u32(src)?)?;
+            sample_sizes.push(be_u32(src)?)?;
         }
     }
 
@@ -2290,17 +2528,14 @@ fn read_stsz<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleSizeBox> {
 fn read_stts<T: Read>(src: &mut BMFFBox<T>) -> Result<TimeToSampleBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let sample_count = be_u32_with_limit(src)?;
-    let mut samples = Vec::new();
+    let mut samples = TryVec::new();
     for _ in 0..sample_count {
         let sample_count = be_u32_with_limit(src)?;
         let sample_delta = be_u32(src)?;
-        vec_push(
-            &mut samples,
-            Sample {
-                sample_count,
-                sample_delta,
-            },
-        )?;
+        samples.push(Sample {
+            sample_count,
+            sample_delta,
+        })?;
     }
 
     // Padding could be added in some contents.
@@ -2657,7 +2892,7 @@ fn read_ds_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
             esds.audio_sample_rate = Some(sample_frequency_value);
             esds.audio_channel_count = Some(channel_counts);
             assert!(esds.decoder_specific_data.is_empty());
-            esds.decoder_specific_data.extend_from_slice(data);
+            esds.decoder_specific_data.extend_from_slice(data)?;
 
             Ok(())
         }
@@ -2751,10 +2986,10 @@ fn read_dfla<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACSpecificBox> {
     if flags != 0 {
         return Err(Error::InvalidData("no-zero dfLa (FLAC) flags"));
     }
-    let mut blocks = Vec::new();
+    let mut blocks = TryVec::new();
     while src.bytes_left() > 0 {
         let block = read_flac_metadata(src)?;
-        vec_push(&mut blocks, block)?;
+        blocks.push(block)?;
     }
     // The box must have at least one meta block, and the first block
     // must be the METADATA_BLOCK_STREAMINFO
@@ -2932,7 +3167,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
 
     // Skip clap/pasp/etc. for now.
     let mut codec_specific = None;
-    let mut protection_info = Vec::new();
+    let mut protection_info = TryVec::new();
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
@@ -2994,7 +3229,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 }
                 let sinf = read_sinf(&mut b)?;
                 debug!("{:?} (sinf)", sinf);
-                vec_push(&mut protection_info, sinf)?;
+                protection_info.push(sinf)?;
             }
             _ => {
                 debug!("Unsupported video codec, box {:?} found", b.head.name);
@@ -3086,7 +3321,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
         BoxType::LPCMAudioSampleEntry => (CodecType::LPCM, Some(AudioCodecSpecific::LPCM)),
         _ => (CodecType::Unknown, None),
     };
-    let mut protection_info = Vec::new();
+    let mut protection_info = TryVec::new();
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
@@ -3141,7 +3376,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 let sinf = read_sinf(&mut b)?;
                 debug!("{:?} (sinf)", sinf);
                 codec_type = CodecType::EncryptedAudio;
-                vec_push(&mut protection_info, sinf)?;
+                protection_info.push(sinf)?;
             }
             _ => {
                 debug!("Unsupported audio codec, box {:?} found", b.head.name);
@@ -3171,7 +3406,7 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
     let (_, _) = read_fullbox_extra(src)?;
 
     let description_count = be_u32(src)?;
-    let mut descriptions = Vec::new();
+    let mut descriptions = TryVec::new();
 
     {
         let mut iter = src.box_iter();
@@ -3194,7 +3429,7 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
                 }
                 Err(e) => return Err(e),
             };
-            vec_push(&mut descriptions, description)?;
+            descriptions.push(description)?;
             check_parser_state!(b.content);
             if descriptions.len() == description_count.to_usize() {
                 break;
@@ -3295,7 +3530,7 @@ fn read_tenc<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackEncryptionBox> {
 
 fn read_frma<T: Read>(src: &mut BMFFBox<T>) -> Result<String> {
     let code_name = read_buf(src, 4)?;
-    String::from_utf8(code_name).map_err(From::from)
+    code_name.try_into().map_err(From::from)
 }
 
 fn read_schm<T: Read>(src: &mut BMFFBox<T>) -> Result<SchemeTypeBox> {
@@ -3454,23 +3689,21 @@ fn read_ilst_bool_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<bool>> {
 }
 
 fn read_ilst_string_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<String>> {
-    read_ilst_u8_data(src)?.map_or(Ok(None), |d| {
-        String::from_utf8(d).map_err(From::from).map(Some)
-    })
+    read_ilst_u8_data(src)?.map_or(Ok(None), |d| d.try_into().map_err(From::from).map(Some))
 }
 
-fn read_ilst_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<Vec<u8>>> {
+fn read_ilst_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<TryVec<u8>>> {
     // For all non-covr atoms, there must only be one data atom.
     Ok(read_ilst_multiple_u8_data(src)?.pop())
 }
 
-fn read_ilst_multiple_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<Vec<u8>>> {
+fn read_ilst_multiple_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<TryVec<u8>>> {
     let mut iter = src.box_iter();
-    let mut data = Vec::new();
+    let mut data = TryVec::new();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::MetadataItemDataEntry => {
-                vec_push(&mut data, read_ilst_data(&mut b)?)?;
+                data.push(read_ilst_data(&mut b)?)?;
             }
             _ => skip_box_content(&mut b)?,
         };
@@ -3479,7 +3712,7 @@ fn read_ilst_multiple_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<Vec<u
     Ok(data)
 }
 
-fn read_ilst_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Vec<u8>> {
+fn read_ilst_data<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<u8>> {
     // Skip past the padding bytes
     skip(&mut src.content, src.head.offset)?;
     let size = src.content.limit();
@@ -3493,14 +3726,13 @@ fn skip<T: Read>(src: &mut T, bytes: u64) -> Result<()> {
 }
 
 /// Read size bytes into a Vector or return error.
-fn read_buf<T: Read>(src: &mut T, size: u64) -> Result<Vec<u8>> {
+fn read_buf<T: Read>(src: &mut T, size: u64) -> Result<TryVec<u8>> {
     if size > BUF_SIZE_LIMIT {
         return Err(Error::InvalidData("read_buf size exceeds BUF_SIZE_LIMIT"));
     }
 
-    let mut buf = vec![];
-    let r: u64 = read_to_end(&mut src.take(size), &mut buf)?.try_into()?;
-    if r != size {
+    let buf = src.take(size).read_into_try_vec()?;
+    if buf.len().to_u64() != size {
         return Err(Error::InvalidData("failed buffer read"));
     }
 
