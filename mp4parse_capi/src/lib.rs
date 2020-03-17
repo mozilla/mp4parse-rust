@@ -41,7 +41,6 @@ extern crate num_traits;
 
 use byteorder::WriteBytesExt;
 use num_traits::{PrimInt, Zero};
-use std::collections::HashMap;
 use std::io::Read;
 
 // Symbols we need from our rust api.
@@ -60,11 +59,20 @@ use mp4parse::Track;
 use mp4parse::TrackScaledTime;
 use mp4parse::TrackTimeScale;
 use mp4parse::TrackType;
+use mp4parse::TryBox;
+use mp4parse::TryHashMap;
 use mp4parse::TryVec;
 use mp4parse::VideoCodecSpecific;
 
+// To ensure we don't use stdlib allocating types by accident
 #[allow(dead_code)]
-struct Vec; // To ensure we don't use any std::vec::Vec by accident
+struct Vec;
+#[allow(dead_code)]
+struct Box;
+#[allow(dead_code)]
+struct HashMap;
+#[allow(dead_code)]
+struct String;
 
 #[repr(C)]
 #[derive(PartialEq, Debug)]
@@ -297,15 +305,15 @@ pub struct Mp4parseFragmentInfo {
 #[derive(Default)]
 pub struct Mp4parseParser {
     context: MediaContext,
-    opus_header: HashMap<u32, TryVec<u8>>,
+    opus_header: TryHashMap<u32, TryVec<u8>>,
     pssh_data: TryVec<u8>,
-    sample_table: HashMap<u32, TryVec<Mp4parseIndice>>,
+    sample_table: TryHashMap<u32, TryVec<Mp4parseIndice>>,
     // Store a mapping from track index (not id) to associated sample
     // descriptions. Because each track has a variable number of sample
     // descriptions, and because we need the data to live long enough to be
     // copied out by callers, we store these on the parser struct.
-    audio_track_sample_descriptions: HashMap<u32, TryVec<Mp4parseTrackAudioSampleInfo>>,
-    video_track_sample_descriptions: HashMap<u32, TryVec<Mp4parseTrackVideoSampleInfo>>,
+    audio_track_sample_descriptions: TryHashMap<u32, TryVec<Mp4parseTrackAudioSampleInfo>>,
+    video_track_sample_descriptions: TryHashMap<u32, TryVec<Mp4parseTrackVideoSampleInfo>>,
 }
 
 /// A unified interface for the parsers which have different contexts, but
@@ -329,10 +337,6 @@ impl Mp4parseParser {
 
     fn context_mut(&mut self) -> &mut MediaContext {
         &mut self.context
-    }
-
-    fn sample_table_mut(&mut self) -> &mut HashMap<u32, TryVec<Mp4parseIndice>> {
-        &mut self.sample_table
     }
 }
 
@@ -477,8 +481,8 @@ fn mp4parse_new_common_safe<T: Read, P: ContextParser>(
 
     P::read(io, &mut context)
         .map(|_| P::with_context(context))
-        .map(Box::new)
-        .map(Box::into_raw)
+        .and_then(TryBox::try_new)
+        .map(TryBox::into_raw)
         .map_err(Mp4parseStatus::from)
 }
 
@@ -519,7 +523,7 @@ impl From<Result<(), Mp4parseStatus>> for Mp4parseStatus {
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_free(parser: *mut Mp4parseParser) {
     assert!(!parser.is_null());
-    let _ = Box::from_raw(parser);
+    let _ = TryBox::from_raw(parser);
 }
 
 /// Free an `Mp4parseAvifParser*` allocated by `mp4parse_avif_new()`.
@@ -532,7 +536,7 @@ pub unsafe extern "C" fn mp4parse_free(parser: *mut Mp4parseParser) {
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_avif_free(parser: *mut Mp4parseAvifParser) {
     assert!(!parser.is_null());
-    let _ = Box::from_raw(parser);
+    let _ = TryBox::from_raw(parser);
 }
 
 /// Return the number of tracks parsed by previous `mp4parse_read()` call.
@@ -800,7 +804,7 @@ fn get_track_audio_info(
                         return Err(Mp4parseStatus::Invalid);
                     }
                     Ok(_) => {
-                        opus_header.insert(track_index, v);
+                        opus_header.insert(track_index, v)?;
                         if let Some(v) = opus_header.get(&track_index) {
                             if v.len() > std::u32::MAX as usize {
                                 return Err(Mp4parseStatus::Invalid);
@@ -826,8 +830,8 @@ fn get_track_audio_info(
             sample_info.protected_data.scheme_type = match p.scheme_type {
                 Some(ref scheme_type_box) => {
                     match scheme_type_box.scheme_type.value.as_ref() {
-                        "cenc" => Mp4ParseEncryptionSchemeType::Cenc,
-                        "cbcs" => Mp4ParseEncryptionSchemeType::Cbcs,
+                        b"cenc" => Mp4ParseEncryptionSchemeType::Cenc,
+                        b"cbcs" => Mp4ParseEncryptionSchemeType::Cbcs,
                         // We don't support other schemes, and shouldn't reach
                         // this case. Try to gracefully handle by treating as
                         // no encryption case.
@@ -861,7 +865,7 @@ fn get_track_audio_info(
 
     parser
         .audio_track_sample_descriptions
-        .insert(track_index, audio_sample_infos);
+        .insert(track_index, audio_sample_infos)?;
     match parser.audio_track_sample_descriptions.get(&track_index) {
         Some(sample_info) => {
             if sample_info.len() > std::u32::MAX as usize {
@@ -986,8 +990,8 @@ fn mp4parse_get_track_video_info_safe(
             sample_info.protected_data.scheme_type = match p.scheme_type {
                 Some(ref scheme_type_box) => {
                     match scheme_type_box.scheme_type.value.as_ref() {
-                        "cenc" => Mp4ParseEncryptionSchemeType::Cenc,
-                        "cbcs" => Mp4ParseEncryptionSchemeType::Cbcs,
+                        b"cenc" => Mp4ParseEncryptionSchemeType::Cenc,
+                        b"cbcs" => Mp4ParseEncryptionSchemeType::Cbcs,
                         // We don't support other schemes, and shouldn't reach
                         // this case. Try to gracefully handle by treating as
                         // no encryption case.
@@ -1021,7 +1025,7 @@ fn mp4parse_get_track_video_info_safe(
 
     parser
         .video_track_sample_descriptions
-        .insert(track_index, video_sample_infos);
+        .insert(track_index, video_sample_infos)?;
     match parser.video_track_sample_descriptions.get(&track_index) {
         Some(sample_info) => {
             if sample_info.len() > std::u32::MAX as usize {
@@ -1088,17 +1092,28 @@ pub unsafe extern "C" fn mp4parse_get_indice_table(
     // Initialize fields to default values to ensure all fields are always valid.
     *indices = Default::default();
 
-    let context = (*parser).context();
+    get_indice_table(&mut *parser, track_id, &mut *indices).into()
+}
+
+fn get_indice_table(
+    parser: &mut Mp4parseParser,
+    track_id: u32,
+    indices: &mut Mp4parseByteData,
+) -> Result<(), Mp4parseStatus> {
+    let Mp4parseParser {
+        context,
+        sample_table: index_table,
+        ..
+    } = parser;
     let tracks = &context.tracks;
     let track = match tracks.iter().find(|track| track.track_id == Some(track_id)) {
         Some(t) => t,
-        _ => return Mp4parseStatus::Invalid,
+        _ => return Err(Mp4parseStatus::Invalid),
     };
 
-    let index_table = (*parser).sample_table_mut();
     if let Some(v) = index_table.get(&track_id) {
-        (*indices).set_indices(v);
-        return Mp4parseStatus::Ok;
+        indices.set_indices(v);
+        return Ok(());
     }
 
     let media_time = match (&track.media_time, &track.timescale) {
@@ -1122,12 +1137,12 @@ pub unsafe extern "C" fn mp4parse_get_indice_table(
     };
 
     if let Some(v) = create_sample_table(track, offset_time) {
-        (*indices).set_indices(&v);
-        index_table.insert(track_id, v);
-        return Mp4parseStatus::Ok;
+        indices.set_indices(&v);
+        index_table.insert(track_id, v)?;
+        return Ok(());
     }
 
-    Mp4parseStatus::Invalid
+    Err(Mp4parseStatus::Invalid)
 }
 
 // Convert a 'ctts' compact table to full table by iterator,
@@ -1431,7 +1446,7 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<TryVec<M
         });
 
         for indices in sort_table.windows(2) {
-            if let &[current_index, peek_index] = indices {
+            if let [current_index, peek_index] = *indices {
                 let next_start_composition_time = sample_table[peek_index].start_composition;
                 let sample = &mut sample_table[current_index];
                 sample.end_composition = next_start_composition_time;

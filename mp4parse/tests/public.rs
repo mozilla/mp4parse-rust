@@ -4,6 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 extern crate mp4parse as mp4;
 
+use std::convert::TryInto;
 use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::Path;
@@ -175,7 +176,7 @@ fn public_metadata() {
     assert_eq!(meta.year.unwrap(), "2019");
     assert_eq!(
         meta.genre.unwrap(),
-        mp4::Genre::CustomGenre("Custom Genre".to_string())
+        mp4::Genre::CustomGenre("Custom Genre".try_into().unwrap())
     );
     assert_eq!(meta.encoder.unwrap(), "Lavf56.40.101");
     assert_eq!(meta.encoded_by.unwrap(), "Encoded-by");
@@ -311,7 +312,7 @@ fn public_audio_tenc() {
             Some(ref p) => {
                 assert_eq!(p.code_name, "mp4a");
                 if let Some(ref schm) = p.scheme_type {
-                    assert_eq!(schm.scheme_type.value, "cenc");
+                    assert_eq!(schm.scheme_type.value, *b"cenc");
                 } else {
                     panic!("Expected scheme type info");
                 }
@@ -370,7 +371,7 @@ fn public_video_cenc() {
             Some(ref p) => {
                 assert_eq!(p.code_name, "avc1");
                 if let Some(ref schm) = p.scheme_type {
-                    assert_eq!(schm.scheme_type.value, "cenc");
+                    assert_eq!(schm.scheme_type.value, *b"cenc");
                 } else {
                     panic!("Expected scheme type info");
                 }
@@ -443,7 +444,7 @@ fn public_audio_cbcs() {
                         found_encrypted_sample_description = true;
                         assert_eq!(p.code_name, "mp4a");
                         if let Some(ref schm) = p.scheme_type {
-                            assert_eq!(schm.scheme_type.value, "cbcs");
+                            assert_eq!(schm.scheme_type.value, *b"cbcs");
                         } else {
                             panic!("Expected scheme type info");
                         }
@@ -528,7 +529,7 @@ fn public_video_cbcs() {
                         found_encrypted_sample_description = true;
                         assert_eq!(p.code_name, "avc1");
                         if let Some(ref schm) = p.scheme_type {
-                            assert_eq!(schm.scheme_type.value, "cbcs");
+                            assert_eq!(schm.scheme_type.value, *b"cbcs");
                         } else {
                             panic!("Expected scheme type info");
                         }
