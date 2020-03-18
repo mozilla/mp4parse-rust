@@ -10,7 +10,3 @@ overflow-checks = true
 
 [profile.bench]
 overflow-checks = true
-
-# Uncomment below to test local changes to mp4parse_fallible crate
-# [patch.crates-io]
-# mp4parse_fallible = { path = "../mp4parse_fallible" }

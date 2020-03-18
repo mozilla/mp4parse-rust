@@ -1702,7 +1702,7 @@ fn parser_input_must_be_null() {
         read: Some(error_read),
         userdata: &mut dummy_value as *mut _ as *mut std::os::raw::c_void,
     };
-    let mut parser = 0xDEADBEEF as *mut _;
+    let mut parser = 0xDEAD_BEEF as *mut _;
     let rv = unsafe { mp4parse_new(&io, &mut parser) };
     assert_eq!(rv, Mp4parseStatus::BadArg);
 }
