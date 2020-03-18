@@ -163,10 +163,10 @@ mod fallible {
     #[cfg(feature = "mp4parse_fallible")]
     extern "C" {
         fn malloc(bytes: usize) -> *mut u8;
+        fn realloc(ptr: *mut u8, bytes: usize) -> *mut u8;
     }
 
     #[cfg(feature = "mp4parse_fallible")]
-    use mp4parse_fallible::FallibleVec;
     use std::cmp::PartialEq;
     use std::convert::TryInto as _;
     use std::hash::Hash;
@@ -236,20 +236,21 @@ mod fallible {
             #[cfg(feature = "mp4parse_fallible")]
             {
                 let size = std::mem::size_of::<T>();
-                unsafe {
-                    let new_ptr = malloc(size) as *mut T;
-                    if new_ptr.is_null() {
-                        return Err(super::Error::OutOfMemory);
-                    }
+                let new_ptr = unsafe { malloc(size) as *mut T };
 
-                    // If we did a simple assignment: *new_ptr = x, then the
-                    // value pointed to by new_ptr would immediately be
-                    // dropped, but that would cause an invalid memory access.
-                    // Instead, we use replace() to avoid the immediate drop
-                    // and forget() to ensure that drop never happens.
-                    std::mem::forget(std::mem::replace(&mut *new_ptr, x));
-                    inner = Box::from_raw(new_ptr);
+                if new_ptr.is_null() {
+                    return Err(super::Error::OutOfMemory);
                 }
+
+                // If we did a simple assignment: *new_ptr = x, then the value
+                // pointed to by new_ptr would immediately be dropped, but
+                // that would cause an invalid memory access. Instead, we use
+                // replace() to avoid the immediate drop and forget() to
+                // ensure that drop never happens.
+                inner = unsafe {
+                    std::mem::forget(std::mem::replace(&mut *new_ptr, x));
+                    Box::from_raw(new_ptr)
+                };
             }
             #[cfg(not(feature = "mp4parse_fallible"))]
             {
@@ -393,8 +394,24 @@ mod fallible {
         fn reserve(&mut self, additional: usize) -> Result<()> {
             #[cfg(feature = "mp4parse_fallible")]
             {
-                FallibleVec::try_reserve(&mut self.inner, additional)
-                    .map_err(|_| super::Error::OutOfMemory)
+                let available = self
+                    .inner
+                    .capacity()
+                    .checked_sub(self.inner.len())
+                    .expect("capacity >= len");
+                if additional > available {
+                    let increase = additional
+                        .checked_sub(available)
+                        .expect("additional > available");
+                    let new_cap = self
+                        .inner
+                        .capacity()
+                        .checked_add(increase)
+                        .ok_or(super::Error::OutOfMemory)?;
+                    self.try_extend(new_cap)?;
+                    debug_assert!(self.inner.capacity() == new_cap);
+                }
+                Ok(())
             }
             #[cfg(not(feature = "mp4parse_fallible"))]
             {
@@ -409,6 +426,39 @@ mod fallible {
         {
             self.reserve(new_len)?;
             self.inner.resize_with(new_len, f);
+            Ok(())
+        }
+
+        #[cfg(feature = "mp4parse_fallible")]
+        fn try_extend(&mut self, new_cap: usize) -> Result<()> {
+            let old_ptr = self.as_mut_ptr();
+            let old_len = self.inner.len();
+
+            let old_cap: usize = self.inner.capacity();
+
+            if old_cap >= new_cap {
+                return Ok(());
+            }
+
+            let new_size_bytes = new_cap
+                .checked_mul(std::mem::size_of::<T>())
+                .ok_or(super::Error::OutOfMemory)?;
+
+            let new_ptr = unsafe {
+                if old_cap == 0 {
+                    malloc(new_size_bytes)
+                } else {
+                    realloc(old_ptr as *mut u8, new_size_bytes)
+                }
+            };
+
+            if new_ptr.is_null() {
+                return Err(super::Error::OutOfMemory);
+            }
+
+            let new_vec = unsafe { Vec::from_raw_parts(new_ptr as *mut T, old_len, new_cap) };
+
+            std::mem::forget(std::mem::replace(&mut self.inner, new_vec));
             Ok(())
         }
     }
@@ -430,6 +480,53 @@ mod fallible {
             self.inner.extend_from_slice(other);
             Ok(())
         }
+    }
+
+    #[test]
+    #[cfg(feature = "mp4parse_fallible")]
+    fn oom() {
+        let mut vec: TryVec<char> = TryVec::new();
+        match vec.reserve(std::usize::MAX) {
+            Ok(_) => panic!("it should be OOM"),
+            _ => (),
+        }
+    }
+
+    #[test]
+    fn try_reserve() {
+        let mut vec: TryVec<_> = vec![1].into();
+        let old_cap = vec.inner.capacity();
+        let new_cap = old_cap + 1;
+        vec.reserve(new_cap).unwrap();
+        assert!(vec.inner.capacity() >= new_cap);
+    }
+
+    #[test]
+    fn try_reserve_idempotent() {
+        let mut vec: TryVec<_> = vec![1].into();
+        let old_cap = vec.inner.capacity();
+        let new_cap = old_cap + 1;
+        vec.reserve(new_cap).unwrap();
+        let cap_after_reserve = vec.inner.capacity();
+        vec.reserve(new_cap).unwrap();
+        assert_eq!(cap_after_reserve, vec.inner.capacity());
+    }
+
+    #[test]
+    #[cfg(feature = "mp4parse_fallible")]
+    fn capacity_overflow() {
+        let mut vec: TryVec<_> = vec![1].into();
+        match vec.reserve(std::usize::MAX) {
+            Ok(_) => panic!("capacity calculation should overflow"),
+            _ => (),
+        }
+    }
+
+    #[test]
+    fn extend_from_slice() {
+        let mut vec: TryVec<u8> = b"foo".as_ref().try_into().unwrap();
+        vec.extend_from_slice(b"bar").unwrap();
+        assert_eq!(vec, b"foobar".as_ref());
     }
 
     impl<T> IntoIterator for TryVec<T> {
@@ -488,6 +585,16 @@ mod fallible {
     impl<T> std::convert::From<Vec<T>> for TryVec<T> {
         fn from(value: Vec<T>) -> Self {
             Self { inner: value }
+        }
+    }
+
+    impl<T: Clone> std::convert::TryFrom<&[T]> for TryVec<T> {
+        type Error = super::Error;
+
+        fn try_from(value: &[T]) -> Result<Self> {
+            let mut v = Self::new();
+            v.extend_from_slice(value)?;
+            Ok(v)
         }
     }
 
