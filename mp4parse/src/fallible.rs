@@ -24,8 +24,6 @@ extern "C" {
     fn realloc(ptr: *mut u8, bytes: usize) -> *mut u8;
 }
 
-#[cfg(feature = "mp4parse_fallible")]
-use std::cmp::PartialEq;
 use std::convert::TryInto as _;
 use std::hash::Hash;
 use std::io::Read;
