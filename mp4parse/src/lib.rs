@@ -19,14 +19,13 @@ use std::io::Cursor;
 use std::io::{Read, Take};
 use std::ops::{Range, RangeFrom};
 
-#[cfg(feature = "mp4parse_fallible")]
-extern crate mp4parse_fallible;
-
 #[macro_use]
 mod macros;
 
 mod boxes;
 use boxes::{BoxType, FourCC};
+
+mod fallible;
 
 // Unit tests.
 #[cfg(test)]
@@ -125,307 +124,19 @@ impl<'a, T: Read> Read for OffsetReader<'a, T> {
 // See https://github.com/mozilla/mp4parse-rust/issues/146
 
 pub type TryVec<T> = fallible::TryVec<T>;
+pub type TryString = TryVec<u8>;
+pub type TryHashMap<K, V> = fallible::TryHashMap<K, V>;
+pub type TryBox<T> = fallible::TryBox<T>;
 
+// To ensure we don't use stdlib allocating types by accident
 #[allow(dead_code)]
-struct Vec; // To ensure we don't use any std::vec::Vec by accident
-
-mod fallible {
-    #[cfg(feature = "mp4parse_fallible")]
-    use mp4parse_fallible::FallibleVec;
-    use std::cmp::PartialEq;
-    use std::convert::TryInto as _;
-    use std::io::Read;
-    use std::io::Take;
-    use std::iter::IntoIterator;
-    use BMFFBox;
-
-    type Result<T> = std::result::Result<T, super::Error>;
-
-    pub trait TryRead {
-        fn try_read_to_end(&mut self, buf: &mut TryVec<u8>) -> Result<usize>;
-
-        fn read_into_try_vec(&mut self) -> Result<TryVec<u8>> {
-            let mut buf = TryVec::new();
-            let _ = self.try_read_to_end(&mut buf)?;
-            Ok(buf)
-        }
-    }
-
-    impl<'a, T: Read> TryRead for BMFFBox<'a, T> {
-        fn try_read_to_end(&mut self, buf: &mut TryVec<u8>) -> Result<usize> {
-            try_read_up_to(self, self.bytes_left(), buf)
-        }
-    }
-
-    impl<T: Read> TryRead for Take<T> {
-        /// With the `mp4parse_fallible` feature enabled, this function reserves the
-        /// upper limit of what `src` can generate before reading all bytes until EOF
-        /// in this source, placing them into buf. If the allocation is unsuccessful,
-        /// or reading from the source generates an error before reaching EOF, this
-        /// will return an error. Otherwise, it will return the number of bytes read.
-        ///
-        /// Since `Take::limit()` may return a value greater than the number of bytes
-        /// which can be read from the source, it's possible this function may fail
-        /// in the allocation phase even though allocating the number of bytes available
-        /// to read would have succeeded. In general, it is assumed that the callers
-        /// have accurate knowledge of the number of bytes of interest and have created
-        /// `src` accordingly.
-        ///
-        /// With the `mp4parse_fallible` feature disabled, this is essentially a wrapper
-        /// around `std::io::Read::read_to_end()`.
-        fn try_read_to_end(&mut self, buf: &mut TryVec<u8>) -> Result<usize> {
-            try_read_up_to(self, self.limit(), buf)
-        }
-    }
-
-    fn try_read_up_to<R: Read>(src: &mut R, limit: u64, buf: &mut TryVec<u8>) -> Result<usize> {
-        let additional = limit.try_into()?;
-        buf.reserve(additional)?;
-        let bytes_read = src.read_to_end(&mut buf.inner)?;
-        Ok(bytes_read)
-    }
-
-    // TODO TryString, TryHashMap?
-
-    #[derive(Default, PartialEq)]
-    pub struct TryVec<T> {
-        inner: Vec<T>,
-    }
-
-    impl<T: std::fmt::Debug> std::fmt::Debug for TryVec<T> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{:?}", self.inner)
-        }
-    }
-
-    /// TryVec is a thin wrapper around std::vec::Vec to provide support for
-    /// fallible allocation. Though the fallible allocator is only enabled
-    /// with the mp4parse_fallible feature, the API differences from stdlib
-    /// Vec ensure that all operations which allocate return a Result. For the
-    /// most part, this simply means adding a Result return value to Vec
-    /// functions which return nothing or a non-Result value. However, Vec
-    /// implements some traits whose API cannot communicate failure, but which
-    /// do require allocation, so it is important that TryVec does not
-    /// implement these traits.
-    ///
-    /// Specifically, do not implement any of the following traits:
-    /// - Clone
-    /// - Extend
-    /// - From
-    /// - FromIterator
-    ///
-    /// This list may not be exhaustive. Exercise caution when implementing
-    /// any new traits to ensure they won't potentially allocate in a way that
-    /// can't return a Result to indicate allocation failure.
-    impl<T> TryVec<T> {
-        pub fn new() -> Self {
-            Self { inner: Vec::new() }
-        }
-
-        pub fn with_capacity(capacity: usize) -> Result<Self> {
-            let mut v = Self::new();
-            v.reserve(capacity)?;
-            Ok(v)
-        }
-
-        pub fn append(&mut self, other: &mut Self) -> Result<()> {
-            self.reserve(other.inner.len())?;
-            self.inner.append(&mut other.inner);
-            Ok(())
-        }
-
-        pub fn as_mut_slice(&mut self) -> &mut [T] {
-            self
-        }
-
-        pub fn as_slice(&self) -> &[T] {
-            self
-        }
-
-        pub fn clear(&mut self) {
-            self.inner.clear()
-        }
-
-        #[cfg(test)]
-        pub fn into_inner(self) -> Vec<T> {
-            self.inner
-        }
-
-        pub fn is_empty(&self) -> bool {
-            self.inner.is_empty()
-        }
-
-        pub fn iter_mut(&mut self) -> IterMut<T> {
-            IterMut {
-                inner: self.inner.iter_mut(),
-            }
-        }
-
-        pub fn iter(&self) -> Iter<T> {
-            Iter {
-                inner: self.inner.iter(),
-            }
-        }
-
-        pub fn pop(&mut self) -> Option<T> {
-            self.inner.pop()
-        }
-
-        pub fn push(&mut self, value: T) -> Result<()> {
-            self.reserve(if self.inner.capacity() == 0 { 4 } else { 1 })?;
-            self.inner.push(value);
-            Ok(())
-        }
-
-        fn reserve(&mut self, additional: usize) -> Result<()> {
-            #[cfg(feature = "mp4parse_fallible")]
-            {
-                FallibleVec::try_reserve(&mut self.inner, additional)
-                    .map_err(|_| super::Error::OutOfMemory)
-            }
-            #[cfg(not(feature = "mp4parse_fallible"))]
-            {
-                self.inner.reserve(additional);
-                Ok(())
-            }
-        }
-
-        pub fn resize_with<F>(&mut self, new_len: usize, f: F) -> Result<()>
-        where
-            F: FnMut() -> T,
-        {
-            self.reserve(new_len)?;
-            self.inner.resize_with(new_len, f);
-            Ok(())
-        }
-    }
-
-    impl<T: Clone> TryVec<TryVec<T>> {
-        pub fn concat(&self) -> Result<TryVec<T>> {
-            let size = self.iter().map(|v| v.inner.len()).sum();
-            let mut result = TryVec::with_capacity(size)?;
-            for v in self.iter() {
-                result.extend_from_slice(&v.inner)?;
-            }
-            Ok(result)
-        }
-    }
-
-    impl<T: Clone> TryVec<T> {
-        pub fn extend_from_slice(&mut self, other: &[T]) -> Result<()> {
-            self.reserve(other.len())?;
-            self.inner.extend_from_slice(other);
-            Ok(())
-        }
-    }
-
-    impl<T> IntoIterator for TryVec<T> {
-        type Item = T;
-        type IntoIter = std::vec::IntoIter<T>;
-
-        fn into_iter(self) -> Self::IntoIter {
-            self.inner.into_iter()
-        }
-    }
-
-    impl<'a, T> IntoIterator for &'a TryVec<T> {
-        type Item = &'a T;
-        type IntoIter = std::slice::Iter<'a, T>;
-
-        fn into_iter(self) -> Self::IntoIter {
-            self.inner.iter()
-        }
-    }
-
-    impl std::io::Write for TryVec<u8> {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.extend_from_slice(buf)?;
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl<T: PartialEq> PartialEq<Vec<T>> for TryVec<T> {
-        fn eq(&self, other: &Vec<T>) -> bool {
-            self.inner.eq(other)
-        }
-    }
-
-    impl<'a, T: PartialEq> PartialEq<&'a [T]> for TryVec<T> {
-        fn eq(&self, other: &&[T]) -> bool {
-            self.inner.eq(other)
-        }
-    }
-
-    impl std::convert::AsRef<[u8]> for TryVec<u8> {
-        fn as_ref(&self) -> &[u8] {
-            self.inner.as_ref()
-        }
-    }
-
-    impl<T> std::convert::From<Vec<T>> for TryVec<T> {
-        fn from(value: Vec<T>) -> Self {
-            Self { inner: value }
-        }
-    }
-
-    impl std::convert::TryFrom<TryVec<u8>> for String {
-        type Error = std::string::FromUtf8Error;
-
-        fn try_from(value: TryVec<u8>) -> std::result::Result<String, Self::Error> {
-            String::from_utf8(value.inner)
-        }
-    }
-
-    impl<T> std::ops::Deref for TryVec<T> {
-        type Target = [T];
-
-        fn deref(&self) -> &[T] {
-            self.inner.deref()
-        }
-    }
-
-    impl<T> std::ops::DerefMut for TryVec<T> {
-        fn deref_mut(&mut self) -> &mut [T] {
-            self.inner.deref_mut()
-        }
-    }
-
-    pub struct Iter<'a, T> {
-        inner: std::slice::Iter<'a, T>,
-    }
-
-    impl<'a, T> Iterator for Iter<'a, T> {
-        type Item = &'a T;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            self.inner.next()
-        }
-
-        fn size_hint(&self) -> (usize, Option<usize>) {
-            self.inner.size_hint()
-        }
-    }
-
-    pub struct IterMut<'a, T> {
-        inner: std::slice::IterMut<'a, T>,
-    }
-
-    impl<'a, T> Iterator for IterMut<'a, T> {
-        type Item = &'a mut T;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            self.inner.next()
-        }
-
-        fn size_hint(&self) -> (usize, Option<usize>) {
-            self.inner.size_hint()
-        }
-    }
-}
+struct Vec;
+#[allow(dead_code)]
+struct Box;
+#[allow(dead_code)]
+struct HashMap;
+#[allow(dead_code)]
+struct String;
 
 /// Describes parser failures.
 ///
@@ -827,7 +538,7 @@ pub struct TrackEncryptionBox {
 
 #[derive(Debug, Default)]
 pub struct ProtectionSchemeInfoBox {
-    pub code_name: String,
+    pub code_name: TryString,
     pub scheme_type: Option<SchemeTypeBox>,
     pub tenc: Option<TrackEncryptionBox>,
 }
@@ -845,12 +556,12 @@ pub struct UserdataBox {
 /// 'udta.meta.ilst' may only have either a
 /// standard genre box 'gnre' or a custom
 /// genre box '©gen', but never both at once.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum Genre {
     /// A standard ID3v1 numbered genre.
     StandardGenre(u8),
     /// Any custom genre string.
-    CustomGenre(String),
+    CustomGenre(TryString),
 }
 
 /// Represents the contents of a 'stik'
@@ -896,21 +607,21 @@ pub enum AdvisoryRating {
 #[derive(Debug, Default)]
 pub struct MetadataBox {
     /// The album name, '©alb'
-    pub album: Option<String>,
+    pub album: Option<TryString>,
     /// The artist name '©art' or '©ART'
-    pub artist: Option<String>,
+    pub artist: Option<TryString>,
     /// The album artist 'aART'
-    pub album_artist: Option<String>,
+    pub album_artist: Option<TryString>,
     /// Track comments '©cmt'
-    pub comment: Option<String>,
+    pub comment: Option<TryString>,
     /// The date or year field '©day'
     ///
     /// This is stored as an arbitrary string,
     /// and may not necessarily be in a valid date
     /// format.
-    pub year: Option<String>,
+    pub year: Option<TryString>,
     /// The track title '©nam'
-    pub title: Option<String>,
+    pub title: Option<TryString>,
     /// The track genre '©gen' or 'gnre'.
     pub genre: Option<Genre>,
     /// The track number 'trkn'.
@@ -924,15 +635,15 @@ pub struct MetadataBox {
     /// stored in 'disk'
     pub total_discs: Option<u8>,
     /// The composer of the track '©wrt'
-    pub composer: Option<String>,
+    pub composer: Option<TryString>,
     /// The encoder used to create this track '©too'
-    pub encoder: Option<String>,
+    pub encoder: Option<TryString>,
     /// The encoded-by settingo this track '©enc'
-    pub encoded_by: Option<String>,
+    pub encoded_by: Option<TryString>,
     /// The tempo or BPM of the track 'tmpo'
     pub beats_per_minute: Option<u8>,
     /// Copyright information of the track 'cprt'
-    pub copyright: Option<String>,
+    pub copyright: Option<TryString>,
     /// Whether or not this track is part of a compilation 'cpil'
     pub compilation: Option<bool>,
     /// The advisory rating of this track 'rtng'
@@ -942,45 +653,45 @@ pub struct MetadataBox {
     /// This is stored in the box as string data, but
     /// the format is an integer percentage from 0 - 100,
     /// where 100 is displayed as 5 stars out of 5.
-    pub rating: Option<String>,
+    pub rating: Option<TryString>,
     /// The grouping this track belongs to '©grp'
-    pub grouping: Option<String>,
+    pub grouping: Option<TryString>,
     /// The media type of this track 'stik'
     pub media_type: Option<MediaType>, // stik
     /// Whether or not this track is a podcast 'pcst'
     pub podcast: Option<bool>,
     /// The category of ths track 'catg'
-    pub category: Option<String>,
+    pub category: Option<TryString>,
     /// The podcast keyword 'keyw'
-    pub keyword: Option<String>,
+    pub keyword: Option<TryString>,
     /// The podcast url 'purl'
-    pub podcast_url: Option<String>,
+    pub podcast_url: Option<TryString>,
     /// The podcast episode GUID 'egid'
-    pub podcast_guid: Option<String>,
+    pub podcast_guid: Option<TryString>,
     /// The description of the track 'desc'
-    pub description: Option<String>,
+    pub description: Option<TryString>,
     /// The long description of the track 'ldes'.
     ///
     /// Unlike other string fields, the long description field
     /// can be longer than 256 characters.
-    pub long_description: Option<String>,
+    pub long_description: Option<TryString>,
     /// The lyrics of the track '©lyr'.
     ///
     /// Unlike other string fields, the lyrics field
     /// can be longer than 256 characters.
-    pub lyrics: Option<String>,
+    pub lyrics: Option<TryString>,
     /// The name of the TV network this track aired on 'tvnn'.
-    pub tv_network_name: Option<String>,
+    pub tv_network_name: Option<TryString>,
     /// The name of the TV Show for this track 'tvsh'.
-    pub tv_show_name: Option<String>,
+    pub tv_show_name: Option<TryString>,
     /// The name of the TV Episode for this track 'tven'.
-    pub tv_episode_name: Option<String>,
+    pub tv_episode_name: Option<TryString>,
     /// The number of the TV Episode for this track 'tves'.
     pub tv_episode_number: Option<u8>,
     /// The season of the TV Episode of this track 'tvsn'.
     pub tv_season: Option<u8>,
     /// The date this track was purchased 'purd'.
-    pub purchase_date: Option<String>,
+    pub purchase_date: Option<TryString>,
     /// Whether or not this track supports gapless playback 'pgap'
     pub gapless_playback: Option<bool>,
     /// Any cover artwork attached to this track 'covr'
@@ -990,19 +701,19 @@ pub struct MetadataBox {
     /// which may contain image data in JPEG or PNG format.
     pub cover_art: Option<TryVec<TryVec<u8>>>,
     /// The owner of the track 'ownr'
-    pub owner: Option<String>,
+    pub owner: Option<TryString>,
     /// Whether or not this track is HD Video 'hdvd'
     pub hd_video: Option<bool>,
     /// The name of the track to sort by 'sonm'
-    pub sort_name: Option<String>,
+    pub sort_name: Option<TryString>,
     /// The name of the album to sort by 'soal'
-    pub sort_album: Option<String>,
+    pub sort_album: Option<TryString>,
     /// The name of the artist to sort by 'soar'
-    pub sort_artist: Option<String>,
+    pub sort_artist: Option<TryString>,
     /// The name of the album artist to sort by 'soaa'
-    pub sort_album_artist: Option<String>,
+    pub sort_album_artist: Option<TryString>,
     /// The name of the composer to sort by 'soco'
-    pub sort_composer: Option<String>,
+    pub sort_composer: Option<TryString>,
 }
 
 /// Internal data structures.
@@ -1513,7 +1224,7 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
     if let Some(mut b) = iter.next_box()? {
         if b.head.name == BoxType::FileTypeBox {
             let ftyp = read_ftyp(&mut b)?;
-            if !ftyp.compatible_brands.contains(&FourCC::from("mif1")) {
+            if !ftyp.compatible_brands.contains(&FourCC::from(*b"mif1")) {
                 return Err(Error::InvalidData("compatible_brands must contain 'mif1'"));
             }
         } else {
@@ -1652,10 +1363,7 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<ItemLocation
         .find(|x| x.item_id == primary_item_id)
     {
         if &item_info.item_type.to_be_bytes() != b"av01" {
-            warn!(
-                "primary_item_id type: {}",
-                be_u32_to_string(item_info.item_type)
-            );
+            warn!("primary_item_id type: {}", U32BE(item_info.item_type));
             return Err(Error::InvalidData("primary_item_id type is not av01"));
         }
     } else {
@@ -1724,8 +1432,17 @@ fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemInfoEntry>> {
     Ok(item_infos)
 }
 
-fn be_u32_to_string(src: u32) -> String {
-    String::from_utf8(src.to_be_bytes().to_vec()).unwrap_or(format!("{:x?}", src))
+/// A simple wrapper to interpret a u32 as a 4-byte string in big-endian
+/// order without requiring any allocation.
+struct U32BE(u32);
+
+impl std::fmt::Display for U32BE {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match std::str::from_utf8(&self.0.to_be_bytes()) {
+            Ok(s) => write!(f, "{}", s),
+            Err(_) => write!(f, "{:x?}", self.0),
+        }
+    }
 }
 
 /// Parse an Item Info Entry
@@ -1751,11 +1468,7 @@ fn read_infe<T: Read>(src: &mut BMFFBox<T>) -> Result<ItemInfoEntry> {
     }
 
     let item_type = be_u32(src)?;
-    debug!(
-        "infe item_id {} item_type: {}",
-        item_id,
-        be_u32_to_string(item_type)
-    );
+    debug!("infe item_id {} item_type: {}", item_id, U32BE(item_type));
 
     // There are some additional fields here, but they're not of interest to us
     skip_box_remain(src)?;
@@ -2143,9 +1856,9 @@ fn read_mdia<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
                 let hdlr = read_hdlr(&mut b)?;
 
                 match hdlr.handler_type.value.as_ref() {
-                    "vide" => track.track_type = TrackType::Video,
-                    "soun" => track.track_type = TrackType::Audio,
-                    "meta" => track.track_type = TrackType::Metadata,
+                    b"vide" => track.track_type = TrackType::Video,
+                    b"soun" => track.track_type = TrackType::Audio,
+                    b"meta" => track.track_type = TrackType::Metadata,
                     _ => (),
                 }
                 debug!("{:?}", hdlr);
@@ -3528,9 +3241,8 @@ fn read_tenc<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackEncryptionBox> {
     })
 }
 
-fn read_frma<T: Read>(src: &mut BMFFBox<T>) -> Result<String> {
-    let code_name = read_buf(src, 4)?;
-    code_name.try_into().map_err(From::from)
+fn read_frma<T: Read>(src: &mut BMFFBox<T>) -> Result<TryString> {
+    read_buf(src, 4)
 }
 
 fn read_schm<T: Read>(src: &mut BMFFBox<T>) -> Result<SchemeTypeBox> {
@@ -3688,8 +3400,8 @@ fn read_ilst_bool_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<bool>> {
     Ok(read_ilst_u8_data(src)?.and_then(|d| Some(d.get(0)? == &1)))
 }
 
-fn read_ilst_string_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<String>> {
-    read_ilst_u8_data(src)?.map_or(Ok(None), |d| d.try_into().map_err(From::from).map(Some))
+fn read_ilst_string_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<TryString>> {
+    read_ilst_u8_data(src)
 }
 
 fn read_ilst_u8_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<TryVec<u8>>> {
