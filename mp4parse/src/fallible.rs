@@ -172,6 +172,15 @@ where
     }
 }
 
+#[test]
+#[cfg(feature = "mp4parse_fallible")]
+fn tryhashmap_oom() {
+    match TryHashMap::<char, char>::default().reserve(std::usize::MAX) {
+        Ok(_) => panic!("it should be OOM"),
+        _ => (),
+    }
+}
+
 #[derive(Default, PartialEq)]
 pub struct TryVec<T> {
     inner: std::vec::Vec<T>,
