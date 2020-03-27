@@ -34,6 +34,7 @@ static_assertions = "1.1.0"
 [dev-dependencies]
 test-assembler = "0.1.2"
 env_logger = "0.7.1"
+walkdir = "2.3.1"
 
 [features]
 # Enable mp4parse_fallible to use fallible memory allocation rather than

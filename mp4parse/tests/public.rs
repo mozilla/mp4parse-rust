@@ -29,8 +29,7 @@ static VIDEO_EME_CBCS_MP4: &str = "tests/bipbop_cbcs_video_init.mp4";
 static VIDEO_AV1_MP4: &str = "tests/tiny_av1.mp4";
 static IMAGE_AVIF: &str = "av1-avif/testFiles/Microsoft/Monochrome.avif";
 static IMAGE_AVIF_GRID: &str = "av1-avif/testFiles/Microsoft/Summer_in_Tomsk_720p_5x4_grid.avif";
-static MICROSOFT_AVIF_TEST_DIR: &str = "av1-avif/testFiles/Microsoft";
-static NETFLIX_AVIF_TEST_DIR: &str = "av1-avif/testFiles/Netflix/avif";
+static AVIF_TEST_DIR: &str = "av1-avif/testFiles";
 
 // Adapted from https://github.com/GuillaumeGomez/audio-video-metadata/blob/9dff40f565af71d5502e03a2e78ae63df95cfd40/src/metadata.rs#L53
 #[test]
@@ -640,22 +639,19 @@ fn public_avif_primary_item_is_grid() {
 #[test]
 fn public_avif_read_samples() {
     env_logger::init();
-    let microsoft = Path::new(MICROSOFT_AVIF_TEST_DIR)
-        .read_dir()
-        .expect("Cannot read AVIF test dir");
-    let netflix = Path::new(NETFLIX_AVIF_TEST_DIR)
-        .read_dir()
-        .expect("Cannot read AVIF test dir");
-    for entry in microsoft.chain(netflix) {
-        let path = entry.expect("AVIF entry").path();
-        if path.extension().expect("no extension") != "avif" {
+
+    for entry in walkdir::WalkDir::new(AVIF_TEST_DIR) {
+        let entry = entry.expect("AVIF entry");
+        let path = entry.path();
+        if !path.is_file() || path.extension().unwrap_or_default() != "avif" {
             eprintln!("Skipping {:?}", path);
-            continue; // Skip ReadMe.txt, etc.
+            continue; // Skip directories, ReadMe.txt, etc.
         }
         if path == Path::new(IMAGE_AVIF_GRID) {
             eprintln!("Skipping {:?}", path);
             continue; // Remove when public_avif_primary_item_is_grid passes
         }
+        println!("parsing {:?}", path);
         let context = &mut mp4::AvifContext::new();
         let input = &mut File::open(path).expect("Unknow file");
         mp4::read_avif(input, context).expect("read_avif failed");
