@@ -27,11 +27,6 @@ install:
     fi
 
 script:
-  # We cannot run `cargo test` with the mp4parse_fallible feature enabled
-  # (see comment where the feature is defined in mp4parse_capi/Cargo.toml),
-  # but we can at least check for changes behind features that would break the
-  # build.
-  - cargo check --all --verbose $RELEASE --tests --all-features
   - cargo test --all --verbose $RELEASE ${TARGET:+--target=$TARGET}
   - cargo doc --package mp4parse_capi
   # The `false` after `echo` is necessary to avoid false negatives due to `echo` returning success
