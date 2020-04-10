@@ -309,7 +309,7 @@ fn public_audio_tenc() {
         assert_eq!(a.codec_type, mp4::CodecType::EncryptedAudio);
         match a.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
             Some(ref p) => {
-                assert_eq!(p.code_name, "mp4a");
+                assert_eq!(p.original_format.value, *b"mp4a");
                 if let Some(ref schm) = p.scheme_type {
                     assert_eq!(schm.scheme_type.value, *b"cenc");
                 } else {
@@ -368,7 +368,7 @@ fn public_video_cenc() {
         assert_eq!(v.codec_type, mp4::CodecType::EncryptedVideo);
         match v.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
             Some(ref p) => {
-                assert_eq!(p.code_name, "avc1");
+                assert_eq!(p.original_format.value, *b"avc1");
                 if let Some(ref schm) = p.scheme_type {
                     assert_eq!(schm.scheme_type.value, *b"cenc");
                 } else {
@@ -441,7 +441,7 @@ fn public_audio_cbcs() {
                 mp4::SampleEntry::Audio(ref a) => {
                     if let Some(p) = a.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
                         found_encrypted_sample_description = true;
-                        assert_eq!(p.code_name, "mp4a");
+                        assert_eq!(p.original_format.value, *b"mp4a");
                         if let Some(ref schm) = p.scheme_type {
                             assert_eq!(schm.scheme_type.value, *b"cbcs");
                         } else {
@@ -526,7 +526,7 @@ fn public_video_cbcs() {
                     assert_eq!(v.height, 300);
                     if let Some(p) = v.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
                         found_encrypted_sample_description = true;
-                        assert_eq!(p.code_name, "avc1");
+                        assert_eq!(p.original_format.value, *b"avc1");
                         if let Some(ref schm) = p.scheme_type {
                             assert_eq!(schm.scheme_type.value, *b"cbcs");
                         } else {
