@@ -8,5 +8,6 @@ edition = "2018"
 mp4parse_capi = { path = "../mp4parse_capi" }
 
 [build-dependencies]
+cbindgen = "0.14.2"
 mp4parse_capi = { path = "../mp4parse_capi" }
 cc = "1.0"
