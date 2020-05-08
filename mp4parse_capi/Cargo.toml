@@ -19,9 +19,6 @@ exclude = [
   "*.mp4",
 ]
 
-[lib]
-crate-type = ["lib", "cdylib"]
-
 [badges]
 travis-ci = { repository = "https://github.com/mozilla/mp4parse-rust" }
 

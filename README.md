@@ -17,10 +17,6 @@ API is intended to wrap the rust parser. As such, features should primarily
 be implemented in the rust parser and exposed via the C API, rather than the C
 API implementing features on its own.
 
-`test_ffi` builds and links `test_ffi/src/test.cc` into a small Rust test
-harness in `test_ffi/src/main.rs` that verifies the C API against the
-generated `mp4parse.h`.
-
 ## Tests
 
 Test coverage comes from several sources:
