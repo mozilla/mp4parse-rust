@@ -2,7 +2,6 @@
 members = [
     "mp4parse",
     "mp4parse_capi",
-    "test_ffi",
 ]
 
 [profile.release]

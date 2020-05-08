@@ -19,9 +19,6 @@ exclude = [
   "*.mp4",
 ]
 
-[lib]
-crate-type = ["lib", "cdylib"]
-
 [badges]
 travis-ci = { repository = "https://github.com/mozilla/mp4parse-rust" }
 
@@ -33,9 +30,6 @@ num-traits = "0.2.0"
 
 [dev-dependencies]
 env_logger = "0.7.1"
-
-[build-dependencies]
-cbindgen = "0.5.2"
 
 [features]
 # Enable mp4parse_fallible to use fallible memory allocation rather than
