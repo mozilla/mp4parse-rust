@@ -27,8 +27,7 @@ travis-ci = { repository = "https://github.com/mozilla/mp4parse-rust" }
 [dependencies]
 byteorder = "1.2.1"
 bitreader = { version = "0.3.2" }
-# Disable the ahash-compile-time-rng feature of hashbrown that makes builds unreproducible.
-hashbrown = { version = "0.7.1", default-features = false, features = ["ahash", "inline-more"]}
+hashbrown = "0.7.1"
 num-traits = "0.2.0"
 log = "0.4"
 static_assertions = "1.1.0"
