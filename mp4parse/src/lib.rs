@@ -538,7 +538,7 @@ pub struct TrackEncryptionBox {
 
 #[derive(Debug, Default)]
 pub struct ProtectionSchemeInfoBox {
-    pub code_name: TryString,
+    pub original_format: FourCC,
     pub scheme_type: Option<SchemeTypeBox>,
     pub tenc: Option<TrackEncryptionBox>,
 }
@@ -3163,8 +3163,7 @@ fn read_sinf<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSchemeInfoBox> {
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::OriginalFormatBox => {
-                let frma = read_frma(&mut b)?;
-                sinf.code_name = frma;
+                sinf.original_format = FourCC::from(be_u32(&mut b)?);
             }
             BoxType::SchemeTypeBox => {
                 sinf.scheme_type = Some(read_schm(&mut b)?);
@@ -3239,10 +3238,6 @@ fn read_tenc<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackEncryptionBox> {
         skip_byte_block_count: default_skip_byte_block,
         constant_iv: default_constant_iv,
     })
-}
-
-fn read_frma<T: Read>(src: &mut BMFFBox<T>) -> Result<TryString> {
-    read_buf(src, 4)
 }
 
 fn read_schm<T: Read>(src: &mut BMFFBox<T>) -> Result<SchemeTypeBox> {
