@@ -1113,6 +1113,9 @@ fn mp4parse_get_track_video_info_safe(
         sample_info.image_height = video.height;
 
         match video.codec_specific {
+            VideoCodecSpecific::AV1Config(ref config) => {
+                sample_info.extra_data.set_data(&config.raw_config);
+            }
             VideoCodecSpecific::AVCConfig(ref data) | VideoCodecSpecific::ESDSConfig(ref data) => {
                 sample_info.extra_data.set_data(data);
             }
