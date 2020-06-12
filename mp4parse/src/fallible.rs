@@ -188,7 +188,7 @@ pub struct TryVec<T> {
 
 impl<T: std::fmt::Debug> std::fmt::Debug for TryVec<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.inner)
+        self.inner.fmt(f)
     }
 }
 
