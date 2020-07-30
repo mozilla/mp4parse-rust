@@ -1603,9 +1603,11 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemLocationBoxItem
         })?;
     }
 
-    debug_assert_eq!(iloc.remaining(), 0);
-
-    Ok(items)
+    if iloc.remaining() == 0 {
+        Ok(items)
+    } else {
+        Err(Error::InvalidData("invalid iloc size"))
+    }
 }
 
 /// Read the contents of a box, including sub boxes.
