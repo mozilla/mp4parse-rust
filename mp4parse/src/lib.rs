@@ -1953,6 +1953,7 @@ fn read_stbl<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
 }
 
 /// Parse an ftyp box.
+/// See ISO 14496-12:2015 § 4.3
 fn read_ftyp<T: Read>(src: &mut BMFFBox<T>) -> Result<FileTypeBox> {
     let major = be_u32(src)?;
     let minor = be_u32(src)?;
@@ -2421,7 +2422,7 @@ fn find_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
         let des = &mut Cursor::new(remains);
         let tag = des.read_u8()?;
 
-        // See ISO 14496-1:2010 § 8.3.3 for interpreting size of exandable classes
+        // See ISO 14496-1:2010 § 8.3.3 for interpreting size of expandable classes
 
         let mut end: u32 = 0; // It's u8 without declaration type that is incorrect.
                               // MSB of extend_or_len indicates more bytes, up to 4 bytes.
@@ -2627,7 +2628,11 @@ fn read_ds_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
             esds.extended_audio_object_type = extended_audio_object_type;
             esds.audio_sample_rate = Some(sample_frequency_value);
             esds.audio_channel_count = Some(channel_counts);
-            assert!(esds.decoder_specific_data.is_empty());
+            if !esds.decoder_specific_data.is_empty() {
+                return Err(Error::InvalidData(
+                    "There can be only one DecSpecificInfoTag descriptor",
+                ));
+            }
             esds.decoder_specific_data.extend_from_slice(data)?;
 
             Ok(())
