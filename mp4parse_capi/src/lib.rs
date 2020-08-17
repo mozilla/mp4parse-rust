@@ -1439,8 +1439,8 @@ fn create_sample_table(track: &Track, track_offset_time: i64) -> Option<TryVec<M
 
         match (start_composition, end_composition, start_decode) {
             (Some(s_c), Some(e_c), Some(s_d)) => {
-                sample.start_composition = s_c + track_offset_time;
-                sample.end_composition = e_c + track_offset_time;
+                sample.start_composition = s_c.checked_add(track_offset_time)?;
+                sample.end_composition = e_c.checked_add(track_offset_time)?;
                 sample.start_decode = s_d;
             }
             _ => return None,
