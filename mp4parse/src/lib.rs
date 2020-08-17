@@ -2700,6 +2700,7 @@ fn read_es_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
     Ok(())
 }
 
+/// See ISO 14496-14:2010 § 6.7.2
 fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
     let (_, _) = read_fullbox_extra(src)?;
 
@@ -3140,6 +3141,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
 
 /// Parse a stsd box.
 /// See ISO 14496-12:2015 § 8.5.2
+/// See ISO 14496-14:2010 § 6.7.2
 fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleDescriptionBox> {
     let (_, _) = read_fullbox_extra(src)?;
 
