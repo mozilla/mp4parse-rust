@@ -975,16 +975,16 @@ pub struct TrackTimeScale<T: Num>(pub T, pub usize);
 /// A time to be scaled by the track's local (mdhd) timescale.
 /// Members are time in scale units and the track id.
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub struct TrackScaledTime<T: Num>(pub T, pub usize);
+pub struct TrackScaledTime<T>(pub T, pub usize);
 
 impl<T> std::ops::Add for TrackScaledTime<T>
 where
-    T: Num,
+    T: num_traits::CheckedAdd,
 {
-    type Output = TrackScaledTime<T>;
+    type Output = Option<Self>;
 
-    fn add(self, other: TrackScaledTime<T>) -> TrackScaledTime<T> {
-        TrackScaledTime::<T>(self.0 + other.0, self.1)
+    fn add(self, other: TrackScaledTime<T>) -> Self::Output {
+        self.0.checked_add(&other.0).map(|sum| Self(sum, self.1))
     }
 }
 
