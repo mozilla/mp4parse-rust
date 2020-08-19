@@ -1963,7 +1963,7 @@ fn read_ftyp<T: Read>(src: &mut BMFFBox<T>) -> Result<FileTypeBox> {
     }
     // Is a brand_count of zero valid?
     let brand_count = bytes_left / 4;
-    let mut brands = TryVec::new();
+    let mut brands = TryVec::with_capacity(brand_count.try_into()?)?;
     for _ in 0..brand_count {
         brands.push(be_u32(src)?.into())?;
     }
