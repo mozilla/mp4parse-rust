@@ -60,6 +60,7 @@ use mp4parse::MediaContext;
 use mp4parse::MediaScaledTime;
 use mp4parse::MediaTimeScale;
 use mp4parse::SampleEntry;
+use mp4parse::ToUsize;
 use mp4parse::Track;
 use mp4parse::TrackScaledTime;
 use mp4parse::TrackTimeScale;
@@ -1385,6 +1386,18 @@ impl<'a> TimeToSampleIterator<'a> {
 // For example:
 // (1, 5), (5, 10), (9, 2) => (1, 5), (2, 5), (3, 5), (4, 5), (5, 10), (6, 10),
 // (7, 10), (8, 10), (9, 2)
+fn sample_to_chunk_iter<'a>(
+    stsc_samples: &'a TryVec<mp4parse::SampleToChunk>,
+    stco_offsets: &'a TryVec<u64>,
+) -> SampleToChunkIterator<'a> {
+    SampleToChunkIterator {
+        chunks: (0..0),
+        sample_count: 0,
+        stsc_peek_iter: stsc_samples.as_slice().iter().peekable(),
+        remain_chunk_count: stco_offsets.len() as u32,
+    }
+}
+
 struct SampleToChunkIterator<'a> {
     chunks: std::ops::Range<u32>,
     sample_count: u32,
@@ -1460,19 +1473,20 @@ fn create_sample_table(
         _ => false,
     };
 
-    let mut sample_table = TryVec::new();
     let mut sample_size_iter = stsz.sample_sizes.iter();
 
     // Get 'stsc' iterator for (chunk_id, chunk_sample_count) and calculate the sample
     // offset address.
-    let stsc_iter = SampleToChunkIterator {
-        chunks: (0..0),
-        sample_count: 0,
-        stsc_peek_iter: stsc.samples.as_slice().iter().peekable(),
-        remain_chunk_count: stco.offsets.len() as u32,
-    };
 
-    for i in stsc_iter {
+    // With large numbers of samples, the cost of many allocations dominates,
+    // so it's worth iterating twice to allocate sample_table just once.
+    let total_sample_count = sample_to_chunk_iter(&stsc.samples, &stco.offsets)
+        .by_ref()
+        .map(|(_, sample_counts)| sample_counts.to_usize())
+        .sum();
+    let mut sample_table = TryVec::with_capacity(total_sample_count).ok()?;
+
+    for i in sample_to_chunk_iter(&stsc.samples, &stco.offsets) {
         let chunk_id = i.0 as usize;
         let sample_counts = i.1;
         let mut cur_position = match stco.offsets.get(chunk_id) {
@@ -1565,7 +1579,8 @@ fn create_sample_table(
     // calculate to correct the composition end time.
     if !sample_table.is_empty() {
         // Create an index table refers to sample_table and sorted by start_composisiton time.
-        let mut sort_table = TryVec::new();
+        let mut sort_table = TryVec::with_capacity(sample_table.len()).ok()?;
+
         for i in 0..sample_table.len() {
             sort_table.push(i).ok()?;
         }

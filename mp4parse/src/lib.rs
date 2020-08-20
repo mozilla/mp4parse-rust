@@ -58,7 +58,7 @@ impl ToU64 for usize {
 
 /// A trait to indicate a type can be infallibly converted to `usize`.
 /// This should only be implemented for infallible conversions, so only unsigned types are valid.
-trait ToUsize {
+pub trait ToUsize {
     fn to_usize(self) -> usize;
 }
 
