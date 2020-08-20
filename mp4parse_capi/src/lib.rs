@@ -43,6 +43,7 @@ use byteorder::WriteBytesExt;
 use num::{CheckedAdd, CheckedSub};
 use num::{PrimInt, Zero};
 use std::convert::TryFrom;
+use std::convert::TryInto;
 
 use std::io::Read;
 use std::ops::Neg;
@@ -1394,7 +1395,10 @@ fn sample_to_chunk_iter<'a>(
         chunks: (0..0),
         sample_count: 0,
         stsc_peek_iter: stsc_samples.as_slice().iter().peekable(),
-        remain_chunk_count: stco_offsets.len() as u32,
+        remain_chunk_count: stco_offsets
+            .len()
+            .try_into()
+            .expect("stco.entry_count is u32"),
     }
 }
 
@@ -1412,7 +1416,12 @@ impl<'a> Iterator for SampleToChunkIterator<'a> {
         let has_chunk = self.chunks.next().or_else(|| {
             self.chunks = self.locate();
             self.remain_chunk_count
-                .checked_sub(self.chunks.len() as u32)
+                .checked_sub(
+                    self.chunks
+                        .len()
+                        .try_into()
+                        .expect("len() of a Range<u32> must fit in u32"),
+                )
                 .and_then(|res| {
                     self.remain_chunk_count = res;
                     self.chunks.next()
