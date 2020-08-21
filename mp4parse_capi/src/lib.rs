@@ -1736,13 +1736,14 @@ fn get_pssh_info(
 
     pssh_data.clear();
     for pssh in &context.psshs {
-        let content_len = pssh.box_content.len();
-        if content_len > std::u32::MAX as usize {
-            return Err(Mp4parseStatus::Invalid);
-        }
+        let content_len = pssh
+            .box_content
+            .len()
+            .try_into()
+            .map_err(|_| Mp4parseStatus::Invalid)?;
         let mut data_len = TryVec::new();
         if data_len
-            .write_u32::<byteorder::NativeEndian>(content_len as u32)
+            .write_u32::<byteorder::NativeEndian>(content_len)
             .is_err()
         {
             return Err(Mp4parseStatus::Io);
