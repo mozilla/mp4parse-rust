@@ -755,6 +755,11 @@ impl AvifContext {
     }
 }
 
+struct AvifMeta {
+    primary_item_id: u32,
+    iloc_items: TryVec<ItemLocationBoxItem>,
+}
+
 /// A Media Data Box
 /// See ISO 14496-12:2015 § 8.1.1
 struct MediaDataBox {
@@ -901,7 +906,7 @@ struct ItemLocationBoxItem {
     extents: TryVec<ItemLocationBoxExtent>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum ConstructionMethod {
     File,
     Idat,
@@ -1086,46 +1091,6 @@ impl<'a, T: Read> BMFFBox<'a, T> {
     }
 }
 
-impl<'a, T: Read + Offset> BMFFBox<'a, T> {
-    /// Check whether the beginning of `extent` is within the bounds of the `BMFFBox`.
-    /// We assume extents to not cross box boundaries. If so, this will cause an error
-    /// in `read_extent`.
-    fn contains_extent(&self, extent: &ExtentRange) -> bool {
-        if self.offset() <= extent.start() {
-            let start_offset = extent.start() - self.offset();
-            start_offset < self.bytes_left()
-        } else {
-            false
-        }
-    }
-
-    /// Read the range specified by `extent` into `buf` or return an error if the range is not
-    /// fully contained within the `BMFFBox`.
-    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut TryVec<u8>) -> Result<()> {
-        let start_offset = extent
-            .start()
-            .checked_sub(self.offset())
-            .expect("box does not contain extent");
-        skip(self, start_offset)?;
-        match extent {
-            ExtentRange::WithLength(range) => {
-                let len = range
-                    .end
-                    .checked_sub(range.start)
-                    .expect("range start > end");
-                if len > self.bytes_left() {
-                    return Err(Error::InvalidData("extent crosses box boundary"));
-                }
-                self.take(len).try_read_to_end(buf)?;
-            }
-            ExtentRange::ToEnd(_) => {
-                self.try_read_to_end(buf)?;
-            }
-        }
-        Ok(())
-    }
-}
-
 impl<'a, T> Drop for BMFFBox<'a, T> {
     fn drop(&mut self) {
         if self.content.limit() > 0 {
@@ -1264,43 +1229,20 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
         }
     }
 
-    let mut read_meta = false;
+    let mut meta = None;
     let mut mdats = TryVec::new();
-    let mut primary_item_extents = None;
-    let mut primary_item_extents_data: TryVec<TryVec<u8>> = TryVec::new();
 
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::MetadataBox => {
-                if read_meta {
+                if meta.is_some() {
                     return Err(Error::InvalidData(
                         "There should be zero or one meta boxes per ISO 14496-12:2015 § 8.11.1.1",
                     ));
                 }
-                read_meta = true;
-                let primary_item_loc = read_avif_meta(&mut b)?;
-                match primary_item_loc.construction_method {
-                    ConstructionMethod::File => {
-                        primary_item_extents_data
-                            .resize_with(primary_item_loc.extents.len(), Default::default)?;
-                        primary_item_extents = Some(primary_item_loc.extents);
-                    }
-                    _ => return Err(Error::Unsupported("unsupported construction_method")),
-                }
+                meta = Some(read_avif_meta(&mut b)?);
             }
             BoxType::MediaDataBox => {
-                // See ISO 14496-12:2015 § 8.1.1
-                // If we know our primary item location by this point, try to read it out of this
-                // mdat directly and avoid a copy
-                if let Some(extents) = &primary_item_extents {
-                    for (extent, data) in extents.iter().zip(primary_item_extents_data.iter_mut()) {
-                        if b.contains_extent(&extent.extent_range) {
-                            b.read_extent(&extent.extent_range, data)?;
-                        }
-                    }
-                }
-
-                // Store any remaining data for potential later extraction
                 if b.bytes_left() > 0 {
                     let offset = b.offset();
                     let data = b.read_into_try_vec()?;
@@ -1313,39 +1255,35 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
         check_parser_state!(b.content);
     }
 
-    // If the `mdat` box came before the `meta` box, we need to fill in our primary item data
-    let primary_item_extents =
-        primary_item_extents.ok_or(Error::InvalidData("primary item extents missing"))?;
-    for (extent, data) in primary_item_extents
-        .iter()
-        .zip(primary_item_extents_data.iter_mut())
-    {
-        if data.is_empty() {
-            // try to find an overlapping mdat
-            for mdat in mdats.iter_mut() {
-                if mdat.matches_extent(&extent.extent_range) {
-                    data.append(&mut mdat.data)?;
-                } else if mdat.contains_extent(&extent.extent_range) {
-                    mdat.read_extent(&extent.extent_range, data)?;
-                }
+    let meta = meta.ok_or(Error::InvalidData("missing meta"))?;
+    let primary_item_loc = get_primary_item_loc(&meta)?;
+    if primary_item_loc.construction_method != ConstructionMethod::File {
+        return Err(Error::Unsupported("unsupported construction_method"));
+    }
+
+    let mut primary_item = TryVec::new();
+    for extent in primary_item_loc.extents.iter() {
+        // try to find an overlapping mdat
+        for mdat in mdats.iter_mut() {
+            if mdat.matches_extent(&extent.extent_range) {
+                primary_item.append(&mut mdat.data)?;
+                break;
+            } else if mdat.contains_extent(&extent.extent_range) {
+                mdat.read_extent(&extent.extent_range, &mut primary_item)?;
+                break;
             }
         }
     }
 
-    context.primary_item = primary_item_extents_data.concat()?;
-
-    if primary_item_extents_data.iter().any(TryVec::is_empty) {
-        Err(Error::InvalidData("Primary item data incomplete"))
-    } else {
-        Ok(())
-    }
+    context.primary_item = primary_item;
+    Ok(())
 }
 
 /// Parse a metadata box in the context of an AVIF
 /// Currently requires the primary item to be an av01 item type and generates
 /// an error otherwise.
 /// See ISO 14496-12:2015 § 8.11.1
-fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<ItemLocationBoxItem> {
+fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
     let version = read_fullbox_version_no_flags(src)?;
 
     if version != 0 {
@@ -1397,11 +1335,9 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<ItemLocation
         "Required pitm box not present in meta box",
     ))?;
 
-    if let Some(item_info) = item_infos
-        .iter()
-        .flatten()
-        .find(|x| x.item_id == primary_item_id)
-    {
+    let item_infos = item_infos.ok_or(Error::InvalidData("iinf missing"))?;
+
+    if let Some(item_info) = item_infos.iter().find(|x| x.item_id == primary_item_id) {
         if &item_info.item_type.to_be_bytes() != b"av01" {
             warn!("primary_item_id type: {}", U32BE(item_info.item_type));
             return Err(Error::InvalidData("primary_item_id type is not av01"));
@@ -1412,10 +1348,17 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<ItemLocation
         ));
     }
 
-    if let Some(loc) = iloc_items
-        .into_iter()
-        .flatten()
-        .find(|loc| loc.item_id == primary_item_id)
+    Ok(AvifMeta {
+        primary_item_id,
+        iloc_items: iloc_items.ok_or(Error::InvalidData("iloc missing"))?,
+    })
+}
+
+fn get_primary_item_loc(meta: &AvifMeta) -> Result<&ItemLocationBoxItem> {
+    if let Some(loc) = meta
+        .iloc_items
+        .iter()
+        .find(|loc| loc.item_id == meta.primary_item_id)
     {
         Ok(loc)
     } else {
