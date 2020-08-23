@@ -13,6 +13,7 @@ extern crate fallible_collections;
 extern crate num_traits;
 use bitreader::{BitReader, ReadInto};
 use byteorder::{ReadBytesExt, WriteBytesExt};
+use fallible_collections::TryClone;
 use fallible_collections::TryRead;
 use num_traits::Num;
 use std::convert::{TryFrom, TryInto as _};
@@ -1294,6 +1295,7 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
     let mut item_infos = None;
     let mut iloc_items = None;
     let mut item_references = TryVec::new();
+    let mut properties = TryVec::new();
 
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
@@ -1324,6 +1326,9 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
             }
             BoxType::ImageReferenceBox => {
                 item_references = read_iref(&mut b)?;
+            }
+            BoxType::ImagePropertiesBox => {
+                properties = read_iprp(&mut b)?;
             }
             _ => skip_box_content(&mut b)?,
         }
@@ -1488,6 +1493,147 @@ fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemReferenceEntry>
         }
     }
     Ok(entries)
+}
+
+fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>> {
+    let mut iter = src.box_iter();
+    let mut properties = TryVec::new();
+    let mut associations = TryVec::new();
+
+    while let Some(mut b) = iter.next_box()? {
+        match b.head.name {
+            BoxType::ItemPropertyContainerBox => {
+                properties = read_ipco(&mut b)?;
+            }
+            BoxType::ItemPropertyAssociationBox => {
+                associations = read_ipma(&mut b)?;
+            }
+            _ => return Err(Error::InvalidData("unexpected ipco child")),
+        }
+    }
+
+    let mut associated = TryVec::new();
+    for a in associations {
+        let index = match a.property_index {
+            0 => continue,
+            x => x as usize - 1,
+        };
+        if let Some(prop) = properties.get(index) {
+            if *prop != ImageProperty::Unsupported {
+                associated.push(AssociatedProperty {
+                    item_id: a.item_id,
+                    property: prop.clone()?,
+                })?;
+            }
+        }
+    }
+    Ok(associated)
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ImageProperty {
+    Channels(TryVec<u8>),
+    AuxiliaryType(TryString),
+    Unsupported,
+}
+
+impl ImageProperty {
+    fn clone(&self) -> Result<Self> {
+        Ok(match self {
+            Self::Channels(val) => Self::Channels(val.clone()?),
+            Self::AuxiliaryType(val) => Self::AuxiliaryType(val.clone()?),
+            Self::Unsupported => Self::Unsupported,
+        })
+    }
+}
+
+struct Association {
+    item_id: u32,
+    property_index: u16,
+}
+
+pub struct AssociatedProperty {
+    pub item_id: u32,
+    pub property: ImageProperty,
+}
+
+fn read_ipma<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<Association>> {
+    let (version, flags) = read_fullbox_extra(src)?;
+
+    let mut associations = TryVec::new();
+
+    let entry_count = be_u32(src)?;
+    for _ in 0..entry_count {
+        let item_id = if version == 0 {
+            be_u16(src)? as u32
+        } else {
+            be_u32(src)?
+        };
+        let association_count = src.read_u8()?;
+        for _ in 0..association_count {
+            let first_byte = src.read_u8()?;
+            let essential_flag = first_byte & 1 << 7;
+            let value = first_byte - essential_flag;
+            let property_index = if flags & 1 != 0 {
+                ((value as u16) << 8) | src.read_u8()? as u16
+            } else {
+                value as u16
+            };
+            associations.push(Association {
+                item_id,
+                property_index,
+            })?;
+        }
+    }
+    Ok(associations)
+}
+
+fn read_ipco<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ImageProperty>> {
+    let mut properties = TryVec::new();
+
+    let mut iter = src.box_iter();
+    while let Some(mut b) = iter.next_box()? {
+        // Must push for every property to have correct index for them
+        properties.push(match b.head.name {
+            BoxType::PixelInformationBox => ImageProperty::Channels(read_pixi(&mut b)?),
+            BoxType::AuxiliaryTypeProperty => ImageProperty::AuxiliaryType(read_auxc(&mut b)?),
+            _ => {
+                skip_box_remain(&mut b)?;
+                ImageProperty::Unsupported
+            }
+        })?;
+    }
+    Ok(properties)
+}
+
+fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<u8>> {
+    let version = read_fullbox_version_no_flags(src)?;
+    if version != 0 {
+        return Err(Error::Unsupported("pixi version"));
+    }
+
+    let mut channels = TryVec::new();
+    let channel_count = src.read_u8()?;
+    for _ in 0..channel_count {
+        channels.push(src.read_u8()?)?;
+    }
+    Ok(channels)
+}
+
+fn read_auxc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryString> {
+    let version = read_fullbox_version_no_flags(src)?;
+    if version != 0 {
+        return Err(Error::Unsupported("auxC version"));
+    }
+
+    let mut aux = TryString::new();
+    loop {
+        match src.read_u8()? {
+            0 => break,
+            c => aux.push(c)?,
+        }
+    }
+    Ok(aux)
 }
 
 /// Parse an item location box inside a meta box
