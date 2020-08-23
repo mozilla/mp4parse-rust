@@ -1070,46 +1070,6 @@ impl<'a, T: Read> BMFFBox<'a, T> {
     }
 }
 
-impl<'a, T: Read + Offset> BMFFBox<'a, T> {
-    /// Check whether the beginning of `extent` is within the bounds of the `BMFFBox`.
-    /// We assume extents to not cross box boundaries. If so, this will cause an error
-    /// in `read_extent`.
-    fn contains_extent(&self, extent: &ExtentRange) -> bool {
-        if self.offset() <= extent.start() {
-            let start_offset = extent.start() - self.offset();
-            start_offset < self.bytes_left()
-        } else {
-            false
-        }
-    }
-
-    /// Read the range specified by `extent` into `buf` or return an error if the range is not
-    /// fully contained within the `BMFFBox`.
-    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut TryVec<u8>) -> Result<()> {
-        let start_offset = extent
-            .start()
-            .checked_sub(self.offset())
-            .expect("box does not contain extent");
-        skip(self, start_offset)?;
-        match extent {
-            ExtentRange::WithLength(range) => {
-                let len = range
-                    .end
-                    .checked_sub(range.start)
-                    .expect("range start > end");
-                if len > self.bytes_left() {
-                    return Err(Error::InvalidData("extent crosses box boundary"));
-                }
-                self.take(len).try_read_to_end(buf)?;
-            }
-            ExtentRange::ToEnd(_) => {
-                self.try_read_to_end(buf)?;
-            }
-        }
-        Ok(())
-    }
-}
-
 impl<'a, T> Drop for BMFFBox<'a, T> {
     fn drop(&mut self) {
         if self.content.limit() > 0 {
@@ -1251,7 +1211,6 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
     let mut read_meta = false;
     let mut mdats = TryVec::new();
     let mut primary_item_extents = None;
-    let mut primary_item_extents_data: TryVec<TryVec<u8>> = TryVec::new();
 
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
@@ -1273,18 +1232,6 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
                 }
             }
             BoxType::MediaDataBox => {
-                // See ISO 14496-12:2015 § 8.1.1
-                // If we know our primary item location by this point, try to read it out of this
-                // mdat directly and avoid a copy
-                if let Some(extents) = &primary_item_extents {
-                    for (extent, data) in extents.iter().zip(primary_item_extents_data.iter_mut()) {
-                        if b.contains_extent(&extent.extent_range) {
-                            b.read_extent(&extent.extent_range, data)?;
-                        }
-                    }
-                }
-
-                // Store any remaining data for potential later extraction
                 if b.bytes_left() > 0 {
                     let offset = b.offset();
                     let data = b.read_into_try_vec()?;
@@ -1297,27 +1244,23 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
         check_parser_state!(b.content);
     }
 
-    // If the `mdat` box came before the `meta` box, we need to fill in our primary item data
     let primary_item_extents =
         primary_item_extents.ok_or(Error::InvalidData("primary item extents missing"))?;
-    for (extent, data) in primary_item_extents
-        .iter()
-        .zip(primary_item_extents_data.iter_mut())
-    {
-        if data.is_empty() {
-            // try to find an overlapping mdat
-            for mdat in mdats.iter_mut() {
-                if mdat.matches_extent(&extent.extent_range) {
-                    data.append(&mut mdat.data)?;
-                } else if mdat.contains_extent(&extent.extent_range) {
-                    mdat.read_extent(&extent.extent_range, data)?;
-                }
+    let mut primary_item = TryVec::new();
+    for extent in primary_item_extents.iter() {
+        // try to find an overlapping mdat
+        for mdat in mdats.iter_mut() {
+            if mdat.matches_extent(&extent.extent_range) {
+                primary_item.append(&mut mdat.data)?;
+                break;
+            } else if mdat.contains_extent(&extent.extent_range) {
+                mdat.read_extent(&extent.extent_range, &mut primary_item)?;
+                break;
             }
         }
     }
 
-    context.primary_item = primary_item_extents_data.concat()?;
-
+    context.primary_item = primary_item;
     Ok(())
 }
 
