@@ -829,8 +829,17 @@ struct ItemInfoEntry {
     item_type: u32,
 }
 
+/// See ISO 14496-12:2015 § 8.11.12
+#[derive(Debug)]
+struct ItemReferenceEntry {
+    item_type: FourCC,
+    from_item_id: u32,
+    to_item_id: u32,
+}
+
 /// Potential sizes (in bytes) of variable-sized fields of the 'iloc' box
 /// See ISO 14496-12:2015 § 8.11.3
+#[derive(Debug)]
 enum IlocFieldSize {
     Zero,
     Four,
@@ -1346,6 +1355,7 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<ItemLocation
     let mut primary_item_id = None;
     let mut item_infos = None;
     let mut iloc_items = None;
+    let mut item_references = TryVec::new();
 
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
@@ -1373,6 +1383,9 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<ItemLocation
                     ));
                 }
                 primary_item_id = Some(read_pitm(&mut b)?);
+            }
+            BoxType::ImageReferenceBox => {
+                item_references = read_iref(&mut b)?;
             }
             _ => skip_box_content(&mut b)?,
         }
@@ -1501,6 +1514,37 @@ fn read_infe<T: Read>(src: &mut BMFFBox<T>) -> Result<ItemInfoEntry> {
     skip_box_remain(src)?;
 
     Ok(ItemInfoEntry { item_id, item_type })
+}
+
+fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemReferenceEntry>> {
+    let mut entries = TryVec::new();
+    let version = read_fullbox_version_no_flags(src)?;
+    if version > 1 {
+        return Err(Error::Unsupported("iref version"));
+    }
+
+    let mut iter = src.box_iter();
+    while let Some(mut b) = iter.next_box()? {
+        let from_item_id = if version == 0 {
+            be_u16(&mut b)? as u32
+        } else {
+            be_u32(&mut b)?
+        };
+        let item_count = be_u16(&mut b)?;
+        for _ in 0..item_count {
+            let to_item_id = if version == 0 {
+                be_u16(&mut b)? as u32
+            } else {
+                be_u32(&mut b)?
+            };
+            entries.push(ItemReferenceEntry {
+                item_type: b.head.name.into(),
+                from_item_id,
+                to_item_id,
+            })?;
+        }
+    }
+    Ok(entries)
 }
 
 /// Parse an item location box inside a meta box
