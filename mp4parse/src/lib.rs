@@ -748,6 +748,11 @@ impl MediaContext {
 pub struct AvifContext {
     /// The collected data indicated by the `pitm` box, See ISO 14496-12:2015 § 8.11.4
     pub primary_item: TryVec<u8>,
+    /// Associated alpha channel for the primary item, if any
+    pub alpha_item: Option<TryVec<u8>>,
+    /// If true, divide RGB values by the alpha value.
+    /// See `prem` in MIAF § 7.3.5.2
+    pub premultiplied_alpha: bool,
 }
 
 impl AvifContext {
@@ -757,6 +762,8 @@ impl AvifContext {
 }
 
 struct AvifMeta {
+    item_references: TryVec<ItemReferenceEntry>,
+    properties: TryVec<AssociatedProperty>,
     primary_item_id: u32,
     iloc_items: TryVec<ItemLocationBoxItem>,
 }
@@ -1258,16 +1265,52 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
 
     let meta = meta.ok_or(Error::InvalidData("missing meta"))?;
 
+    let alpha_item_id = meta
+        .item_references
+        .iter()
+        // Auxiliary image for the primary image
+        .filter(|iref| {
+            iref.to_item_id == meta.primary_item_id
+                && iref.from_item_id != meta.primary_item_id
+                && iref.item_type == b"auxl"
+        })
+        .map(|iref| iref.from_item_id)
+        // which has the alpha property
+        .filter(|&item_id| {
+            meta.properties.iter().any(|prop| {
+                prop.item_id == item_id
+                    && match &prop.property {
+                        ImageProperty::AuxiliaryType(urn) => {
+                            urn.as_slice()
+                                == "urn:mpeg:mpegB:cicp:systems:auxiliary:alpha".as_bytes()
+                        }
+                        _ => false,
+                    }
+            })
+        })
+        .next();
+
+    context.premultiplied_alpha = alpha_item_id.map_or(false, |alpha_item_id| {
+        meta.item_references.iter().any(|iref| {
+            iref.from_item_id == meta.primary_item_id
+                && iref.to_item_id == alpha_item_id
+                && iref.item_type == b"prem"
+        })
+    });
+
     // load data of relevant items
     for loc in meta.iloc_items.iter() {
-        if loc.item_id != meta.primary_item_id {
+        let mut item_data = if loc.item_id == meta.primary_item_id {
+            &mut context.primary_item
+        } else if Some(loc.item_id) == alpha_item_id {
+            context.alpha_item.get_or_insert_with(TryVec::new)
+        } else {
             continue;
-        }
+        };
 
         if loc.construction_method != ConstructionMethod::File {
             return Err(Error::Unsupported("unsupported construction_method"));
         }
-        let mut item_data = TryVec::new();
         for extent in loc.extents.iter() {
             let mut found = false;
             // try to find an overlapping mdat
@@ -1283,12 +1326,10 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
                 }
             }
             if !found {
-                return Err(Error::InvalidData("iloc contains an extent that is not in mdat"));
+                return Err(Error::InvalidData(
+                    "iloc contains an extent that is not in mdat",
+                ));
             }
-        }
-
-        if loc.item_id == meta.primary_item_id {
-            context.primary_item = item_data;
         }
     }
 
@@ -1369,6 +1410,8 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
     }
 
     Ok(AvifMeta {
+        properties,
+        item_references,
         primary_item_id,
         iloc_items: iloc_items.ok_or(Error::InvalidData("iloc missing"))?,
     })
@@ -1541,8 +1584,8 @@ pub enum ImageProperty {
 impl ImageProperty {
     fn clone(&self) -> Result<Self> {
         Ok(match self {
-            Self::Channels(val) => Self::Channels(val.clone()?),
-            Self::AuxiliaryType(val) => Self::AuxiliaryType(val.clone()?),
+            Self::Channels(val) => Self::Channels(val.try_clone()?),
+            Self::AuxiliaryType(val) => Self::AuxiliaryType(val.try_clone()?),
             Self::Unsupported => Self::Unsupported,
         })
     }
