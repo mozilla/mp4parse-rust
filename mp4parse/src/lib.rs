@@ -1257,26 +1257,41 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
     }
 
     let meta = meta.ok_or(Error::InvalidData("missing meta"))?;
-    let primary_item_loc = get_primary_item_loc(&meta)?;
-    if primary_item_loc.construction_method != ConstructionMethod::File {
-        return Err(Error::Unsupported("unsupported construction_method"));
-    }
 
-    let mut primary_item = TryVec::new();
-    for extent in primary_item_loc.extents.iter() {
-        // try to find an overlapping mdat
-        for mdat in mdats.iter_mut() {
-            if mdat.matches_extent(&extent.extent_range) {
-                primary_item.append(&mut mdat.data)?;
-                break;
-            } else if mdat.contains_extent(&extent.extent_range) {
-                mdat.read_extent(&extent.extent_range, &mut primary_item)?;
-                break;
+    // load data of relevant items
+    for loc in meta.iloc_items.iter() {
+        if loc.item_id != meta.primary_item_id {
+            continue;
+        }
+
+        if loc.construction_method != ConstructionMethod::File {
+            return Err(Error::Unsupported("unsupported construction_method"));
+        }
+        let mut item_data = TryVec::new();
+        for extent in loc.extents.iter() {
+            let mut found = false;
+            // try to find an overlapping mdat
+            for mdat in mdats.iter_mut() {
+                if mdat.matches_extent(&extent.extent_range) {
+                    item_data.append(&mut mdat.data)?;
+                    found = true;
+                    break;
+                } else if mdat.contains_extent(&extent.extent_range) {
+                    mdat.read_extent(&extent.extent_range, &mut item_data)?;
+                    found = true;
+                    break;
+                }
             }
+            if !found {
+                return Err(Error::InvalidData("iloc contains an extent that is not in mdat"));
+            }
+        }
+
+        if loc.item_id == meta.primary_item_id {
+            context.primary_item = item_data;
         }
     }
 
-    context.primary_item = primary_item;
     Ok(())
 }
 
@@ -1357,20 +1372,6 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
         primary_item_id,
         iloc_items: iloc_items.ok_or(Error::InvalidData("iloc missing"))?,
     })
-}
-
-fn get_primary_item_loc(meta: &AvifMeta) -> Result<&ItemLocationBoxItem> {
-    if let Some(loc) = meta
-        .iloc_items
-        .iter()
-        .find(|loc| loc.item_id == meta.primary_item_id)
-    {
-        Ok(loc)
-    } else {
-        Err(Error::InvalidData(
-            "primary_item_id not present in iloc box",
-        ))
-    }
 }
 
 /// Parse a Primary Item Box
