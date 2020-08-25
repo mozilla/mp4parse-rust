@@ -37,11 +37,11 @@
 
 extern crate byteorder;
 extern crate mp4parse;
-extern crate num;
+extern crate num_traits;
 
 use byteorder::WriteBytesExt;
-use num::{CheckedAdd, CheckedSub};
-use num::{PrimInt, Zero};
+use num_traits::{CheckedAdd, CheckedSub};
+use num_traits::{PrimInt, Zero};
 use std::convert::TryFrom;
 use std::convert::TryInto;
 
@@ -704,7 +704,7 @@ where
 
     let integer = numerator / denominator;
     let remainder = numerator % denominator;
-    num::cast(scale2).and_then(|s| match integer.checked_mul(&s) {
+    num_traits::cast(scale2).and_then(|s| match integer.checked_mul(&s) {
         Some(integer) => remainder
             .checked_mul(&s)
             .and_then(|remainder| (remainder / denominator).checked_add(&integer)),
