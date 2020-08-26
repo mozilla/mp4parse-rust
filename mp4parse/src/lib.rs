@@ -1455,7 +1455,7 @@ struct U32BE(u32);
 impl std::fmt::Display for U32BE {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match std::str::from_utf8(&self.0.to_be_bytes()) {
-            Ok(s) => write!(f, "{}", s),
+            Ok(s) => f.write_str(s),
             Err(_) => write!(f, "{:x?}", self.0),
         }
     }
