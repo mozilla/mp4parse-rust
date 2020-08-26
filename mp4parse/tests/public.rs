@@ -34,6 +34,7 @@ static VIDEO_INVALID_USERDATA: &str = "tests/invalid_userdata.mp4";
 static IMAGE_AVIF: &str = "av1-avif/testFiles/Microsoft/Monochrome.avif";
 static IMAGE_AVIF_EXTENTS: &str = "tests/kodim-extents.avif";
 static IMAGE_AVIF_ALPHA: &str = "tests/bug-1661347.avif";
+static IMAGE_AVIF_NO_BRANDS_ALPHA: &str = "tests/no-brands-alpha.avif";
 static IMAGE_AVIF_CORRUPT: &str = "tests/corrupt/bug-1655846.avif";
 static IMAGE_AVIF_CORRUPT_2: &str = "tests/corrupt/bug-1661347.avif";
 static IMAGE_AVIF_CORRUPT_3: &str = "tests/corrupt/bad-ipma-version.avif";
@@ -739,6 +740,13 @@ fn public_avif_primary_item_is_grid() {
     let input = &mut File::open(IMAGE_AVIF_GRID).expect("Unknown file");
     mp4::read_avif(input).expect("read_avif failed");
     // Add some additional checks
+}
+
+#[test]
+fn public_avif_with_no_brands() {
+    let input = &mut File::open(IMAGE_AVIF_NO_BRANDS_ALPHA).expect("Unknown file");
+    let res = mp4::read_avif(input).expect("read_avif failed");
+    assert!(res.alpha_item().is_some());
 }
 
 #[test]
