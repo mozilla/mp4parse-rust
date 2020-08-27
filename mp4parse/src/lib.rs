@@ -1318,7 +1318,11 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
 
     context.primary_item = primary_item_extents_data.concat()?;
 
-    Ok(())
+    if primary_item_extents_data.iter().any(TryVec::is_empty) {
+        Err(Error::InvalidData("Primary item data incomplete"))
+    } else {
+        Ok(())
+    }
 }
 
 /// Parse a metadata box in the context of an AVIF
