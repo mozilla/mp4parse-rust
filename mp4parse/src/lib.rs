@@ -9,10 +9,11 @@ extern crate log;
 
 extern crate bitreader;
 extern crate byteorder;
+extern crate fallible_collections;
 extern crate num_traits;
 use bitreader::{BitReader, ReadInto};
 use byteorder::{ReadBytesExt, WriteBytesExt};
-use fallible::TryRead as _;
+use fallible_collections::TryRead;
 use num_traits::Num;
 use std::convert::{TryFrom, TryInto as _};
 use std::io::Cursor;
@@ -24,8 +25,6 @@ mod macros;
 
 mod boxes;
 use boxes::{BoxType, FourCC};
-
-mod fallible;
 
 // Unit tests.
 #[cfg(test)]
@@ -119,14 +118,10 @@ impl<'a, T: Read> Read for OffsetReader<'a, T> {
     }
 }
 
-// TODO: all the functions that rely on the mp4parse_fallible feature need to
-// be updated when Rust supports fallible memory allocation in raw_vec.
-// See https://github.com/mozilla/mp4parse-rust/issues/146
-
-pub type TryVec<T> = fallible::TryVec<T>;
-pub type TryString = TryVec<u8>;
-pub type TryHashMap<K, V> = fallible::TryHashMap<K, V>;
-pub type TryBox<T> = fallible::TryBox<T>;
+pub type TryVec<T> = fallible_collections::TryVec<T>;
+pub type TryString = fallible_collections::TryVec<u8>;
+pub type TryHashMap<K, V> = fallible_collections::TryHashMap<K, V>;
+pub type TryBox<T> = fallible_collections::TryBox<T>;
 
 // To ensure we don't use stdlib allocating types by accident
 #[allow(dead_code)]
@@ -202,6 +197,12 @@ impl From<Error> for std::io::Error {
             _ => std::io::ErrorKind::Other,
         };
         Self::new(kind, err)
+    }
+}
+
+impl From<fallible_collections::TryReserveError> for Error {
+    fn from(_: fallible_collections::TryReserveError) -> Error {
+        Error::OutOfMemory
     }
 }
 
@@ -1047,6 +1048,12 @@ impl<'a, T: Read> BoxIter<'a, T> {
 impl<'a, T: Read> Read for BMFFBox<'a, T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.content.read(buf)
+    }
+}
+
+impl<'a, T: Read> TryRead for BMFFBox<'a, T> {
+    fn try_read_to_end(&mut self, buf: &mut TryVec<u8>) -> std::io::Result<usize> {
+        fallible_collections::try_read_up_to(self, self.bytes_left(), buf)
     }
 }
 
