@@ -1600,6 +1600,7 @@ impl TryClone for ItemProperty {
 
 struct Association {
     item_id: u32,
+    essential: bool,
     property_index: u16,
 }
 
@@ -1622,16 +1623,14 @@ fn read_ipma<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<Association>> {
         };
         let association_count = src.read_u8()?;
         for _ in 0..association_count {
-            let first_byte = src.read_u8()?;
-            let essential_flag = first_byte & 1 << 7;
-            let value = first_byte - essential_flag;
-            let property_index = if flags & 1 != 0 {
-                ((value as u16) << 8) | src.read_u8()? as u16
-            } else {
-                value as u16
-            };
+            let num_association_bytes = if flags & 1 == 1 { 2 } else { 1 };
+            let association = src.take(num_association_bytes).read_into_try_vec()?;
+            let mut association = BitReader::new(association.as_slice());
+            let essential = association.read_bool()?;
+            let property_index = association.read_u16(association.remaining().try_into()?)?;
             associations.push(Association {
                 item_id,
+                essential,
                 property_index,
             })?;
         }
