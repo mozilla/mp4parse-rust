@@ -1266,7 +1266,7 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
 
     let meta = meta.ok_or(Error::InvalidData("missing meta"))?;
 
-    let alpha_item_id = meta
+    let mut alpha_item_ids = meta
         .item_references
         .iter()
         // Auxiliary image for the primary image
@@ -1288,8 +1288,11 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
                         _ => false,
                     }
             })
-        })
-        .next();
+        });
+    let alpha_item_id = alpha_item_ids.next();
+    if alpha_item_ids.next().is_some() {
+        return Err(Error::InvalidData("multiple alpha planes"));
+    }
 
     context.premultiplied_alpha = alpha_item_id.map_or(false, |alpha_item_id| {
         meta.item_references.iter().any(|iref| {
