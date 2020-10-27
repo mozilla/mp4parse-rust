@@ -1354,8 +1354,8 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
     let mut primary_item_id = None;
     let mut item_infos = None;
     let mut iloc_items = None;
-    let mut item_references = TryVec::new();
-    let mut properties = TryVec::new();
+    let mut item_references = None;
+    let mut properties = None;
 
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
@@ -1379,16 +1379,22 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
             BoxType::PrimaryItemBox => {
                 if primary_item_id.is_some() {
                     return Err(Error::InvalidData(
-                        "There should be zero or one iloc boxes per ISO 14496-12:2015 § 8.11.4.1",
+                        "There should be zero or one pitm boxes per ISO 14496-12:2015 § 8.11.4.1",
                     ));
                 }
                 primary_item_id = Some(read_pitm(&mut b)?);
             }
             BoxType::ImageReferenceBox => {
-                item_references = read_iref(&mut b)?;
+                if item_references.is_some() {
+                    return Err(Error::InvalidData("There should be zero or one iref boxes"));
+                }
+                item_references = Some(read_iref(&mut b)?);
             }
             BoxType::ImagePropertiesBox => {
-                properties = read_iprp(&mut b)?;
+                if properties.is_some() {
+                    return Err(Error::InvalidData("There should be zero or one iprp boxes"));
+                }
+                properties = Some(read_iprp(&mut b)?);
             }
             _ => skip_box_content(&mut b)?,
         }
@@ -1414,8 +1420,8 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
     }
 
     Ok(AvifMeta {
-        properties,
-        item_references,
+        properties: properties.unwrap_or_else(TryVec::new),
+        item_references: item_references.unwrap_or_else(TryVec::new),
         primary_item_id,
         iloc_items: iloc_items.ok_or(Error::InvalidData("iloc missing"))?,
     })
