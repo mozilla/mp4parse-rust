@@ -762,7 +762,7 @@ impl AvifContext {
 }
 
 struct AvifMeta {
-    item_references: TryVec<ItemReferenceEntry>,
+    item_references: TryVec<SingleItemTypeReferenceBox>,
     properties: TryVec<AssociatedProperty>,
     primary_item_id: u32,
     iloc_items: TryVec<ItemLocationBoxItem>,
@@ -844,7 +844,7 @@ struct ItemInfoEntry {
 
 /// See ISO 14496-12:2015 § 8.11.12
 #[derive(Debug)]
-struct ItemReferenceEntry {
+struct SingleItemTypeReferenceBox {
     item_type: FourCC,
     from_item_id: u32,
     to_item_id: u32,
@@ -1508,8 +1508,8 @@ fn read_infe<T: Read>(src: &mut BMFFBox<T>) -> Result<ItemInfoEntry> {
     Ok(ItemInfoEntry { item_id, item_type })
 }
 
-fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemReferenceEntry>> {
-    let mut entries = TryVec::new();
+fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<SingleItemTypeReferenceBox>> {
+    let mut item_references = TryVec::new();
     let version = read_fullbox_version_no_flags(src)?;
     if version > 1 {
         return Err(Error::Unsupported("iref version"));
@@ -1518,25 +1518,31 @@ fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemReferenceEntry>
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         let from_item_id = if version == 0 {
-            be_u16(&mut b)? as u32
+            be_u16(&mut b)?.into()
         } else {
             be_u32(&mut b)?
         };
-        let item_count = be_u16(&mut b)?;
-        for _ in 0..item_count {
+        let reference_count = be_u16(&mut b)?;
+        for _ in 0..reference_count {
             let to_item_id = if version == 0 {
                 be_u16(&mut b)? as u32
             } else {
                 be_u32(&mut b)?
             };
-            entries.push(ItemReferenceEntry {
+            if from_item_id == to_item_id {
+                return Err(Error::InvalidData(
+                    "from_item_id and to_item_id must be different",
+                ));
+            }
+            item_references.push(SingleItemTypeReferenceBox {
                 item_type: b.head.name.into(),
                 from_item_id,
                 to_item_id,
             })?;
         }
+        check_parser_state!(b.content);
     }
-    Ok(entries)
+    Ok(item_references)
 }
 
 fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>> {
