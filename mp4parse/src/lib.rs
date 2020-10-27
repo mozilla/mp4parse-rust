@@ -15,6 +15,7 @@ use bitreader::{BitReader, ReadInto};
 use byteorder::{ReadBytesExt, WriteBytesExt};
 use fallible_collections::TryClone;
 use fallible_collections::TryRead;
+use fallible_collections::TryReserveError;
 use num_traits::Num;
 use std::convert::{TryFrom, TryInto as _};
 use std::io::Cursor;
@@ -201,14 +202,14 @@ impl From<Error> for std::io::Error {
     }
 }
 
-impl From<fallible_collections::TryReserveError> for Error {
-    fn from(_: fallible_collections::TryReserveError) -> Error {
+impl From<TryReserveError> for Error {
+    fn from(_: TryReserveError) -> Error {
         Error::OutOfMemory
     }
 }
 
 /// Result shorthand using our Error enum.
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Basic ISO box structure.
 ///
@@ -1281,7 +1282,7 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
                 prop.item_id == item_id
                     && match &prop.property {
                         ItemProperty::AuxiliaryType(urn) => {
-                            urn.as_slice()
+                            urn.aux_type.as_slice()
                                 == "urn:mpeg:mpegB:cicp:systems:auxiliary:alpha".as_bytes()
                         }
                         _ => false,
@@ -1572,7 +1573,7 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
             if *prop != ItemProperty::Unsupported {
                 associated.push(AssociatedProperty {
                     item_id: a.item_id,
-                    property: prop.clone()?,
+                    property: prop.try_clone()?,
                 })?;
             }
         }
@@ -1583,12 +1584,12 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
 #[derive(Debug, PartialEq)]
 pub enum ItemProperty {
     Channels(TryVec<u8>),
-    AuxiliaryType(TryString),
+    AuxiliaryType(AuxiliaryTypeProperty),
     Unsupported,
 }
 
-impl ItemProperty {
-    fn clone(&self) -> Result<Self> {
+impl TryClone for ItemProperty {
+    fn try_clone(&self) -> Result<Self, TryReserveError> {
         Ok(match self {
             Self::Channels(val) => Self::Channels(val.try_clone()?),
             Self::AuxiliaryType(val) => Self::AuxiliaryType(val.try_clone()?),
@@ -1674,20 +1675,44 @@ fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<u8>> {
     Ok(channels)
 }
 
-fn read_auxc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryString> {
+#[derive(Debug, PartialEq)]
+pub struct AuxiliaryTypeProperty {
+    aux_type: TryString,
+    aux_subtype: TryString,
+}
+
+impl TryClone for AuxiliaryTypeProperty {
+    fn try_clone(&self) -> Result<Self, TryReserveError> {
+        Ok(AuxiliaryTypeProperty {
+            aux_type: self.aux_type.try_clone()?,
+            aux_subtype: self.aux_subtype.try_clone()?,
+        })
+    }
+}
+
+fn read_auxc<T: Read>(src: &mut BMFFBox<T>) -> Result<AuxiliaryTypeProperty> {
     let version = read_fullbox_version_no_flags(src)?;
     if version != 0 {
         return Err(Error::Unsupported("auxC version"));
     }
 
     let mut aux = TryString::new();
-    loop {
-        match src.read_u8()? {
-            0 => break,
-            c => aux.push(c)?,
-        }
+    src.try_read_to_end(&mut aux)?;
+
+    let (aux_type, aux_subtype): (TryString, TryVec<u8>);
+    if let Some(nul_byte_pos) = aux.iter().position(|&b| b == b'\0') {
+        let (a, b) = aux.as_slice().split_at(nul_byte_pos);
+        aux_type = a.try_into()?;
+        aux_subtype = (&b[1..]).try_into()?;
+    } else {
+        aux_type = aux;
+        aux_subtype = TryVec::new();
     }
-    Ok(aux)
+
+    Ok(AuxiliaryTypeProperty {
+        aux_type,
+        aux_subtype,
+    })
 }
 
 /// Parse an item location box inside a meta box
