@@ -1656,11 +1656,15 @@ fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<u8>> {
         return Err(Error::Unsupported("pixi version"));
     }
 
-    let mut channels = TryVec::new();
-    let channel_count = src.read_u8()?;
-    for _ in 0..channel_count {
-        channels.push(src.read_u8()?)?;
+    let num_channels = src.read_u8()?.into();
+    let mut channels = TryVec::with_capacity(num_channels)?;
+    let num_channels_read = src.try_read_to_end(&mut channels)?;
+
+    if num_channels_read != num_channels.into() {
+        return Err(Error::InvalidData("invalid num_channels"));
     }
+
+    check_parser_state!(src.content);
     Ok(channels)
 }
 
