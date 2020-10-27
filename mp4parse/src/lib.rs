@@ -1280,7 +1280,7 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
             meta.properties.iter().any(|prop| {
                 prop.item_id == item_id
                     && match &prop.property {
-                        ImageProperty::AuxiliaryType(urn) => {
+                        ItemProperty::AuxiliaryType(urn) => {
                             urn.as_slice()
                                 == "urn:mpeg:mpegB:cicp:systems:auxiliary:alpha".as_bytes()
                         }
@@ -1563,7 +1563,7 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
             x => x as usize - 1,
         };
         if let Some(prop) = properties.get(index) {
-            if *prop != ImageProperty::Unsupported {
+            if *prop != ItemProperty::Unsupported {
                 associated.push(AssociatedProperty {
                     item_id: a.item_id,
                     property: prop.clone()?,
@@ -1575,13 +1575,13 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
 }
 
 #[derive(Debug, PartialEq)]
-pub enum ImageProperty {
+pub enum ItemProperty {
     Channels(TryVec<u8>),
     AuxiliaryType(TryString),
     Unsupported,
 }
 
-impl ImageProperty {
+impl ItemProperty {
     fn clone(&self) -> Result<Self> {
         Ok(match self {
             Self::Channels(val) => Self::Channels(val.try_clone()?),
@@ -1598,7 +1598,7 @@ struct Association {
 
 pub struct AssociatedProperty {
     pub item_id: u32,
-    pub property: ImageProperty,
+    pub property: ItemProperty,
 }
 
 fn read_ipma<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<Association>> {
@@ -1632,18 +1632,18 @@ fn read_ipma<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<Association>> {
     Ok(associations)
 }
 
-fn read_ipco<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ImageProperty>> {
+fn read_ipco<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemProperty>> {
     let mut properties = TryVec::new();
 
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         // Must push for every property to have correct index for them
         properties.push(match b.head.name {
-            BoxType::PixelInformationBox => ImageProperty::Channels(read_pixi(&mut b)?),
-            BoxType::AuxiliaryTypeProperty => ImageProperty::AuxiliaryType(read_auxc(&mut b)?),
+            BoxType::PixelInformationBox => ItemProperty::Channels(read_pixi(&mut b)?),
+            BoxType::AuxiliaryTypeProperty => ItemProperty::AuxiliaryType(read_auxc(&mut b)?),
             _ => {
                 skip_box_remain(&mut b)?;
-                ImageProperty::Unsupported
+                ItemProperty::Unsupported
             }
         })?;
     }
