@@ -1548,7 +1548,7 @@ fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<SingleItemTypeRefer
 
 fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>> {
     let mut iter = src.box_iter();
-    let mut properties = TryVec::new();
+    let mut properties = TryHashMap::with_capacity(1)?;
     let mut associations = TryVec::new();
 
     while let Some(mut b) = iter.next_box()? {
@@ -1565,19 +1565,21 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
 
     let mut associated = TryVec::new();
     for a in associations {
-        let index = match a.property_index {
-            0 => continue,
-            x => x as usize - 1,
-        };
-        if let Some(prop) = properties.get(index) {
-            if *prop != ItemProperty::Unsupported {
-                associated.push(AssociatedProperty {
-                    item_id: a.item_id,
-                    property: prop.try_clone()?,
-                })?;
+        if a.property_index == 0 {
+            if a.essential {
+                return Err(Error::InvalidData("0 property index can't be essential"));
             }
+            continue;
+        }
+
+        if let Some(prop) = properties.get(&a.property_index) {
+            associated.push(AssociatedProperty {
+                item_id: a.item_id,
+                property: prop.try_clone()?,
+            })?;
         }
     }
+
     Ok(associated)
 }
 
@@ -1638,21 +1640,28 @@ fn read_ipma<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<Association>> {
     Ok(associations)
 }
 
-fn read_ipco<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemProperty>> {
-    let mut properties = TryVec::new();
+fn read_ipco<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<u16, ItemProperty>> {
+    let mut properties = TryHashMap::with_capacity(1)?;
 
+    let mut index = 1; // ipma uses 1-based indexing
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
-        // Must push for every property to have correct index for them
-        properties.push(match b.head.name {
-            BoxType::PixelInformationBox => ItemProperty::Channels(read_pixi(&mut b)?),
-            BoxType::AuxiliaryTypeProperty => ItemProperty::AuxiliaryType(read_auxc(&mut b)?),
+        if let Some(property) = match b.head.name {
+            BoxType::PixelInformationBox => Some(ItemProperty::Channels(read_pixi(&mut b)?)),
+            BoxType::AuxiliaryTypeProperty => Some(ItemProperty::AuxiliaryType(read_auxc(&mut b)?)),
             _ => {
                 skip_box_remain(&mut b)?;
-                ItemProperty::Unsupported
+                None
             }
-        })?;
+        } {
+            properties.insert(index, property)?;
+        }
+
+        index += 1; // must include ignored properties to have correct indexes
+
+        check_parser_state!(b.content);
     }
+
     Ok(properties)
 }
 
