@@ -1557,36 +1557,49 @@ fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<SingleItemTypeRefer
 
 fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>> {
     let mut iter = src.box_iter();
-    let mut properties = TryHashMap::with_capacity(1)?;
-    let mut associations = TryVec::new();
+
+    let properties = match iter.next_box()? {
+        Some(mut b) if b.head.name == BoxType::ItemPropertyContainerBox => read_ipco(&mut b),
+        Some(_) => Err(Error::InvalidData("unexpected iprp child")),
+        None => Err(Error::UnexpectedEOF),
+    }?;
+
+    // Per ISO 23008-12:2017 § 9.3.1: There can be zero or more ipma boxes
+    // but "There shall be at most one ItemPropertyAssociationbox with a given
+    // pair of values of version and flags"
+    let mut ipma_version_and_flag_values_seen = TryHashMap::with_capacity(1)?;
+    let mut associated = TryVec::new();
 
     while let Some(mut b) = iter.next_box()? {
-        match b.head.name {
-            BoxType::ItemPropertyContainerBox => {
-                properties = read_ipco(&mut b)?;
-            }
-            BoxType::ItemPropertyAssociationBox => {
-                associations = read_ipma(&mut b)?;
-            }
-            _ => return Err(Error::InvalidData("unexpected ipco child")),
-        }
-    }
-
-    let mut associated = TryVec::new();
-    for a in associations {
-        if a.property_index == 0 {
-            if a.essential {
-                return Err(Error::InvalidData("0 property index can't be essential"));
-            }
-            continue;
+        if b.head.name != BoxType::ItemPropertyAssociationBox {
+            return Err(Error::InvalidData("unexpected iprp child"));
         }
 
-        if let Some(prop) = properties.get(&a.property_index) {
-            associated.push(AssociatedProperty {
-                item_id: a.item_id,
-                property: prop.try_clone()?,
-            })?;
+        let version_and_flags = read_fullbox_extra(&mut b)?;
+        if ipma_version_and_flag_values_seen
+            .insert(version_and_flags, ())?
+            .is_some()
+        {
+            return Err(Error::InvalidData("Duplicate ipma with same version/flags"));
         }
+        let associations = read_ipma(&mut b, version_and_flags)?;
+        for a in associations {
+            if a.property_index == 0 {
+                if a.essential {
+                    return Err(Error::InvalidData("0 property index can't be essential"));
+                }
+                continue;
+            }
+
+            if let Some(prop) = properties.get(&a.property_index) {
+                associated.push(AssociatedProperty {
+                    item_id: a.item_id,
+                    property: prop.try_clone()?,
+                })?;
+            }
+        }
+
+        check_parser_state!(b.content);
     }
 
     Ok(associated)
@@ -1620,9 +1633,10 @@ pub struct AssociatedProperty {
     pub property: ItemProperty,
 }
 
-fn read_ipma<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<Association>> {
-    let (version, flags) = read_fullbox_extra(src)?;
-
+fn read_ipma<T: Read>(
+    src: &mut BMFFBox<T>,
+    (version, flags): (u8, u32),
+) -> Result<TryVec<Association>> {
     let mut associations = TryVec::new();
 
     let entry_count = be_u32(src)?;
