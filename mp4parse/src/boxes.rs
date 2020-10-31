@@ -97,6 +97,7 @@ impl PartialEq<&[u8; 4]> for FourCC {
     }
 }
 
+#[deny(unreachable_patterns)]
 box_database!(
     FileTypeBox                       0x6674_7970, // "ftyp"
     MediaDataBox                      0x6d64_6174, // "mdat"
@@ -114,6 +115,13 @@ box_database!(
     MediaHeaderBox                    0x6d64_6864, // "mdhd"
     HandlerBox                        0x6864_6c72, // "hdlr"
     MediaInformationBox               0x6d69_6e66, // "minf"
+    ImageReferenceBox                 0x6972_6566, // "iref"
+    ImagePropertiesBox                0x6970_7270, // "iprp"
+    ItemPropertyContainerBox          0x6970_636F, // "ipco"
+    ItemPropertyAssociationBox        0x6970_6D61, // "ipma"
+    ColorInformationBox               0x636F_6C72, // "colr"
+    PixelInformationBox               0x7069_7869, // "pixi"
+    AuxiliaryTypeProperty             0x6175_7843, // "auxC"
     SampleTableBox                    0x7374_626c, // "stbl"
     SampleDescriptionBox              0x7374_7364, // "stsd"
     TimeToSampleBox                   0x7374_7473, // "stts"
