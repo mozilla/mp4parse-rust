@@ -1518,6 +1518,8 @@ fn read_infe<T: Read>(src: &mut BMFFBox<T>) -> Result<ItemInfoEntry> {
     Ok(ItemInfoEntry { item_id, item_type })
 }
 
+/// Parse an Item Reference Box
+/// See ISO 14496-12:2015 § 8.11.12
 fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<SingleItemTypeReferenceBox>> {
     let mut item_references = TryVec::new();
     let version = read_fullbox_version_no_flags(src)?;
@@ -1555,6 +1557,8 @@ fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<SingleItemTypeRefer
     Ok(item_references)
 }
 
+/// Parse an Item Properties Box
+/// See ISO 23008-12:2017 § 9.3.1
 fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>> {
     let mut iter = src.box_iter();
 
@@ -1605,6 +1609,7 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
     Ok(associated)
 }
 
+/// See ISO 23008-12:2017 § 9.3.1
 #[derive(Debug, PartialEq)]
 pub enum ItemProperty {
     Channels(TryVec<u8>),
@@ -1622,12 +1627,16 @@ impl TryClone for ItemProperty {
     }
 }
 
+/// For storing ItemPropertyAssociation data
+/// See ISO 23008-12:2017 § 9.3.1
 struct Association {
     item_id: u32,
     essential: bool,
     property_index: u16,
 }
 
+/// For storing ItemPropertiesBox data
+/// See ISO 23008-12:2017 § 9.3.1
 pub struct AssociatedProperty {
     pub item_id: u32,
     pub property: ItemProperty,
@@ -1663,6 +1672,8 @@ fn read_ipma<T: Read>(
     Ok(associations)
 }
 
+/// Parse an ItemPropertyContainerBox
+/// See ISO 23008-12:2017 § 9.3.1
 fn read_ipco<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<u16, ItemProperty>> {
     let mut properties = TryHashMap::with_capacity(1)?;
 
@@ -1688,6 +1699,8 @@ fn read_ipco<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<u16, ItemProper
     Ok(properties)
 }
 
+/// Parse pixel information
+/// See ISO 23008-12:2017 § 6.5.6
 fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<u8>> {
     let version = read_fullbox_version_no_flags(src)?;
     if version != 0 {
@@ -1706,6 +1719,7 @@ fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<u8>> {
     Ok(channels)
 }
 
+/// See ISO 23008-12:2017 § 6.5.8
 #[derive(Debug, PartialEq)]
 pub struct AuxiliaryTypeProperty {
     aux_type: TryString,
@@ -1721,6 +1735,8 @@ impl TryClone for AuxiliaryTypeProperty {
     }
 }
 
+/// Parse image properties for auxiliary images
+/// See ISO 23008-12:2017 § 6.5.8
 fn read_auxc<T: Read>(src: &mut BMFFBox<T>) -> Result<AuxiliaryTypeProperty> {
     let version = read_fullbox_version_no_flags(src)?;
     if version != 0 {
