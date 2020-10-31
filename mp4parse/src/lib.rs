@@ -1535,7 +1535,7 @@ fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<SingleItemTypeRefer
         let reference_count = be_u16(&mut b)?;
         for _ in 0..reference_count {
             let to_item_id = if version == 0 {
-                be_u16(&mut b)? as u32
+                be_u16(&mut b)?.into()
             } else {
                 be_u32(&mut b)?
             };
@@ -1642,7 +1642,7 @@ fn read_ipma<T: Read>(
     let entry_count = be_u32(src)?;
     for _ in 0..entry_count {
         let item_id = if version == 0 {
-            be_u16(src)? as u32
+            be_u16(src)?.into()
         } else {
             be_u32(src)?
         };
