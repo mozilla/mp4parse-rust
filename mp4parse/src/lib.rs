@@ -1612,7 +1612,6 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
 pub enum ItemProperty {
     Channels(TryVec<u8>),
     AuxiliaryType(AuxiliaryTypeProperty),
-    Unsupported,
 }
 
 /// For storing ItemPropertyAssociation data
