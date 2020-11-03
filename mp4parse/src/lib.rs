@@ -13,7 +13,7 @@ extern crate fallible_collections;
 extern crate num_traits;
 use bitreader::{BitReader, ReadInto};
 use byteorder::{ReadBytesExt, WriteBytesExt};
-use fallible_collections::TryClone;
+
 use fallible_collections::TryRead;
 use fallible_collections::TryReserveError;
 use num_traits::Num;
@@ -1420,8 +1420,8 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
     }
 
     Ok(AvifMeta {
-        properties: properties.unwrap_or_else(TryVec::new),
-        item_references: item_references.unwrap_or_else(TryVec::new),
+        properties: properties.unwrap_or_default(),
+        item_references: item_references.unwrap_or_default(),
         primary_item_id,
         iloc_items: iloc_items.ok_or(Error::InvalidData("iloc missing"))?,
     })
@@ -1562,7 +1562,7 @@ fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<SingleItemTypeRefer
 fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>> {
     let mut iter = src.box_iter();
 
-    let properties = match iter.next_box()? {
+    let mut properties = match iter.next_box()? {
         Some(mut b) if b.head.name == BoxType::ItemPropertyContainerBox => read_ipco(&mut b),
         Some(_) => Err(Error::InvalidData("unexpected iprp child")),
         None => Err(Error::UnexpectedEOF),
@@ -1571,7 +1571,7 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
     // Per HEIF (ISO 23008-12:2017) § 9.3.1: There can be zero or more ipma boxes
     // but "There shall be at most one ItemPropertyAssociationbox with a given
     // pair of values of version and flags"
-    let mut ipma_version_and_flag_values_seen = TryHashMap::with_capacity(1)?;
+    let mut ipma_version_and_flag_values_seen = TryVec::with_capacity(1)?;
     let mut associated = TryVec::new();
 
     while let Some(mut b) = iter.next_box()? {
@@ -1580,12 +1580,10 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
         }
 
         let version_and_flags = read_fullbox_extra(&mut b)?;
-        if ipma_version_and_flag_values_seen
-            .insert(version_and_flags, ())?
-            .is_some()
-        {
+        if ipma_version_and_flag_values_seen.contains(&version_and_flags) {
             return Err(Error::InvalidData("Duplicate ipma with same version/flags"));
         }
+        ipma_version_and_flag_values_seen.push(version_and_flags)?;
         let associations = read_ipma(&mut b, version_and_flags)?;
         for a in associations {
             if a.property_index == 0 {
@@ -1595,10 +1593,10 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
                 continue;
             }
 
-            if let Some(prop) = properties.get(&a.property_index) {
+            if let Some(property) = properties.remove(&a.property_index) {
                 associated.push(AssociatedProperty {
                     item_id: a.item_id,
-                    property: prop.try_clone()?,
+                    property,
                 })?;
             }
         }
@@ -1615,16 +1613,6 @@ pub enum ItemProperty {
     Channels(TryVec<u8>),
     AuxiliaryType(AuxiliaryTypeProperty),
     Unsupported,
-}
-
-impl TryClone for ItemProperty {
-    fn try_clone(&self) -> Result<Self, TryReserveError> {
-        Ok(match self {
-            Self::Channels(val) => Self::Channels(val.try_clone()?),
-            Self::AuxiliaryType(val) => Self::AuxiliaryType(val.try_clone()?),
-            Self::Unsupported => Self::Unsupported,
-        })
-    }
 }
 
 /// For storing ItemPropertyAssociation data
@@ -1724,15 +1712,6 @@ fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<u8>> {
 pub struct AuxiliaryTypeProperty {
     aux_type: TryString,
     aux_subtype: TryString,
-}
-
-impl TryClone for AuxiliaryTypeProperty {
-    fn try_clone(&self) -> Result<Self, TryReserveError> {
-        Ok(AuxiliaryTypeProperty {
-            aux_type: self.aux_type.try_clone()?,
-            aux_subtype: self.aux_subtype.try_clone()?,
-        })
-    }
 }
 
 /// Parse image properties for auxiliary images

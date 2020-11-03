@@ -27,7 +27,7 @@ travis-ci = { repository = "https://github.com/mozilla/mp4parse-rust" }
 [dependencies]
 byteorder = "1.2.1"
 bitreader = { version = "0.3.2" }
-fallible_collections = { version = "0.2", features = ["std_io"] }
+fallible_collections = { version = "0.3", features = ["std_io"] }
 hashbrown = "0.9"
 num-traits = "=0.2.10"
 log = "0.4"
