@@ -117,9 +117,9 @@ box_database!(
     MediaInformationBox               0x6d69_6e66, // "minf"
     ImageReferenceBox                 0x6972_6566, // "iref"
     ImagePropertiesBox                0x6970_7270, // "iprp"
-    ItemPropertyContainerBox          0x6970_636F, // "ipco"
-    ItemPropertyAssociationBox        0x6970_6D61, // "ipma"
-    ColorInformationBox               0x636F_6C72, // "colr"
+    ItemPropertyContainerBox          0x6970_636f, // "ipco"
+    ItemPropertyAssociationBox        0x6970_6d61, // "ipma"
+    ColorInformationBox               0x636f_6c72, // "colr"
     PixelInformationBox               0x7069_7869, // "pixi"
     AuxiliaryTypeProperty             0x6175_7843, // "auxC"
     SampleTableBox                    0x7374_626c, // "stbl"
@@ -158,8 +158,8 @@ box_database!(
     SchemeTypeBox                     0x7363_686d, // "schm"
     MP3AudioSampleEntry               0x2e6d_7033, // ".mp3" - from F4V.
     CompositionOffsetBox              0x6374_7473, // "ctts"
-    LPCMAudioSampleEntry              0x6C70_636D, // "lpcm" - quicktime atom
-    ALACSpecificBox                   0x616C_6163, // "alac" - Also used by ALACSampleEntry
+    LPCMAudioSampleEntry              0x6c70_636d, // "lpcm" - quicktime atom
+    ALACSpecificBox                   0x616c_6163, // "alac" - Also used by ALACSampleEntry
     UuidBox                           0x7575_6964, // "uuid"
     MetadataBox                       0x6d65_7461, // "meta"
     MetadataHeaderBox                 0x6d68_6472, // "mhdr"
