@@ -1629,13 +1629,49 @@ pub struct AssociatedProperty {
     pub property: ItemProperty,
 }
 
+const MAX_IPMA_ASSOCIATION_COUNT: u64 = u8::MAX as u64;
+
+/// Parse an ItemPropertyAssociation box
+/// See HEIF (ISO 23008-12:2017) § 9.3.1
 fn read_ipma<T: Read>(
     src: &mut BMFFBox<T>,
     (version, flags): (u8, u32),
 ) -> Result<TryVec<Association>> {
-    let mut associations = TryVec::new();
+    // Static analysis shows that none of this unchecked arithmetic can fail
+    let entry_count: u64 = be_u32(src)?.into();
+    let min_entry_bytes: u64 = 1 /* association_count */ + if version == 0 { 2 } else { 4 };
+    let total_non_association_bytes = entry_count * min_entry_bytes;
+    let total_association_bytes;
 
-    let entry_count = be_u32(src)?;
+    if let Some(difference) = src.bytes_left().checked_sub(total_non_association_bytes) {
+        // All the storage for the `essential` and `property_index` parts (assuming a valid ipma box size)
+        total_association_bytes = difference;
+    } else {
+        return Err(Error::InvalidData(
+            "ipma box below minimum size for entry_count",
+        ));
+    }
+
+    let num_association_bytes = if flags & 1 == 1 { 2 } else { 1 };
+
+    // total_association_bytes must be a multiple of num_association_bytes
+    if total_association_bytes % num_association_bytes != 0 {
+        return Err(Error::InvalidData("ipma box has invalid size"));
+    }
+
+    let max_association_bytes_per_entry = MAX_IPMA_ASSOCIATION_COUNT * num_association_bytes;
+    let max_total_association_bytes = entry_count * max_association_bytes_per_entry;
+    let max_bytes_left = total_non_association_bytes + max_total_association_bytes;
+
+    if src.bytes_left() > max_bytes_left {
+        return Err(Error::InvalidData(
+            "ipma box exceeds maximum size for entry_count",
+        ));
+    }
+
+    let total_associations = total_association_bytes / num_association_bytes;
+    let mut associations = TryVec::with_capacity(total_associations.try_into()?)?;
+
     for _ in 0..entry_count {
         let item_id = if version == 0 {
             be_u16(src)?.into()
@@ -1644,7 +1680,6 @@ fn read_ipma<T: Read>(
         };
         let association_count = src.read_u8()?;
         for _ in 0..association_count {
-            let num_association_bytes = if flags & 1 == 1 { 2 } else { 1 };
             let association = src.take(num_association_bytes).read_into_try_vec()?;
             let mut association = BitReader::new(association.as_slice());
             let essential = association.read_bool()?;
