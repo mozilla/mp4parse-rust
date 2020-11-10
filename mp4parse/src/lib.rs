@@ -1629,13 +1629,177 @@ pub struct AssociatedProperty {
     pub property: ItemProperty,
 }
 
+/// An upper bound which can be used to check overflow at compile time
+trait UpperBounded {
+    const MAX: u64;
+}
+
+/// Implement type $name as a newtype wrapper around an unsigned int which
+/// implements the UpperBounded trait.
+macro_rules! impl_bounded {
+    ( $name:ident, $inner:ty ) => {
+        #[derive(Clone, Copy)]
+        pub struct $name($inner);
+
+        impl $name {
+            pub const fn new(n: $inner) -> Self {
+                Self(n)
+            }
+
+            #[allow(dead_code)]
+            pub fn get(self) -> $inner {
+                self.0
+            }
+        }
+
+        impl UpperBounded for $name {
+            const MAX: u64 = <$inner>::MAX as u64;
+        }
+    };
+}
+
+/// Implement type $name as a type representing the product of two unsigned ints
+/// which implements the UpperBounded trait.
+macro_rules! impl_bounded_product {
+    ( $name:ident, $multiplier:ty, $multiplicand:ty, $inner:ty) => {
+        #[derive(Clone, Copy)]
+        pub struct $name($inner);
+
+        impl $name {
+            pub fn new(value: $inner) -> Self {
+                assert!(<$inner>::from(value) <= Self::MAX);
+                Self(value)
+            }
+
+            pub fn get(self) -> $inner {
+                self.0
+            }
+        }
+
+        impl UpperBounded for $name {
+            const MAX: u64 = <$multiplier>::MAX * <$multiplicand>::MAX;
+        }
+    };
+}
+
+mod bounded_uints {
+    use UpperBounded;
+
+    impl_bounded!(U8, u8);
+    impl_bounded!(U16, u16);
+    impl_bounded!(U32, u32);
+    impl_bounded!(U64, u64);
+
+    impl_bounded_product!(U32MulU8, U32, U8, u64);
+    impl_bounded_product!(U32MulU16, U32, U16, u64);
+
+    impl UpperBounded for std::num::NonZeroU8 {
+        const MAX: u64 = u8::MAX as u64;
+    }
+}
+
+use bounded_uints::*;
+
+/// Implement the multiplication operator for $lhs * $rhs giving $output, which
+/// is internally represented as $inner. The operation is statically checked
+/// to ensure the product won't overflow $inner, nor exceed <$output>::MAX.
+macro_rules! impl_mul {
+    ( ($lhs:ty , $rhs:ty) => ($output:ty, $inner:ty) ) => {
+        impl std::ops::Mul<$rhs> for $lhs {
+            type Output = $output;
+
+            fn mul(self, rhs: $rhs) -> Self::Output {
+                static_assertions::const_assert!(<$output>::MAX <= <$inner>::MAX as u64);
+                static_assertions::const_assert!(<$lhs>::MAX * <$rhs>::MAX <= <$output>::MAX);
+
+                let lhs: $inner = self.get().into();
+                let rhs: $inner = rhs.get().into();
+                Self::Output::new(lhs.checked_mul(rhs).expect("infallible"))
+            }
+        }
+    };
+}
+
+impl_mul!((U8, std::num::NonZeroU8) => (U16, u16));
+impl_mul!((U32, std::num::NonZeroU8) => (U32MulU8, u64));
+impl_mul!((U32, U16) => (U32MulU16, u64));
+
+impl std::ops::Add<U32MulU16> for U32MulU8 {
+    type Output = U64;
+
+    fn add(self, rhs: U32MulU16) -> Self::Output {
+        static_assertions::const_assert!(U32MulU8::MAX + U32MulU16::MAX < U64::MAX);
+        let lhs: u64 = self.get().into();
+        let rhs: u64 = rhs.get().into();
+        Self::Output::new(lhs.checked_add(rhs).expect("infallible"))
+    }
+}
+
+const MAX_IPMA_ASSOCIATION_COUNT: U8 = U8::new(u8::MAX);
+
+/// After reading only the `entry_count` field of an ipma box, we can check its
+/// basic validity and calculate (assuming validity) the number of associations
+/// which will be contained (allowing preallocation of the storage).
+/// All the arithmetic is compile-time verified to not overflow via supporting
+/// types implementing the UpperBounded trait. Types are declared explicitly to
+/// show there isn't any accidental inference to primitive types.
+///
+/// See HEIF (ISO 23008-12:2017) § 9.3.1
+fn calculate_ipma_total_associations(
+    version: u8,
+    bytes_left: u64,
+    entry_count: U32,
+    num_association_bytes: std::num::NonZeroU8,
+) -> Result<usize> {
+    let min_entry_bytes =
+        std::num::NonZeroU8::new(1 /* association_count */ + if version == 0 { 2 } else { 4 })
+            .unwrap();
+
+    let total_non_association_bytes: U32MulU8 = entry_count * min_entry_bytes;
+    let total_association_bytes: u64;
+
+    if let Some(difference) = bytes_left.checked_sub(total_non_association_bytes.get()) {
+        // All the storage for the `essential` and `property_index` parts (assuming a valid ipma box size)
+        total_association_bytes = difference;
+    } else {
+        return Err(Error::InvalidData(
+            "ipma box below minimum size for entry_count",
+        ));
+    }
+
+    let max_association_bytes_per_entry: U16 = MAX_IPMA_ASSOCIATION_COUNT * num_association_bytes;
+    let max_total_association_bytes: U32MulU16 = entry_count * max_association_bytes_per_entry;
+    let max_bytes_left: U64 = total_non_association_bytes + max_total_association_bytes;
+
+    if bytes_left > max_bytes_left.get() {
+        return Err(Error::InvalidData(
+            "ipma box exceeds maximum size for entry_count",
+        ));
+    }
+
+    let total_associations: u64 = total_association_bytes / u64::from(num_association_bytes.get());
+
+    Ok(total_associations.try_into()?)
+}
+
+/// Parse an ItemPropertyAssociation box
+/// See HEIF (ISO 23008-12:2017) § 9.3.1
 fn read_ipma<T: Read>(
     src: &mut BMFFBox<T>,
     (version, flags): (u8, u32),
 ) -> Result<TryVec<Association>> {
-    let mut associations = TryVec::new();
-
     let entry_count = be_u32(src)?;
+    let num_association_bytes =
+        std::num::NonZeroU8::new(if flags & 1 == 1 { 2 } else { 1 }).unwrap();
+
+    let total_associations = calculate_ipma_total_associations(
+        version,
+        src.bytes_left(),
+        U32::new(entry_count),
+        num_association_bytes,
+    )?;
+    let mut associations = TryVec::with_capacity(total_associations)?;
+
     for _ in 0..entry_count {
         let item_id = if version == 0 {
             be_u16(src)?.into()
@@ -1644,8 +1808,9 @@ fn read_ipma<T: Read>(
         };
         let association_count = src.read_u8()?;
         for _ in 0..association_count {
-            let num_association_bytes = if flags & 1 == 1 { 2 } else { 1 };
-            let association = src.take(num_association_bytes).read_into_try_vec()?;
+            let association = src
+                .take(num_association_bytes.get().into())
+                .read_into_try_vec()?;
             let mut association = BitReader::new(association.as_slice());
             let essential = association.read_bool()?;
             let property_index = association.read_u16(association.remaining().try_into()?)?;
