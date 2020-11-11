@@ -1218,10 +1218,7 @@ fn skip_box_remain<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
 }
 
 /// Read the contents of an AVIF file
-///
-/// Metadata is accumulated in the passed-through `AvifContext` struct,
-/// which can be examined later.
-pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
+pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
     let _ = env_logger::try_init();
 
     let mut f = OffsetReader::new(f);
@@ -1297,7 +1294,7 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
         return Err(Error::InvalidData("multiple alpha planes"));
     }
 
-    context.premultiplied_alpha = alpha_item_id.map_or(false, |alpha_item_id| {
+    let premultiplied_alpha = alpha_item_id.map_or(false, |alpha_item_id| {
         meta.item_references.iter().any(|iref| {
             iref.from_item_id == meta.primary_item_id
                 && iref.to_item_id == alpha_item_id
@@ -1305,12 +1302,15 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
         })
     });
 
+    let mut primary_item = TryVec::new();
+    let mut alpha_item = None;
+
     // load data of relevant items
     for loc in meta.iloc_items.iter() {
         let mut item_data = if loc.item_id == meta.primary_item_id {
-            &mut context.primary_item
+            &mut primary_item
         } else if Some(loc.item_id) == alpha_item_id {
-            context.alpha_item.get_or_insert_with(TryVec::new)
+            alpha_item.get_or_insert_with(TryVec::new)
         } else {
             continue;
         };
@@ -1340,7 +1340,11 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(AvifContext {
+        primary_item,
+        alpha_item,
+        premultiplied_alpha,
+    })
 }
 
 /// Parse a metadata box in the context of an AVIF
@@ -2040,12 +2044,9 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemLocationBoxItem
 }
 
 /// Read the contents of a box, including sub boxes.
-///
-/// Metadata is accumulated in the passed-through `MediaContext` struct,
-/// which can be examined later.
-pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
+pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
+    let mut context = None;
     let mut found_ftyp = false;
-    let mut found_moov = false;
     // TODO(kinetik): Top-level parsing should handle zero-sized boxes
     // rather than throwing an error.
     let mut iter = BoxIter::new(f);
@@ -2072,13 +2073,12 @@ pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
                 debug!("{:?}", ftyp);
             }
             BoxType::MovieBox => {
-                read_moov(&mut b, context)?;
-                found_moov = true;
+                context = Some(read_moov(&mut b)?);
             }
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
-        if found_moov {
+        if context.is_some() {
             debug!(
                 "found moov {}, could stop pure 'moov' parser now",
                 if found_ftyp {
@@ -2093,56 +2093,64 @@ pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     // XXX(kinetik): This isn't perfect, as a "moov" with no contents is
     // treated as okay but we haven't found anything useful.  Needs more
     // thought for clearer behaviour here.
-    if found_moov {
-        Ok(())
-    } else {
-        Err(Error::NoMoov)
-    }
+    context.ok_or(Error::NoMoov)
 }
 
-fn parse_mvhd<T: Read>(f: &mut BMFFBox<T>) -> Result<(MovieHeaderBox, Option<MediaTimeScale>)> {
+fn parse_mvhd<T: Read>(f: &mut BMFFBox<T>) -> Result<Option<MediaTimeScale>> {
     let mvhd = read_mvhd(f)?;
+    debug!("{:?}", mvhd);
     if mvhd.timescale == 0 {
         return Err(Error::InvalidData("zero timescale in mdhd"));
     }
     let timescale = Some(MediaTimeScale(u64::from(mvhd.timescale)));
-    Ok((mvhd, timescale))
+    Ok(timescale)
 }
 
-fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: &mut MediaContext) -> Result<()> {
+fn read_moov<T: Read>(f: &mut BMFFBox<T>) -> Result<MediaContext> {
+    let MediaContext {
+        mut timescale,
+        mut tracks,
+        mut mvex,
+        mut psshs,
+        mut userdata,
+    } = Default::default();
+
     let mut iter = f.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::MovieHeaderBox => {
-                let (mvhd, timescale) = parse_mvhd(&mut b)?;
-                context.timescale = timescale;
-                debug!("{:?}", mvhd);
+                timescale = parse_mvhd(&mut b)?;
             }
             BoxType::TrackBox => {
-                let mut track = Track::new(context.tracks.len());
+                let mut track = Track::new(tracks.len());
                 read_trak(&mut b, &mut track)?;
-                context.tracks.push(track)?;
+                tracks.push(track)?;
             }
             BoxType::MovieExtendsBox => {
-                let mvex = read_mvex(&mut b)?;
+                mvex = Some(read_mvex(&mut b)?);
                 debug!("{:?}", mvex);
-                context.mvex = Some(mvex);
             }
             BoxType::ProtectionSystemSpecificHeaderBox => {
                 let pssh = read_pssh(&mut b)?;
                 debug!("{:?}", pssh);
-                context.psshs.push(pssh)?;
+                psshs.push(pssh)?;
             }
             BoxType::UserdataBox => {
-                let udta = read_udta(&mut b);
-                debug!("{:?}", udta);
-                context.userdata = Some(udta);
+                userdata = Some(read_udta(&mut b));
+                debug!("{:?}", userdata);
             }
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
     }
-    Ok(())
+
+    Ok(MediaContext {
+        timescale,
+        tracks,
+        mvex,
+        psshs,
+        userdata,
+    })
 }
 
 fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHeaderBox> {
