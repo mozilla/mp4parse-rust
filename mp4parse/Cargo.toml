@@ -37,3 +37,12 @@ static_assertions = "1.1.0"
 test-assembler = "0.1.2"
 env_logger = "0.7.1"
 walkdir = "2.3.1"
+criterion = "0.3"
+
+[[bench]]
+name = "avif_benchmark"
+harness = false
+
+# See https://bheisler.github.io/criterion.rs/book/faq.html#cargo-bench-gives-unrecognized-option-errors-for-valid-command-line-options
+[lib]
+bench = false
