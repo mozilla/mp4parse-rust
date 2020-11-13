@@ -853,7 +853,7 @@ struct SingleItemTypeReferenceBox {
 
 /// Potential sizes (in bytes) of variable-sized fields of the 'iloc' box
 /// See ISOBMFF (ISO 14496-12:2015) § 8.11.3
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 enum IlocFieldSize {
     Zero,
     Four,
@@ -1970,6 +1970,16 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemLocationBoxItem
         if extent_count < 1 {
             return Err(Error::InvalidData(
                 "extent_count must have a value 1 or greater per ISOBMFF (ISO 14496-12:2015) § 8.11.3.3",
+            ));
+        }
+
+        // "If only one extent is used (extent_count = 1) then either or both of the
+        //  offset and length may be implied"
+        if extent_count != 1
+            && (offset_size == IlocFieldSize::Zero || length_size == IlocFieldSize::Zero)
+        {
+            return Err(Error::InvalidData(
+                "extent_count != 1 requires explicit offset and length per ISOBMFF (ISO 14496-12:2015) § 8.11.3.3",
             ));
         }
 
