@@ -663,8 +663,6 @@ fn public_avif_primary_item_is_grid() {
 
 #[test]
 fn public_avif_read_samples() {
-    env_logger::init();
-
     for entry in walkdir::WalkDir::new(AVIF_TEST_DIR) {
         let entry = entry.expect("AVIF entry");
         let path = entry.path();
