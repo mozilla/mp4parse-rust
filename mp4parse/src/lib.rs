@@ -20,7 +20,6 @@ use num_traits::Num;
 use std::convert::{TryFrom, TryInto as _};
 use std::io::Cursor;
 use std::io::{Read, Take};
-use std::ops::{Range, RangeFrom};
 
 #[macro_use]
 mod macros;
@@ -745,20 +744,59 @@ impl MediaContext {
     }
 }
 
-#[derive(Debug, Default)]
+/// An ISOBMFF item as described by an iloc box. For the sake of avoiding copies,
+/// this can either be represented by the `Location` variant, which indicates
+/// where the data exists within a `MediaDataBox` stored separately, or the
+/// `Data` variant which owns the data. Unfortunately, it's not simple to
+/// represent this as a std::borrow::Cow, or other reference-based type, because
+/// multiple instances may references different parts of the same `MediaDataBox`
+/// and we want to avoid the copy that splitting the storage would entail.
+#[derive(Debug)]
+enum AvifItem {
+    Location(Extent),
+    Data(TryVec<u8>),
+}
+
+#[derive(Debug)]
 pub struct AvifContext {
-    /// The collected data indicated by the `pitm` box, See ISOBMFF (ISO 14496-12:2015) § 8.11.4
-    pub primary_item: TryVec<u8>,
+    /// Referred to by the `Location` variants of the `AvifItem`s in this struct
+    item_storage: TryVec<MediaDataBox>,
+    /// The item indicated by the `pitm` box, See ISOBMFF (ISO 14496-12:2015) § 8.11.4
+    primary_item: AvifItem,
     /// Associated alpha channel for the primary item, if any
-    pub alpha_item: Option<TryVec<u8>>,
+    alpha_item: Option<AvifItem>,
     /// If true, divide RGB values by the alpha value.
     /// See `prem` in MIAF (ISO 23000-22:2019) § 7.3.5.2
     pub premultiplied_alpha: bool,
 }
 
 impl AvifContext {
-    pub fn new() -> Self {
-        Default::default()
+    pub fn primary_item(&self) -> &[u8] {
+        self.item_as_slice(&self.primary_item)
+    }
+
+    pub fn alpha_item(&self) -> Option<&[u8]> {
+        self.alpha_item
+            .as_ref()
+            .map(|item| self.item_as_slice(item))
+    }
+
+    /// A helper for the various `AvifItem`s to expose a reference to the
+    /// underlying data while avoiding copies.
+    fn item_as_slice<'a>(&'a self, item: &'a AvifItem) -> &'a [u8] {
+        match item {
+            AvifItem::Location(extent) => {
+                for mdat in &self.item_storage {
+                    if let Some(slice) = mdat.get(&extent) {
+                        return slice;
+                    }
+                }
+                unreachable!(
+                    "AvifItem::Location requires the location exists in AvifContext::item_storage"
+                );
+            }
+            AvifItem::Data(data) => return data.as_slice(),
+        }
     }
 }
 
@@ -771,66 +809,179 @@ struct AvifMeta {
 
 /// A Media Data Box
 /// See ISOBMFF (ISO 14496-12:2015) § 8.1.1
+#[derive(Debug)]
 struct MediaDataBox {
-    /// Offset of `data` from the beginning of the file. See ConstructionMethod::File
-    offset: u64,
+    /// Offset of `data` from the beginning of the "file". See ConstructionMethod::File.
+    /// Note: the file may not be an actual file, read_avif supports any `&mut impl Read`
+    /// source for input. However we try to match the terminology used in the spec.
+    file_offset: u64,
     data: TryVec<u8>,
 }
 
 impl MediaDataBox {
-    /// Check whether the beginning of `extent` is within the bounds of the `MediaDataBox`.
-    /// We assume extents to not cross box boundaries. If so, this will cause an error
-    /// in `read_extent`.
-    fn contains_extent(&self, extent: &ExtentRange) -> bool {
-        if self.offset <= extent.start() {
-            let start_offset = extent.start() - self.offset;
-            start_offset < self.data.len().to_u64()
-        } else {
-            false
+    /// Convert an absolute offset to an offset relative to the beginning of the
+    /// `self.data` field. Returns None if the offset would be negative.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the offset would overflow a `usize`.
+    fn file_offset_to_data_offset(&self, offset: u64) -> Option<usize> {
+        let start = offset
+            .checked_sub(self.file_offset)?
+            .try_into()
+            .expect("usize overflow");
+        Some(start)
+    }
+
+    /// Return a slice from the MediaDataBox specified by the provided `extent`.
+    /// Returns `None` if the extent isn't fully contained by the MediaDataBox.
+    ///
+    /// # Panics
+    ///
+    /// Panics if either the offset or length (if the extent is bounded) of the
+    /// slice would overflow a `usize`.
+    pub fn get<'a>(&'a self, extent: &'a Extent) -> Option<&'a [u8]> {
+        match extent {
+            Extent::WithLength { offset, len } => {
+                let start = self.file_offset_to_data_offset(*offset)?;
+                let end = start.checked_add(*len).expect("usize overflow");
+                self.data.get(start..end)
+            }
+            Extent::ToEnd { offset } => {
+                let start = self.file_offset_to_data_offset(*offset)?;
+                self.data.get(start..)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod media_data_box_tests {
+    use super::*;
+
+    impl MediaDataBox {
+        fn at_offset(file_offset: u64, data: std::vec::Vec<u8>) -> Self {
+            MediaDataBox {
+                file_offset,
+                data: data.into(),
+            }
         }
     }
 
-    /// Check whether `extent` covers the `MediaDataBox` exactly.
-    fn matches_extent(&self, extent: &ExtentRange) -> bool {
-        if self.offset == extent.start() {
-            match extent {
-                ExtentRange::WithLength(range) => {
-                    if let Some(end) = self.offset.checked_add(self.data.len().to_u64()) {
-                        end == range.end
-                    } else {
-                        false
-                    }
-                }
-                ExtentRange::ToEnd(_) => true,
-            }
-        } else {
-            false
-        }
+    #[test]
+    fn extent_with_length_before_mdat_returns_none() {
+        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let extent = Extent::WithLength { offset: 0, len: 2 };
+
+        assert!(mdat.get(&extent).is_none());
     }
 
-    /// Copy the range specified by `extent` to the end of `buf` or return an error if the range
-    /// is not fully contained within `MediaDataBox`.
-    fn read_extent(&mut self, extent: &ExtentRange, buf: &mut TryVec<u8>) -> Result<()> {
-        let start_offset = extent
-            .start()
-            .checked_sub(self.offset)
-            .expect("mdat does not contain extent");
-        let slice = match extent {
-            ExtentRange::WithLength(range) => {
-                let range_len = range
-                    .end
-                    .checked_sub(range.start)
-                    .expect("range start > end");
-                let end = start_offset
-                    .checked_add(range_len)
-                    .expect("extent end overflow");
-                self.data.get(start_offset.try_into()?..end.try_into()?)
-            }
-            ExtentRange::ToEnd(_) => self.data.get(start_offset.try_into()?..),
+    #[test]
+    fn extent_to_end_before_mdat_returns_none() {
+        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let extent = Extent::ToEnd { offset: 0 };
+
+        assert!(mdat.get(&extent).is_none());
+    }
+
+    #[test]
+    fn extent_with_length_crossing_front_mdat_boundary_returns_none() {
+        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let extent = Extent::WithLength { offset: 99, len: 3 };
+
+        assert!(mdat.get(&extent).is_none());
+    }
+
+    #[test]
+    fn extent_with_length_which_is_subset_of_mdat() {
+        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let extent = Extent::WithLength {
+            offset: 101,
+            len: 2,
         };
-        let slice = slice.ok_or(Error::InvalidData("extent crosses box boundary"))?;
-        buf.extend_from_slice(slice)?;
-        Ok(())
+
+        assert_eq!(mdat.get(&extent), Some(&[1, 1][..]));
+    }
+
+    #[test]
+    fn extent_to_end_which_is_subset_of_mdat() {
+        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let extent = Extent::ToEnd { offset: 101 };
+
+        assert_eq!(mdat.get(&extent), Some(&[1, 1, 1, 1][..]));
+    }
+
+    #[test]
+    fn extent_with_length_which_is_all_of_mdat() {
+        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let extent = Extent::WithLength {
+            offset: 100,
+            len: 5,
+        };
+
+        assert_eq!(mdat.get(&extent), Some(mdat.data.as_slice()));
+    }
+
+    #[test]
+    fn extent_to_end_which_is_all_of_mdat() {
+        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let extent = Extent::ToEnd { offset: 100 };
+
+        assert_eq!(mdat.get(&extent), Some(mdat.data.as_slice()));
+    }
+
+    #[test]
+    fn extent_with_length_crossing_back_mdat_boundary_returns_none() {
+        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let extent = Extent::WithLength {
+            offset: 103,
+            len: 3,
+        };
+
+        assert!(mdat.get(&extent).is_none());
+    }
+
+    #[test]
+    fn extent_with_length_after_mdat_returns_none() {
+        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let extent = Extent::WithLength {
+            offset: 200,
+            len: 2,
+        };
+
+        assert!(mdat.get(&extent).is_none());
+    }
+
+    #[test]
+    fn extent_to_end_after_mdat_returns_none() {
+        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let extent = Extent::ToEnd { offset: 200 };
+
+        assert!(mdat.get(&extent).is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "usize overflow")]
+    fn extent_with_length_which_overflows_usize_panics() {
+        let mdat = MediaDataBox::at_offset(std::u64::MAX - 1, vec![1; 5]);
+        let extent = Extent::WithLength {
+            offset: std::u64::MAX,
+            len: std::usize::MAX,
+        };
+
+        mdat.get(&extent);
+    }
+
+    // The end of the range would overflow `usize` if it were calculated, but
+    // because the range end is unbounded, we don't calculate it.
+    #[test]
+    fn extent_to_end_which_overflows_usize() {
+        let mdat = MediaDataBox::at_offset(std::u64::MAX - 1, vec![1; 5]);
+        let extent = Extent::ToEnd {
+            offset: std::u64::MAX,
+        };
+
+        assert_eq!(mdat.get(&extent), Some(&[1, 1, 1, 1][..]));
     }
 }
 
@@ -912,7 +1063,7 @@ struct ItemLocationBoxItem {
     item_id: u32,
     construction_method: ConstructionMethod,
     /// Unused for ConstructionMethod::Idat
-    extents: TryVec<ItemLocationBoxExtent>,
+    extents: TryVec<Extent>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -923,26 +1074,18 @@ enum ConstructionMethod {
     Item,
 }
 
+/// Describes a region where a item specified by an `ItemLocationBoxItem` is stored.
+/// The offset is `u64` since that's the maximum possible size and since the relative
+/// nature of `MediaDataBox` means this can still possibly succeed even in the case
+/// that the raw value exceeds std::usize::MAX on platforms where that type is smaller
+/// than u64. However, `len` is stored as a `usize` since no value larger than
+/// `std::usize::MAX` can be used in a successful indexing operation in rust.
 /// `extent_index` is omitted since it's only used for ConstructionMethod::Item which
 /// is currently not implemented.
 #[derive(Clone, Debug)]
-struct ItemLocationBoxExtent {
-    extent_range: ExtentRange,
-}
-
-#[derive(Clone, Debug)]
-enum ExtentRange {
-    WithLength(Range<u64>),
-    ToEnd(RangeFrom<u64>),
-}
-
-impl ExtentRange {
-    fn start(&self) -> u64 {
-        match self {
-            Self::WithLength(r) => r.start,
-            Self::ToEnd(r) => r.start,
-        }
-    }
+enum Extent {
+    WithLength { offset: u64, len: usize },
+    ToEnd { offset: u64 },
 }
 
 #[derive(Debug, PartialEq)]
@@ -1238,7 +1381,7 @@ pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
     }
 
     let mut meta = None;
-    let mut mdats = TryVec::new();
+    let mut item_storage = TryVec::new();
 
     while let Some(mut b) = iter.next_box()? {
         trace!("read_avif parsing {:?} box", b.head.name);
@@ -1253,9 +1396,9 @@ pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
             }
             BoxType::MediaDataBox => {
                 if b.bytes_left() > 0 {
-                    let offset = b.offset();
+                    let file_offset = b.offset();
                     let data = b.read_into_try_vec()?;
-                    mdats.push(MediaDataBox { offset, data })?;
+                    item_storage.push(MediaDataBox { file_offset, data })?;
                 }
             }
             _ => skip_box_content(&mut b)?,
@@ -1302,15 +1445,15 @@ pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
         })
     });
 
-    let mut primary_item = TryVec::new();
+    let mut primary_item = None;
     let mut alpha_item = None;
 
-    // load data of relevant items
-    for loc in meta.iloc_items.iter() {
-        let mut item_data = if loc.item_id == meta.primary_item_id {
+    // store data or record location of relevant items
+    for loc in meta.iloc_items {
+        let item = if loc.item_id == meta.primary_item_id {
             &mut primary_item
         } else if Some(loc.item_id) == alpha_item_id {
-            alpha_item.get_or_insert_with(TryVec::new)
+            &mut alpha_item
         } else {
             continue;
         };
@@ -1318,29 +1461,55 @@ pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
         if loc.construction_method != ConstructionMethod::File {
             return Err(Error::Unsupported("unsupported construction_method"));
         }
-        for extent in loc.extents.iter() {
+
+        assert!(item.is_none());
+
+        // If our item is spread over multiple extents, we'll need to copy it
+        // into a contiguous buffer. Otherwise, we can just store the extent
+        // and return a pointer into the mdat later to avoid the copy.
+        if loc.extents.len() > 1 {
+            *item = Some(AvifItem::Data(TryVec::new()));
+        }
+
+        for extent in loc.extents {
             let mut found = false;
-            // try to find an overlapping mdat
-            for mdat in mdats.iter_mut() {
-                if mdat.matches_extent(&extent.extent_range) {
-                    item_data.append(&mut mdat.data)?;
-                    found = true;
-                    break;
-                } else if mdat.contains_extent(&extent.extent_range) {
-                    mdat.read_extent(&extent.extent_range, &mut item_data)?;
+            // try to find an mdat which contains the extent
+            for mdat in item_storage.iter_mut() {
+                if let Some(extent_slice) = mdat.get(&extent) {
+                    match item {
+                        None => {
+                            trace!("Using AvifItem::Location");
+                            *item = Some(AvifItem::Location(extent));
+                        }
+                        Some(AvifItem::Data(item_data)) => {
+                            trace!("Using AvifItem::Data");
+                            item_data.extend_from_slice(extent_slice)?;
+                        }
+                        _ => unreachable!(),
+                    }
                     found = true;
                     break;
                 }
             }
+
             if !found {
                 return Err(Error::InvalidData(
-                    "iloc contains an extent that is not in mdat",
+                    "iloc contains an extent that is not in any mdat",
                 ));
             }
         }
+
+        assert!(item.is_some());
     }
 
+    let primary_item =
+        primary_item.ok_or(Error::InvalidData("Required primary item data not found"))?;
+
+    // We could potentially optimize memory usage by trying to avoid reading
+    // or storing mdat boxes which aren't used by our API, but for now it seems
+    // like unnecessary complexity
     Ok(AvifContext {
+        item_storage,
         primary_item,
         alpha_item,
         premultiplied_alpha,
@@ -1996,7 +2165,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemLocationBoxItem
         let mut extents = TryVec::with_capacity(extent_count.to_usize())?;
 
         for _ in 0..extent_count {
-            // Parsed but currently ignored, see `ItemLocationBoxExtent`
+            // Parsed but currently ignored, see `Extent`
             let _extent_index = match &index_size {
                 None | Some(IlocFieldSize::Zero) => None,
                 Some(index_size) => {
@@ -2010,23 +2179,23 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemLocationBoxItem
             //  beginning of the source (offset 0) is implied"
             // This behavior will follow from BitReader::read_u64(0) -> 0.
             let extent_offset = iloc.read_u64(offset_size.to_bits())?;
-            let extent_length = iloc.read_u64(length_size.to_bits())?;
+            let extent_length = iloc.read_u64(length_size.to_bits())?.try_into()?;
 
             // "If the length is not specified, or specified as zero, then the entire length of
             //  the source is implied" (ibid)
-            let start = base_offset
+            let offset = base_offset
                 .checked_add(extent_offset)
                 .ok_or(Error::InvalidData("offset calculation overflow"))?;
-            let extent_range = if extent_length == 0 {
-                ExtentRange::ToEnd(RangeFrom { start })
+            let extent = if extent_length == 0 {
+                Extent::ToEnd { offset }
             } else {
-                let end = start
-                    .checked_add(extent_length)
-                    .ok_or(Error::InvalidData("end calculation overflow"))?;
-                ExtentRange::WithLength(Range { start, end })
+                Extent::WithLength {
+                    offset,
+                    len: extent_length,
+                }
             };
 
-            extents.push(ItemLocationBoxExtent { extent_range })?;
+            extents.push(extent)?;
         }
 
         items.push(ItemLocationBoxItem {
