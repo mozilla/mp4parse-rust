@@ -1222,6 +1222,8 @@ fn skip_box_remain<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
 /// Metadata is accumulated in the passed-through `AvifContext` struct,
 /// which can be examined later.
 pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
+    let _ = env_logger::try_init();
+
     let mut f = OffsetReader::new(f);
 
     let mut iter = BoxIter::new(&mut f);
@@ -1242,6 +1244,7 @@ pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
     let mut mdats = TryVec::new();
 
     while let Some(mut b) = iter.next_box()? {
+        trace!("read_avif parsing {:?} box", b.head.name);
         match b.head.name {
             BoxType::MetadataBox => {
                 if meta.is_some() {
@@ -1359,6 +1362,7 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
 
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
+        trace!("read_avif_meta parsing {:?} box", b.head.name);
         match b.head.name {
             BoxType::ItemInfoBox => {
                 if item_infos.is_some() {
@@ -1529,12 +1533,14 @@ fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<SingleItemTypeRefer
 
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
+        trace!("read_iref parsing {:?} referenceType", b.head.name);
         let from_item_id = if version == 0 {
             be_u16(&mut b)?.into()
         } else {
             be_u32(&mut b)?
         };
         let reference_count = be_u16(&mut b)?;
+        item_references.reserve(reference_count.to_usize())?;
         for _ in 0..reference_count {
             let to_item_id = if version == 0 {
                 be_u16(&mut b)?.into()
