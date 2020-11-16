@@ -15,10 +15,9 @@ criterion_group!(benches, criterion_benchmark);
 criterion_main!(benches);
 
 fn avif_largest() {
-    let context = &mut mp4::AvifContext::new();
     let input = &mut File::open(
         "av1-avif/testFiles/Netflix/avif/cosmos_frame05000_yuv444_12bpc_bt2020_pq_qlossless.avif",
     )
     .expect("Unknown file");
-    assert!(mp4::read_avif(input, context).is_ok());
+    assert!(mp4::read_avif(input).is_ok());
 }

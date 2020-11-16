@@ -443,11 +443,11 @@ trait ContextParser
 where
     Self: Sized,
 {
-    type Context: Default;
+    type Context;
 
     fn with_context(context: Self::Context) -> Self;
 
-    fn read<T: Read>(io: &mut T, context: &mut Self::Context) -> mp4parse::Result<()>;
+    fn read<T: Read>(io: &mut T) -> mp4parse::Result<Self::Context>;
 }
 
 impl Mp4parseParser {
@@ -470,8 +470,8 @@ impl ContextParser for Mp4parseParser {
         }
     }
 
-    fn read<T: Read>(io: &mut T, context: &mut Self::Context) -> mp4parse::Result<()> {
-        read_mp4(io, context)
+    fn read<T: Read>(io: &mut T) -> mp4parse::Result<Self::Context> {
+        read_mp4(io)
     }
 }
 
@@ -493,8 +493,8 @@ impl ContextParser for Mp4parseAvifParser {
         Self { context }
     }
 
-    fn read<T: Read>(io: &mut T, context: &mut Self::Context) -> mp4parse::Result<()> {
-        read_avif(io, context)
+    fn read<T: Read>(io: &mut T) -> mp4parse::Result<Self::Context> {
+        read_avif(io)
     }
 }
 
@@ -597,10 +597,8 @@ unsafe fn mp4parse_new_common<P: ContextParser>(
 fn mp4parse_new_common_safe<T: Read, P: ContextParser>(
     io: &mut T,
 ) -> Result<*mut P, Mp4parseStatus> {
-    let mut context = P::Context::default();
-
-    P::read(io, &mut context)
-        .map(|_| P::with_context(context))
+    P::read(io)
+        .map(P::with_context)
         .and_then(|x| TryBox::try_new(x).map_err(mp4parse::Error::from))
         .map(TryBox::into_raw)
         .map_err(Mp4parseStatus::from)
