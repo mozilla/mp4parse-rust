@@ -659,7 +659,13 @@ fn public_avif_read_samples() {
                 eprintln!("Skipping {:?}", path);
                 continue; // Skip directories, ReadMe.txt, etc.
             }
-            if AVIF_CORRUPT_IMAGES.contains(&path.to_str().unwrap()) {
+            if AVIF_CORRUPT_IMAGES
+                .iter()
+                .find(|&&corrupt| {
+                    std::fs::canonicalize(corrupt).unwrap() == path.canonicalize().unwrap()
+                })
+                .is_some()
+            {
                 eprintln!("Skipping {:?}", path);
                 continue;
             }
