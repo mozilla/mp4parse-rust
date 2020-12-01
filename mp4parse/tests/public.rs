@@ -32,7 +32,8 @@ static IMAGE_AVIF_EXTENTS: &str = "tests/kodim-extents.avif";
 static IMAGE_AVIF_CORRUPT: &str = "tests/bug-1655846.avif";
 static IMAGE_AVIF_CORRUPT_2: &str = "tests/bug-1661347.avif";
 static IMAGE_AVIF_GRID: &str = "av1-avif/testFiles/Microsoft/Summer_in_Tomsk_720p_5x4_grid.avif";
-static AVIF_TEST_DIR: &str = "av1-avif/testFiles";
+static AVIF_TEST_DIRS: &[&str] = &["tests", "av1-avif/testFiles"];
+static AVIF_CORRUPT_IMAGES: &[&str] = &[IMAGE_AVIF_CORRUPT, IMAGE_AVIF_CORRUPT_2];
 
 // Adapted from https://github.com/GuillaumeGomez/audio-video-metadata/blob/9dff40f565af71d5502e03a2e78ae63df95cfd40/src/metadata.rs#L53
 #[test]
@@ -617,15 +618,15 @@ fn public_video_av1() {
 fn public_avif_primary_item() {
     let input = &mut File::open(IMAGE_AVIF).expect("Unknown file");
     let context = mp4::read_avif(input).expect("read_avif failed");
-    assert_eq!(context.primary_item.len(), 6979);
-    assert_eq!(context.primary_item[0..4], [0x12, 0x00, 0x0a, 0x0a]);
+    assert_eq!(context.primary_item().len(), 6979);
+    assert_eq!(context.primary_item()[0..4], [0x12, 0x00, 0x0a, 0x0a]);
 }
 
 #[test]
 fn public_avif_primary_item_split_extents() {
     let input = &mut File::open(IMAGE_AVIF_EXTENTS).expect("Unknown file");
     let context = mp4::read_avif(input).expect("read_avif failed");
-    assert_eq!(context.primary_item.len(), 4387);
+    assert_eq!(context.primary_item().len(), 4387);
 }
 
 #[test]
@@ -650,19 +651,31 @@ fn public_avif_primary_item_is_grid() {
 
 #[test]
 fn public_avif_read_samples() {
-    for entry in walkdir::WalkDir::new(AVIF_TEST_DIR) {
-        let entry = entry.expect("AVIF entry");
-        let path = entry.path();
-        if !path.is_file() || path.extension().unwrap_or_default() != "avif" {
-            eprintln!("Skipping {:?}", path);
-            continue; // Skip directories, ReadMe.txt, etc.
+    for dir in AVIF_TEST_DIRS {
+        for entry in walkdir::WalkDir::new(dir) {
+            let entry = entry.expect("AVIF entry");
+            let path = entry.path();
+            if !path.is_file() || path.extension().unwrap_or_default() != "avif" {
+                eprintln!("Skipping {:?}", path);
+                continue; // Skip directories, ReadMe.txt, etc.
+            }
+            if AVIF_CORRUPT_IMAGES
+                .iter()
+                .find(|&&corrupt| {
+                    std::fs::canonicalize(corrupt).unwrap() == path.canonicalize().unwrap()
+                })
+                .is_some()
+            {
+                eprintln!("Skipping {:?}", path);
+                continue;
+            }
+            if path == Path::new(IMAGE_AVIF_GRID) {
+                eprintln!("Skipping {:?}", path);
+                continue; // Remove when public_avif_primary_item_is_grid passes
+            }
+            println!("parsing {:?}", path);
+            let input = &mut File::open(path).expect("Unknow file");
+            mp4::read_avif(input).expect("read_avif failed");
         }
-        if path == Path::new(IMAGE_AVIF_GRID) {
-            eprintln!("Skipping {:?}", path);
-            continue; // Remove when public_avif_primary_item_is_grid passes
-        }
-        println!("parsing {:?}", path);
-        let input = &mut File::open(path).expect("Unknow file");
-        mp4::read_avif(input).expect("read_avif failed");
     }
 }

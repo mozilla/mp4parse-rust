@@ -475,7 +475,6 @@ impl ContextParser for Mp4parseParser {
     }
 }
 
-#[derive(Default)]
 pub struct Mp4parseAvifParser {
     context: AvifContext,
 }
@@ -1197,8 +1196,7 @@ pub unsafe extern "C" fn mp4parse_avif_get_primary_item(
 
     let context = (*parser).context();
 
-    // TODO: check for a valid parsed context. See https://github.com/mozilla/mp4parse-rust/issues/195
-    (*primary_item).set_data(&context.primary_item);
+    (*primary_item).set_data(context.primary_item());
 
     Mp4parseStatus::Ok
 }
