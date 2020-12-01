@@ -4,6 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 extern crate mp4parse as mp4;
 
+use mp4::Error;
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{Cursor, Read};
@@ -29,11 +30,12 @@ static VIDEO_EME_CBCS_MP4: &str = "tests/bipbop_cbcs_video_init.mp4";
 static VIDEO_AV1_MP4: &str = "tests/tiny_av1.mp4";
 static IMAGE_AVIF: &str = "av1-avif/testFiles/Microsoft/Monochrome.avif";
 static IMAGE_AVIF_EXTENTS: &str = "tests/kodim-extents.avif";
-static IMAGE_AVIF_CORRUPT: &str = "tests/bug-1655846.avif";
-static IMAGE_AVIF_CORRUPT_2: &str = "tests/bug-1661347.avif";
+static IMAGE_AVIF_CORRUPT: &str = "tests/corrupt/bug-1655846.avif";
+static IMAGE_AVIF_CORRUPT_2: &str = "tests/corrupt/bug-1661347.avif";
+static IMAGE_AVIF_CORRUPT_3: &str = "tests/corrupt/bad-ipma-version.avif";
 static IMAGE_AVIF_GRID: &str = "av1-avif/testFiles/Microsoft/Summer_in_Tomsk_720p_5x4_grid.avif";
 static AVIF_TEST_DIRS: &[&str] = &["tests", "av1-avif/testFiles"];
-static AVIF_CORRUPT_IMAGES: &[&str] = &[IMAGE_AVIF_CORRUPT, IMAGE_AVIF_CORRUPT_2];
+static AVIF_CORRUPT_IMAGES: &str = "tests/corrupt";
 
 // Adapted from https://github.com/GuillaumeGomez/audio-video-metadata/blob/9dff40f565af71d5502e03a2e78ae63df95cfd40/src/metadata.rs#L53
 #[test]
@@ -642,6 +644,19 @@ fn public_avif_bug_1661347() {
 }
 
 #[test]
+fn public_avif_bad_ipma_version() {
+    let input = &mut File::open(IMAGE_AVIF_CORRUPT_3).expect("Unknown file");
+    let expected_msg = "The version 0 should be used unless 32-bit item_ID values are needed";
+    match mp4::read_avif(input) {
+        Err(Error::InvalidData(msg)) if msg == expected_msg => {}
+        r => panic!(
+            "Expected Err(Error::InvalidData({:?})), found {:?}",
+            expected_msg, r
+        ),
+    }
+}
+
+#[test]
 #[ignore] // Remove when we add support; see https://github.com/mozilla/mp4parse-rust/issues/198
 fn public_avif_primary_item_is_grid() {
     let input = &mut File::open(IMAGE_AVIF_GRID).expect("Unknown file");
@@ -659,13 +674,7 @@ fn public_avif_read_samples() {
                 eprintln!("Skipping {:?}", path);
                 continue; // Skip directories, ReadMe.txt, etc.
             }
-            if AVIF_CORRUPT_IMAGES
-                .iter()
-                .find(|&&corrupt| {
-                    std::fs::canonicalize(corrupt).unwrap() == path.canonicalize().unwrap()
-                })
-                .is_some()
-            {
+            if path.parent().unwrap() == Path::new(AVIF_CORRUPT_IMAGES) {
                 eprintln!("Skipping {:?}", path);
                 continue;
             }
