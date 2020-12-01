@@ -1977,7 +1977,7 @@ fn read_ipma<T: Read>(
         U32::new(entry_count),
         num_association_bytes,
     )?;
-    let mut associations = TryVec::with_capacity(total_associations)?;
+    let mut associations = TryVec::<Association>::with_capacity(total_associations)?;
 
     for _ in 0..entry_count {
         let item_id = if version == 0 {
@@ -1985,6 +1985,17 @@ fn read_ipma<T: Read>(
         } else {
             be_u32(src)?
         };
+
+        if let Some(previous_association) = associations.last() {
+            if previous_association.item_id > item_id {
+                return Err(Error::InvalidData(
+                    "Each ItemPropertyAssociation box shall be ordered by increasing item_ID",
+                ));
+            } else if previous_association.item_id == item_id {
+                return Err(Error::InvalidData("There shall be at most one association box for each item_ID, in any ItemPropertyAssociation box"));
+            }
+        }
+
         let association_count = src.read_u8()?;
         for _ in 0..association_count {
             let association = src
@@ -2000,6 +2011,23 @@ fn read_ipma<T: Read>(
             })?;
         }
     }
+
+    check_parser_state!(src.content);
+
+    if version != 0 {
+        if let Some(Association {
+            item_id: max_item_id,
+            ..
+        }) = associations.last()
+        {
+            if *max_item_id <= u16::MAX.into() {
+                return Err(Error::InvalidData(
+                    "The version 0 should be used unless 32-bit item_ID values are needed",
+                ));
+            }
+        }
+    }
+
     Ok(associations)
 }
 
