@@ -2226,6 +2226,14 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemLocationBoxItem
             extents.push(extent)?;
         }
 
+        // TODO: change items to TryHashMap once https://github.com/vcombey/fallible_collections/pull/12 merges
+        if items
+            .iter()
+            .any(|prev_item: &ItemLocationBoxItem| prev_item.item_id == item_id)
+        {
+            return Err(Error::InvalidData("duplicate item_ID in iloc"));
+        }
+
         items.push(ItemLocationBoxItem {
             item_id,
             construction_method,
