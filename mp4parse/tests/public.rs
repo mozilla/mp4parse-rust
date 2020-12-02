@@ -33,6 +33,7 @@ static IMAGE_AVIF_EXTENTS: &str = "tests/kodim-extents.avif";
 static IMAGE_AVIF_CORRUPT: &str = "tests/corrupt/bug-1655846.avif";
 static IMAGE_AVIF_CORRUPT_2: &str = "tests/corrupt/bug-1661347.avif";
 static IMAGE_AVIF_CORRUPT_3: &str = "tests/corrupt/bad-ipma-version.avif";
+static IMAGE_AVIF_CORRUPT_4: &str = "tests/corrupt/bad-ipma-flags.avif";
 static IMAGE_AVIF_GRID: &str = "av1-avif/testFiles/Microsoft/Summer_in_Tomsk_720p_5x4_grid.avif";
 static AVIF_TEST_DIRS: &[&str] = &["tests", "av1-avif/testFiles"];
 static AVIF_CORRUPT_IMAGES: &str = "tests/corrupt";
@@ -643,17 +644,28 @@ fn public_avif_bug_1661347() {
     assert!(mp4::read_avif(input).is_err());
 }
 
-#[test]
-fn public_avif_bad_ipma_version() {
-    let input = &mut File::open(IMAGE_AVIF_CORRUPT_3).expect("Unknown file");
-    let expected_msg = "The version 0 should be used unless 32-bit item_ID values are needed";
-    match mp4::read_avif(input) {
+fn assert_invalid_data<T: std::fmt::Debug>(result: mp4::Result<T>, expected_msg: &str) {
+    match result {
         Err(Error::InvalidData(msg)) if msg == expected_msg => {}
         r => panic!(
             "Expected Err(Error::InvalidData({:?})), found {:?}",
             expected_msg, r
         ),
     }
+}
+
+#[test]
+fn public_avif_bad_ipma_version() {
+    let input = &mut File::open(IMAGE_AVIF_CORRUPT_3).expect("Unknown file");
+    let expected_msg = "The version 0 should be used unless 32-bit item_ID values are needed";
+    assert_invalid_data(mp4::read_avif(input), expected_msg);
+}
+
+#[test]
+fn public_avif_bad_ipma_flags() {
+    let input = &mut File::open(IMAGE_AVIF_CORRUPT_4).expect("Unknown file");
+    let expected_msg = "flags should be equal to 0 unless there are more than 127 properties in the ItemPropertyContainerBox";
+    assert_invalid_data(mp4::read_avif(input), expected_msg);
 }
 
 #[test]

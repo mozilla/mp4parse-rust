@@ -1758,12 +1758,15 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
             return Err(Error::InvalidData("unexpected iprp child"));
         }
 
-        let version_and_flags = read_fullbox_extra(&mut b)?;
-        if ipma_version_and_flag_values_seen.contains(&version_and_flags) {
+        let (version, flags) = read_fullbox_extra(&mut b)?;
+        if ipma_version_and_flag_values_seen.contains(&(version, flags)) {
             return Err(Error::InvalidData("Duplicate ipma with same version/flags"));
         }
-        ipma_version_and_flag_values_seen.push(version_and_flags)?;
-        let associations = read_ipma(&mut b, version_and_flags)?;
+        if flags != 0 && properties.len() <= 127 {
+            return Err(Error::InvalidData("flags should be equal to 0 unless there are more than 127 properties in the ItemPropertyContainerBox"));
+        }
+        ipma_version_and_flag_values_seen.push((version, flags))?;
+        let associations = read_ipma(&mut b, version, flags)?;
         for a in associations {
             if a.property_index == 0 {
                 if a.essential {
@@ -1965,7 +1968,8 @@ fn calculate_ipma_total_associations(
 /// See HEIF (ISO 23008-12:2017) § 9.3.1
 fn read_ipma<T: Read>(
     src: &mut BMFFBox<T>,
-    (version, flags): (u8, u32),
+    version: u8,
+    flags: u32,
 ) -> Result<TryVec<Association>> {
     let entry_count = be_u32(src)?;
     let num_association_bytes =
