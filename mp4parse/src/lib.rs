@@ -804,7 +804,7 @@ struct AvifMeta {
     item_references: TryVec<SingleItemTypeReferenceBox>,
     properties: TryVec<AssociatedProperty>,
     primary_item_id: u32,
-    iloc_items: TryVec<ItemLocationBoxItem>,
+    iloc_items: TryHashMap<u32, ItemLocationBoxItem>,
 }
 
 /// A Media Data Box
@@ -1060,7 +1060,6 @@ impl TryFrom<u8> for IlocVersion {
 /// `data_reference_index` is omitted, since only 0 (i.e., this file) is supported
 #[derive(Debug)]
 struct ItemLocationBoxItem {
-    item_id: u32,
     construction_method: ConstructionMethod,
     /// Unused for ConstructionMethod::Idat
     extents: TryVec<Extent>,
@@ -1449,10 +1448,10 @@ pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
     let mut alpha_item = None;
 
     // store data or record location of relevant items
-    for loc in meta.iloc_items {
-        let item = if loc.item_id == meta.primary_item_id {
+    for (item_id, loc) in meta.iloc_items {
+        let item = if item_id == meta.primary_item_id {
             &mut primary_item
-        } else if Some(loc.item_id) == alpha_item_id {
+        } else if Some(item_id) == alpha_item_id {
             &mut alpha_item
         } else {
             continue;
@@ -2118,7 +2117,7 @@ fn read_auxc<T: Read>(src: &mut BMFFBox<T>) -> Result<AuxiliaryTypeProperty> {
 
 /// Parse an item location box inside a meta box
 /// See ISOBMFF (ISO 14496-12:2015) § 8.11.3
-fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemLocationBoxItem>> {
+fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<u32, ItemLocationBoxItem>> {
     let version: IlocVersion = read_fullbox_version_no_flags(src)?.try_into()?;
 
     let iloc = src.read_into_try_vec()?;
@@ -2141,7 +2140,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemLocationBoxItem
         IlocVersion::Two => iloc.read_u32(32)?,
     };
 
-    let mut items = TryVec::with_capacity(item_count.to_usize())?;
+    let mut items = TryHashMap::with_capacity(item_count.to_usize())?;
 
     for _ in 0..item_count {
         let item_id = match version {
@@ -2230,11 +2229,14 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemLocationBoxItem
             extents.push(extent)?;
         }
 
-        items.push(ItemLocationBoxItem {
-            item_id,
+        let loc = ItemLocationBoxItem {
             construction_method,
             extents,
-        })?;
+        };
+
+        if items.insert(item_id, loc)?.is_some() {
+            return Err(Error::InvalidData("duplicate item_ID in iloc"));
+        }
     }
 
     if iloc.remaining() == 0 {
