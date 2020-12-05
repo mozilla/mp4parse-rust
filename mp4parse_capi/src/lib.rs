@@ -1201,6 +1201,28 @@ pub unsafe extern "C" fn mp4parse_avif_get_primary_item(
     Mp4parseStatus::Ok
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn mp4parse_avif_get_alpha_item(
+    parser: *mut Mp4parseAvifParser,
+    alpha_item: *mut Mp4parseByteData,
+    premultiplied_alpha: *mut bool,
+) -> Mp4parseStatus {
+    if parser.is_null() {
+        return Mp4parseStatus::BadArg;
+    }
+
+    *alpha_item = Default::default();
+
+    let context = (*parser).context();
+    if let Some(context_alpha_item) = context.alpha_item() {
+        (*alpha_item).set_data(context_alpha_item);
+        *premultiplied_alpha = context.premultiplied_alpha;
+        Mp4parseStatus::Ok
+    } else {
+        Mp4parseStatus::Invalid
+    }
+}
+
 /// Fill the supplied `Mp4parseByteData` with index information from `track`.
 ///
 /// # Safety
