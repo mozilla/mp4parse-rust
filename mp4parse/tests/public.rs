@@ -30,6 +30,7 @@ static VIDEO_EME_CBCS_MP4: &str = "tests/bipbop_cbcs_video_init.mp4";
 static VIDEO_AV1_MP4: &str = "tests/tiny_av1.mp4";
 static IMAGE_AVIF: &str = "av1-avif/testFiles/Microsoft/Monochrome.avif";
 static IMAGE_AVIF_EXTENTS: &str = "tests/kodim-extents.avif";
+static IMAGE_AVIF_ALPHA: &str = "tests/bug-1661347.avif";
 static IMAGE_AVIF_CORRUPT: &str = "tests/corrupt/bug-1655846.avif";
 static IMAGE_AVIF_CORRUPT_2: &str = "tests/corrupt/bug-1661347.avif";
 static IMAGE_AVIF_CORRUPT_3: &str = "tests/corrupt/bad-ipma-version.avif";
@@ -630,6 +631,14 @@ fn public_avif_primary_item_split_extents() {
     let input = &mut File::open(IMAGE_AVIF_EXTENTS).expect("Unknown file");
     let context = mp4::read_avif(input).expect("read_avif failed");
     assert_eq!(context.primary_item().len(), 4387);
+}
+
+#[test]
+fn public_avif_alpha_item() {
+    let input = &mut File::open(IMAGE_AVIF_ALPHA).expect("Unknown file");
+    let context = mp4::read_avif(input).expect("read_avif failed");
+    assert!(context.alpha_item().is_some());
+    assert!(!context.premultiplied_alpha);
 }
 
 #[test]
