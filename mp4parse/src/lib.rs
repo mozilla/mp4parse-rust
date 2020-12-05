@@ -2039,7 +2039,7 @@ fn read_ipma<T: Read>(
 fn read_ipco<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<u16, ItemProperty>> {
     let mut properties = TryHashMap::with_capacity(1)?;
 
-    let mut index = 1; // ipma uses 1-based indexing
+    let mut index: u16 = 1; // ipma uses 1-based indexing
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         if let Some(property) = match b.head.name {
@@ -2053,7 +2053,9 @@ fn read_ipco<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<u16, ItemProper
             properties.insert(index, property)?;
         }
 
-        index += 1; // must include ignored properties to have correct indexes
+        index = index
+            .checked_add(1) // must include ignored properties to have correct indexes
+            .ok_or(Error::InvalidData("ipco index overflow"))?;
 
         check_parser_state!(b.content);
     }
