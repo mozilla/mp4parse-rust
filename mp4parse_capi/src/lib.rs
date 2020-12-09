@@ -16,8 +16,8 @@
 //!        Err(_) => -1,
 //!    }
 //! }
-//!
-//! let mut file = std::fs::File::open("mp4parse/tests/minimal.mp4").unwrap();
+//! let capi_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+//! let mut file = std::fs::File::open(capi_dir + "/../mp4parse/tests/minimal.mp4").unwrap();
 //! let io = mp4parse_capi::Mp4parseIo {
 //!     read: Some(buf_read),
 //!     userdata: &mut file as *mut _ as *mut std::os::raw::c_void
