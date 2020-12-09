@@ -29,12 +29,8 @@ fuzz_target!(|data: &[u8]| {
             return;
         }
 
-        let mut primary_item = Default::default();
-        mp4parse_avif_get_primary_item(context, &mut primary_item);
-
-        let mut alpha_item = Default::default();
-        let mut premultiplied_alpha = Default::default();
-        mp4parse_avif_get_alpha_item(context, &mut alpha_item, &mut premultiplied_alpha);
+        let mut avif_image = Default::default();
+        mp4parse_avif_get_image(context, &mut avif_image);
 
         mp4parse_avif_free(context);
     }

@@ -436,6 +436,14 @@ pub struct Mp4parseParser {
     video_track_sample_descriptions: TryHashMap<u32, TryVec<Mp4parseTrackVideoSampleInfo>>,
 }
 
+#[repr(C)]
+#[derive(Default)]
+pub struct AvifImage {
+    pub primary_item: Mp4parseByteData,
+    pub alpha_item: Mp4parseByteData,
+    pub premultiplied_alpha: bool,
+}
+
 /// A unified interface for the parsers which have different contexts, but
 /// share the same pattern of construction. This allows unification of
 /// argument validation from C and minimizes the surface of unsafe code.
@@ -1177,50 +1185,35 @@ fn mp4parse_get_track_video_info_safe(
 /// # Safety
 ///
 /// This function is unsafe because it dereferences both the parser and
-/// primary_item raw pointers passed into it. Callers should ensure the parser
-/// pointer points to a valid `Mp4parseAvifParser`, and that the primary_item
-/// pointer points to a valid `Mp4parseByteData`. If there was not a previous
+/// avif_image raw pointers passed into it. Callers should ensure the parser
+/// pointer points to a valid `Mp4parseAvifParser`, and that the avif_image
+/// pointer points to a valid `AvifImage`. If there was not a previous
 /// successful call to `mp4parse_avif_read()`, no guarantees are made as to
-/// the state of `primary_item`.
+/// the state of `avif_image`. If `avif_image.alpha_item` are set with a
+/// positive`length` and non-null `data`, then the `avif_image` contains an
+/// valid alpha channel data. Otherwise, the image is opaque.
 #[no_mangle]
-pub unsafe extern "C" fn mp4parse_avif_get_primary_item(
+pub unsafe extern "C" fn mp4parse_avif_get_image(
     parser: *mut Mp4parseAvifParser,
-    primary_item: *mut Mp4parseByteData,
+    avif_image: *mut AvifImage,
 ) -> Mp4parseStatus {
-    if parser.is_null() {
+    if parser.is_null() || avif_image.is_null() {
         return Mp4parseStatus::BadArg;
     }
 
     // Initialize fields to default values to ensure all fields are always valid.
-    *primary_item = Default::default();
+    *avif_image = Default::default();
+    let image_ref = &mut (*avif_image);
 
     let context = (*parser).context();
 
-    (*primary_item).set_data(context.primary_item());
+    image_ref.primary_item.set_data(context.primary_item());
+    if let Some(context_alpha_item) = context.alpha_item() {
+        image_ref.alpha_item.set_data(context_alpha_item);
+        image_ref.premultiplied_alpha = context.premultiplied_alpha;
+    }
 
     Mp4parseStatus::Ok
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn mp4parse_avif_get_alpha_item(
-    parser: *mut Mp4parseAvifParser,
-    alpha_item: *mut Mp4parseByteData,
-    premultiplied_alpha: *mut bool,
-) -> Mp4parseStatus {
-    if parser.is_null() {
-        return Mp4parseStatus::BadArg;
-    }
-
-    *alpha_item = Default::default();
-
-    let context = (*parser).context();
-    if let Some(context_alpha_item) = context.alpha_item() {
-        (*alpha_item).set_data(context_alpha_item);
-        *premultiplied_alpha = context.premultiplied_alpha;
-        Mp4parseStatus::Ok
-    } else {
-        Mp4parseStatus::Invalid
-    }
 }
 
 /// Fill the supplied `Mp4parseByteData` with index information from `track`.
