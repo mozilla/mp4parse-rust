@@ -1189,8 +1189,8 @@ fn mp4parse_get_track_video_info_safe(
 /// pointer points to a valid `Mp4parseAvifParser`, and that the avif_image
 /// pointer points to a valid `AvifImage`. If there was not a previous
 /// successful call to `mp4parse_avif_read()`, no guarantees are made as to
-/// the state of `avif_image`. If `avif_image.alpha_item` are set with a
-/// positive`length` and non-null `data`, then the `avif_image` contains an
+/// the state of `avif_image`. If `avif_image.alpha_item` is set to a
+/// positive `length` and non-null `data`, then the `avif_image` contains an
 /// valid alpha channel data. Otherwise, the image is opaque.
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_avif_get_image(
@@ -1203,14 +1203,12 @@ pub unsafe extern "C" fn mp4parse_avif_get_image(
 
     // Initialize fields to default values to ensure all fields are always valid.
     *avif_image = Default::default();
-    let image_ref = &mut (*avif_image);
-
     let context = (*parser).context();
 
-    image_ref.primary_item.set_data(context.primary_item());
+    (*avif_image).primary_item.set_data(context.primary_item());
     if let Some(context_alpha_item) = context.alpha_item() {
-        image_ref.alpha_item.set_data(context_alpha_item);
-        image_ref.premultiplied_alpha = context.premultiplied_alpha;
+        (*avif_image).alpha_item.set_data(context_alpha_item);
+        (*avif_image).premultiplied_alpha = context.premultiplied_alpha;
     }
 
     Mp4parseStatus::Ok
