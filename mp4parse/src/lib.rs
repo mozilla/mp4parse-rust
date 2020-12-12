@@ -738,12 +738,6 @@ pub struct MediaContext {
     pub userdata: Option<Result<UserdataBox>>,
 }
 
-impl MediaContext {
-    pub fn new() -> MediaContext {
-        Default::default()
-    }
-}
-
 /// An ISOBMFF item as described by an iloc box. For the sake of avoiding copies,
 /// this can either be represented by the `Location` variant, which indicates
 /// where the data exists within a `MediaDataBox` stored separately, or the
@@ -2278,7 +2272,7 @@ pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
                 debug!("{:?}", ftyp);
             }
             BoxType::MovieBox => {
-                context = Some(read_moov(&mut b)?);
+                context = Some(read_moov(&mut b, context)?);
             }
             _ => skip_box_content(&mut b)?,
         };
@@ -2301,6 +2295,8 @@ pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
     context.ok_or(Error::NoMoov)
 }
 
+/// Parse a Movie Header Box
+/// See ISOBMFF (ISO 14496-12:2015) § 8.2.2
 fn parse_mvhd<T: Read>(f: &mut BMFFBox<T>) -> Result<Option<MediaTimeScale>> {
     let mvhd = read_mvhd(f)?;
     debug!("{:?}", mvhd);
@@ -2311,14 +2307,19 @@ fn parse_mvhd<T: Read>(f: &mut BMFFBox<T>) -> Result<Option<MediaTimeScale>> {
     Ok(timescale)
 }
 
-fn read_moov<T: Read>(f: &mut BMFFBox<T>) -> Result<MediaContext> {
+/// Parse a Movie Box
+/// See ISOBMFF (ISO 14496-12:2015) § 8.2.1
+/// Note that despite the spec indicating "exactly one" moov box should exist at
+/// the file container level, we support reading and merging multiple moov boxes
+/// such as with tests/test_case_1185230.mp4.
+fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Result<MediaContext> {
     let MediaContext {
         mut timescale,
         mut tracks,
         mut mvex,
         mut psshs,
         mut userdata,
-    } = Default::default();
+    } = context.unwrap_or_default();
 
     let mut iter = f.box_iter();
     while let Some(mut b) = iter.next_box()? {
@@ -2396,6 +2397,8 @@ fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHe
     })
 }
 
+/// Parse a Movie Extends Box
+/// See ISOBMFF (ISO 14496-12:2015) § 8.8.1
 fn read_mvex<T: Read>(src: &mut BMFFBox<T>) -> Result<MovieExtendsBox> {
     let mut iter = src.box_iter();
     let mut fragment_duration = None;
@@ -2421,6 +2424,8 @@ fn read_mehd<T: Read>(src: &mut BMFFBox<T>) -> Result<MediaScaledTime> {
     Ok(MediaScaledTime(fragment_duration))
 }
 
+/// Parse a Track Box
+/// See ISOBMFF (ISO 14496-12:2015) § 8.3.1.
 fn read_trak<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
     let mut iter = f.box_iter();
     while let Some(mut b) = iter.next_box()? {
@@ -3940,6 +3945,7 @@ fn read_schm<T: Read>(src: &mut BMFFBox<T>) -> Result<SchemeTypeBox> {
 }
 
 /// Parse a metadata box inside a moov, trak, or mdia box.
+/// See ISOBMFF (ISO 14496-12:2015) § 8.10.1.
 fn read_udta<T: Read>(src: &mut BMFFBox<T>) -> Result<UserdataBox> {
     let mut iter = src.box_iter();
     let mut udta = UserdataBox { meta: None };
