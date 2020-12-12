@@ -757,7 +757,13 @@ enum AvifItem {
     Data(TryVec<u8>),
 }
 
-#[derive(Debug)]
+impl Default for AvifItem {
+    fn default() -> Self {
+        Self::Data(Default::default())
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct AvifContext {
     /// Referred to by the `Location` variants of the `AvifItem`s in this struct
     item_storage: TryVec<MediaDataBox>,
@@ -771,6 +777,10 @@ pub struct AvifContext {
 }
 
 impl AvifContext {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
     pub fn primary_item(&self) -> &[u8] {
         self.item_as_slice(&self.primary_item)
     }
@@ -1360,7 +1370,10 @@ fn skip_box_remain<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
 }
 
 /// Read the contents of an AVIF file
-pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
+///
+/// Metadata is accumulated in the passed-through `AvifContext` struct,
+/// which can be examined later.
+pub fn read_avif<T: Read>(f: &mut T, context: &mut AvifContext) -> Result<()> {
     let _ = env_logger::try_init();
 
     let mut f = OffsetReader::new(f);
@@ -1507,12 +1520,12 @@ pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
     // We could potentially optimize memory usage by trying to avoid reading
     // or storing mdat boxes which aren't used by our API, but for now it seems
     // like unnecessary complexity
-    Ok(AvifContext {
-        item_storage,
-        primary_item,
-        alpha_item,
-        premultiplied_alpha,
-    })
+
+    context.item_storage = item_storage;
+    context.primary_item = primary_item;
+    context.alpha_item = alpha_item;
+    context.premultiplied_alpha = premultiplied_alpha;
+    Ok(())
 }
 
 /// Parse a metadata box in the context of an AVIF
@@ -2249,9 +2262,12 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<u32, ItemLocati
 }
 
 /// Read the contents of a box, including sub boxes.
-pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
-    let mut context = None;
+///
+/// Metadata is accumulated in the passed-through `MediaContext` struct,
+/// which can be examined later.
+pub fn read_mp4<T: Read>(f: &mut T, context: &mut MediaContext) -> Result<()> {
     let mut found_ftyp = false;
+    let mut found_moov = false;
     // TODO(kinetik): Top-level parsing should handle zero-sized boxes
     // rather than throwing an error.
     let mut iter = BoxIter::new(f);
@@ -2278,12 +2294,13 @@ pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
                 debug!("{:?}", ftyp);
             }
             BoxType::MovieBox => {
-                context = Some(read_moov(&mut b)?);
+                read_moov(&mut b, context)?;
+                found_moov = true;
             }
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
-        if context.is_some() {
+        if found_moov {
             debug!(
                 "found moov {}, could stop pure 'moov' parser now",
                 if found_ftyp {
@@ -2298,7 +2315,11 @@ pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
     // XXX(kinetik): This isn't perfect, as a "moov" with no contents is
     // treated as okay but we haven't found anything useful.  Needs more
     // thought for clearer behaviour here.
-    context.ok_or(Error::NoMoov)
+    if found_moov {
+        Ok(())
+    } else {
+        Err(Error::NoMoov)
+    }
 }
 
 fn parse_mvhd<T: Read>(f: &mut BMFFBox<T>) -> Result<Option<MediaTimeScale>> {
@@ -2311,51 +2332,39 @@ fn parse_mvhd<T: Read>(f: &mut BMFFBox<T>) -> Result<Option<MediaTimeScale>> {
     Ok(timescale)
 }
 
-fn read_moov<T: Read>(f: &mut BMFFBox<T>) -> Result<MediaContext> {
-    let MediaContext {
-        mut timescale,
-        mut tracks,
-        mut mvex,
-        mut psshs,
-        mut userdata,
-    } = Default::default();
-
+fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: &mut MediaContext) -> Result<()> {
     let mut iter = f.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::MovieHeaderBox => {
-                timescale = parse_mvhd(&mut b)?;
+                context.timescale = parse_mvhd(&mut b)?;
             }
             BoxType::TrackBox => {
-                let mut track = Track::new(tracks.len());
+                let mut track = Track::new(context.tracks.len());
                 read_trak(&mut b, &mut track)?;
-                tracks.push(track)?;
+                context.tracks.push(track)?;
             }
             BoxType::MovieExtendsBox => {
-                mvex = Some(read_mvex(&mut b)?);
+                let mvex = read_mvex(&mut b)?;
                 debug!("{:?}", mvex);
+                context.mvex = Some(mvex);
             }
             BoxType::ProtectionSystemSpecificHeaderBox => {
                 let pssh = read_pssh(&mut b)?;
                 debug!("{:?}", pssh);
-                psshs.push(pssh)?;
+                context.psshs.push(pssh)?;
             }
             BoxType::UserdataBox => {
-                userdata = Some(read_udta(&mut b));
-                debug!("{:?}", userdata);
+                let udta = read_udta(&mut b);
+                debug!("{:?}", udta);
+                context.userdata = Some(udta);
             }
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
     }
 
-    Ok(MediaContext {
-        timescale,
-        tracks,
-        mvex,
-        psshs,
-        userdata,
-    })
+    Ok(())
 }
 
 fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHeaderBox> {

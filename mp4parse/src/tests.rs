@@ -7,6 +7,7 @@
 
 use super::read_mp4;
 use super::Error;
+use super::MediaContext;
 use fallible_collections::TryRead as _;
 
 use std::convert::TryInto as _;
@@ -194,7 +195,8 @@ fn read_truncated_ftyp() {
             .B32(0) // minor version
             .append_bytes(b"isom")
     });
-    match read_mp4(&mut stream) {
+    let mut context = MediaContext::new();
+    match read_mp4(&mut stream, &mut context) {
         Err(Error::UnexpectedEOF) => (),
         Ok(_) => panic!("expected an error result"),
         _ => panic!("expected a different error result"),
@@ -1247,8 +1249,9 @@ fn read_invalid_pssh() {
     let mut stream = make_box(BoxSize::Auto, b"moov", |s| s.append_bytes(pssh.as_slice()));
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
+    let mut context = super::MediaContext::new();
 
-    match super::read_moov(&mut stream) {
+    match super::read_moov(&mut stream, &mut context) {
         Err(Error::InvalidData(s)) => assert_eq!(s, "read_buf size exceeds BUF_SIZE_LIMIT"),
         _ => panic!("unexpected result with invalid descriptor"),
     }
