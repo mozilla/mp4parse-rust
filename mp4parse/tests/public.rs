@@ -619,6 +619,24 @@ fn public_video_av1() {
 }
 
 #[test]
+fn public_mp4_bug_1185230() {
+    let input = &mut File::open("tests/test_case_1185230.mp4").expect("Unknown file");
+    let context = mp4::read_mp4(input).expect("read_mp4 failed");
+    let number_video_tracks = context
+        .tracks
+        .iter()
+        .filter(|t| t.track_type == mp4::TrackType::Video)
+        .count();
+    let number_audio_tracks = context
+        .tracks
+        .iter()
+        .filter(|t| t.track_type == mp4::TrackType::Audio)
+        .count();
+    assert_eq!(number_video_tracks, 2);
+    assert_eq!(number_audio_tracks, 2);
+}
+
+#[test]
 fn public_avif_primary_item() {
     let input = &mut File::open(IMAGE_AVIF).expect("Unknown file");
     let context = mp4::read_avif(input).expect("read_avif failed");

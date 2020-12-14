@@ -1248,7 +1248,7 @@ fn read_invalid_pssh() {
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
 
-    match super::read_moov(&mut stream) {
+    match super::read_moov(&mut stream, None) {
         Err(Error::InvalidData(s)) => assert_eq!(s, "read_buf size exceeds BUF_SIZE_LIMIT"),
         _ => panic!("unexpected result with invalid descriptor"),
     }
