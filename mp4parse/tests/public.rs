@@ -41,7 +41,6 @@ static AVIF_CORRUPT_IMAGES: &str = "tests/corrupt";
 
 // Adapted from https://github.com/GuillaumeGomez/audio-video-metadata/blob/9dff40f565af71d5502e03a2e78ae63df95cfd40/src/metadata.rs#L53
 #[test]
-#[allow(clippy::cognitive_complexity)] // TODO: Consider simplifying this
 fn public_api() {
     let mut fd = File::open(MINI_MP4).expect("Unknown file");
     let mut buf = Vec::new();
@@ -161,7 +160,6 @@ fn public_api() {
 }
 
 #[test]
-#[allow(clippy::cognitive_complexity)] // TODO: Consider simplifying this
 fn public_metadata() {
     let mut fd = File::open(MINI_MP4_WITH_METADATA).expect("Unknown file");
     let mut buf = Vec::new();
@@ -228,7 +226,6 @@ fn public_metadata() {
 }
 
 #[test]
-#[allow(clippy::cognitive_complexity)] // TODO: Consider simplifying this
 fn public_metadata_gnre() {
     let mut fd = File::open(MINI_MP4_WITH_METADATA_STD_GENRE).expect("Unknown file");
     let mut buf = Vec::new();
@@ -486,7 +483,6 @@ fn public_audio_cbcs() {
 }
 
 #[test]
-#[allow(clippy::cognitive_complexity)] // TODO: Consider simplifying this
 fn public_video_cbcs() {
     let system_id = vec![
         0x10, 0x77, 0xef, 0xec, 0xc0, 0xb2, 0x4d, 0x02, 0xac, 0xe3, 0x3c, 0x1e, 0x52, 0xe2, 0xfb,
@@ -567,7 +563,6 @@ fn public_video_cbcs() {
 }
 
 #[test]
-#[allow(clippy::cognitive_complexity)] // TODO: Consider simplifying this
 fn public_video_av1() {
     let mut fd = File::open(VIDEO_AV1_MP4).expect("Unknown file");
     let mut buf = Vec::new();
