@@ -6,6 +6,7 @@ authors = [
   "Matthew Gregan <kinetik@flim.org>",
   "Alfredo Yang <ayang@mozilla.com>",
   "Jon Bauman <jbauman@mozilla.com>",
+  "Bryce Seager van Dyk <bvandyk@mozilla.com>",
 ]
 
 description = "Parser for ISO base media file format (mp4)"
