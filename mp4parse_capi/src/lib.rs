@@ -125,6 +125,7 @@ pub enum Mp4parseCodec {
     Ac3,
     Ec3,
     Alac,
+    H263,
 }
 
 impl Default for Mp4parseCodec {
@@ -1103,6 +1104,7 @@ fn mp4parse_get_track_video_info_safe(
             VideoCodecSpecific::VPxConfig(_) => Mp4parseCodec::Vp9,
             VideoCodecSpecific::AV1Config(_) => Mp4parseCodec::Av1,
             VideoCodecSpecific::AVCConfig(_) => Mp4parseCodec::Avc,
+            VideoCodecSpecific::H263Config(_) => Mp4parseCodec::H263,
             VideoCodecSpecific::ESDSConfig(_) =>
             // MP4V (14496-2) video is unsupported.
             {
