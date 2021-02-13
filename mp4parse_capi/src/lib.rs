@@ -51,8 +51,6 @@ use std::ops::Neg;
 use std::ops::{Add, Sub};
 
 // Symbols we need from our rust api.
-use mp4parse::read_avif;
-use mp4parse::read_mp4;
 use mp4parse::serialize_opus_header;
 use mp4parse::AudioCodecSpecific;
 use mp4parse::AvifContext;
@@ -480,7 +478,9 @@ impl ContextParser for Mp4parseParser {
     }
 
     fn read<T: Read>(io: &mut T) -> mp4parse::Result<Self::Context> {
-        read_mp4(io)
+        let r = mp4parse::read_mp4(io);
+        log::debug!("mp4parse::read_mp4 -> {:?}", r);
+        r
     }
 }
 
@@ -502,7 +502,9 @@ impl ContextParser for Mp4parseAvifParser {
     }
 
     fn read<T: Read>(io: &mut T) -> mp4parse::Result<Self::Context> {
-        read_avif(io)
+        let r = mp4parse::read_avif(io);
+        log::debug!("mp4parse::read_avif -> {:?}", r);
+        r
     }
 }
 
