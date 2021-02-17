@@ -126,6 +126,8 @@ pub enum Mp4parseCodec {
     Ec3,
     Alac,
     H263,
+    AMRNB,
+    AMRWB,
 }
 
 impl Default for Mp4parseCodec {
@@ -895,6 +897,14 @@ fn get_track_audio_info(
             }
             AudioCodecSpecific::MP3 => Mp4parseCodec::Mp3,
             AudioCodecSpecific::ALACSpecificBox(_) => Mp4parseCodec::Alac,
+            AudioCodecSpecific::AMRSpecificBox(_) | AudioCodecSpecific::AMRSpecificEmptyBox
+                if audio.codec_type == CodecType::AMRNB =>
+            {
+                Mp4parseCodec::AMRNB
+            }
+            AudioCodecSpecific::AMRSpecificBox(_) | AudioCodecSpecific::AMRSpecificEmptyBox => {
+                Mp4parseCodec::AMRWB
+            }
         };
         sample_info.channels = audio.channelcount as u16;
         sample_info.bit_depth = audio.samplesize;
@@ -955,7 +965,10 @@ fn get_track_audio_info(
                 sample_info.codec_specific_config.length = alac.data.len() as u32;
                 sample_info.codec_specific_config.data = alac.data.as_ptr();
             }
-            AudioCodecSpecific::MP3 | AudioCodecSpecific::LPCM => (),
+            AudioCodecSpecific::MP3
+            | AudioCodecSpecific::LPCM
+            | AudioCodecSpecific::AMRSpecificBox(_)
+            | AudioCodecSpecific::AMRSpecificEmptyBox => (),
         }
 
         if let Some(p) = audio
