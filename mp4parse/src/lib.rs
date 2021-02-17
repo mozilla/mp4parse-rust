@@ -470,10 +470,18 @@ pub struct AV1ConfigBox {
     pub chroma_sample_position: u8,
     pub initial_presentation_delay_present: bool,
     pub initial_presentation_delay_minus_one: u8,
-    pub config_obus: TryVec<u8>,
     // The raw config contained in the av1c box. Because some decoders accept this data as a binary
     // blob, rather than as structured data, we store the blob here for convenience.
     pub raw_config: TryVec<u8>,
+}
+
+impl AV1ConfigBox {
+    /// See https://aomediacodec.github.io/av1-isobmff/#av1codecconfigurationbox-syntax
+    const CONFIG_OBUS_OFFSET: usize = 4;
+
+    pub fn config_obus(&self) -> &[u8] {
+        &self.raw_config[Self::CONFIG_OBUS_OFFSET..]
+    }
 }
 
 #[derive(Debug)]
@@ -3015,7 +3023,7 @@ fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
 fn read_av1c<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1ConfigBox> {
     // We want to store the raw config as well as a structured (parsed) config, so create a copy of
     // the raw config so we have it later, and then parse the structured data from that.
-    let raw_config = read_buf(src, src.bytes_left())?;
+    let raw_config = src.read_into_try_vec()?;
     let mut raw_config_slice = raw_config.as_slice();
     let marker_byte = raw_config_slice.read_u8()?;
     if marker_byte & 0x80 != 0x80 {
@@ -3046,9 +3054,6 @@ fn read_av1c<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1ConfigBox> {
         0
     };
 
-    let config_obus_size = raw_config_slice.len().to_u64();
-    let config_obus = read_buf(&mut raw_config_slice, config_obus_size)?;
-
     Ok(AV1ConfigBox {
         profile,
         level,
@@ -3060,7 +3065,6 @@ fn read_av1c<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1ConfigBox> {
         chroma_sample_position,
         initial_presentation_delay_present,
         initial_presentation_delay_minus_one,
-        config_obus,
         raw_config,
     })
 }
