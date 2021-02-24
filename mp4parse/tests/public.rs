@@ -166,8 +166,7 @@ fn public_api() {
                             "LPCM"
                         }
                         #[cfg(feature = "3gpp")]
-                        mp4::AudioCodecSpecific::AMRSpecificBox(_)
-                        | mp4::AudioCodecSpecific::AMRSpecificEmptyBox => {
+                        mp4::AudioCodecSpecific::AMRSpecificBox(_) => {
                             "AMR"
                         }
                     },
@@ -828,8 +827,7 @@ fn public_audio_amrnb() {
         };
         assert!(a.codec_type == mp4::CodecType::AMRNB);
         let _codec_specific = match a.codec_specific {
-            mp4::AudioCodecSpecific::AMRSpecificBox(_)
-            | mp4::AudioCodecSpecific::AMRSpecificEmptyBox => true,
+            mp4::AudioCodecSpecific::AMRSpecificBox(_) => true,
             _ => {
                 panic!("expected a AMRSpecificBox",);
             }
@@ -854,8 +852,7 @@ fn public_audio_amrwb() {
         };
         assert!(a.codec_type == mp4::CodecType::AMRWB);
         let _codec_specific = match a.codec_specific {
-            mp4::AudioCodecSpecific::AMRSpecificBox(_)
-            | mp4::AudioCodecSpecific::AMRSpecificEmptyBox => true,
+            mp4::AudioCodecSpecific::AMRSpecificBox(_) => true,
             _ => {
                 panic!("expected a AMRSpecificBox",);
             }

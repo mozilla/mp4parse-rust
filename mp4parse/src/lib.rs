@@ -401,10 +401,6 @@ pub enum AudioCodecSpecific {
     LPCM,
     #[cfg(feature = "3gpp")]
     AMRSpecificBox(TryVec<u8>),
-    // Some mp4 file with AMR doesn't have above AMRSpecificBox "damr",
-    // we use empty box instead.
-    #[cfg(feature = "3gpp")]
-    AMRSpecificEmptyBox,
 }
 
 #[derive(Debug)]
@@ -3769,12 +3765,12 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
         #[cfg(feature = "3gpp")]
         BoxType::AMRNBSampleEntry => (
             CodecType::AMRNB,
-            Some(AudioCodecSpecific::AMRSpecificEmptyBox),
+            Some(AudioCodecSpecific::AMRSpecificBox(Default::default())),
         ),
         #[cfg(feature = "3gpp")]
         BoxType::AMRWBSampleEntry => (
             CodecType::AMRWB,
-            Some(AudioCodecSpecific::AMRSpecificEmptyBox),
+            Some(AudioCodecSpecific::AMRSpecificBox(Default::default())),
         ),
         _ => (CodecType::Unknown, None),
     };
