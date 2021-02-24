@@ -399,9 +399,11 @@ pub enum AudioCodecSpecific {
     ALACSpecificBox(ALACSpecificBox),
     MP3,
     LPCM,
+    #[cfg(feature = "3gpp")]
     AMRSpecificBox(TryVec<u8>),
     // Some mp4 file with AMR doesn't have above AMRSpecificBox "damr",
     // we use empty box instead.
+    #[cfg(feature = "3gpp")]
     AMRSpecificEmptyBox,
 }
 
@@ -1128,7 +1130,9 @@ pub enum CodecType {
     LPCM, // QT
     ALAC,
     H263,
+    #[cfg(feature = "3gpp")]
     AMRNB,
+    #[cfg(feature = "3gpp")]
     AMRWB,
 }
 
@@ -3762,10 +3766,12 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
         BoxType::LPCMAudioSampleEntry => (CodecType::LPCM, Some(AudioCodecSpecific::LPCM)),
         // Some mp4 file with AMR doesn't have AMRSpecificBox "damr" in followed while loop,
         // we use empty box by default.
+        #[cfg(feature = "3gpp")]
         BoxType::AMRNBSampleEntry => (
             CodecType::AMRNB,
             Some(AudioCodecSpecific::AMRSpecificEmptyBox),
         ),
+        #[cfg(feature = "3gpp")]
         BoxType::AMRWBSampleEntry => (
             CodecType::AMRWB,
             Some(AudioCodecSpecific::AMRSpecificEmptyBox),
@@ -3829,6 +3835,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 codec_type = CodecType::EncryptedAudio;
                 protection_info.push(sinf)?;
             }
+            #[cfg(feature = "3gpp")]
             BoxType::AMRSpecificBox => {
                 if codec_type != CodecType::AMRNB && codec_type != CodecType::AMRWB {
                     return Err(Error::InvalidData("malformed audio sample entry"));
