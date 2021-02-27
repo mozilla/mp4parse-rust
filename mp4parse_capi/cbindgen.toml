@@ -15,3 +15,6 @@ cpp_compat = true
 
 [enum]
 rename_variants = "QualifiedScreamingSnakeCase"
+
+[defines]
+"feature = 3gpp" = "MP4PARSE_FEATURE_3GPP"
