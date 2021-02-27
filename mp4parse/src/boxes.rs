@@ -138,8 +138,11 @@ box_database!(
     H263SpecificBox                   0x6432_3633, // "d263"
     MP4AudioSampleEntry               0x6d70_3461, // "mp4a"
     MP4VideoSampleEntry               0x6d70_3476, // "mp4v"
+    #[cfg(feature = "3gpp")]
     AMRNBSampleEntry                  0x7361_6d72, // "samr" - AMR narrow-band
+    #[cfg(feature = "3gpp")]
     AMRWBSampleEntry                  0x7361_7762, // "sawb" - AMR wide-band
+    #[cfg(feature = "3gpp")]
     AMRSpecificBox                    0x6461_6d72, // "damr"
     ESDBox                            0x6573_6473, // "esds"
     VP8SampleEntry                    0x7670_3038, // "vp08"
