@@ -1,0 +1,63 @@
+name: Build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: Build Rust ${{ matrix.rust }} on ${{ matrix.os }}, release=${{ matrix.release }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-10.15]
+        rust: [stable]
+        release: [true, false]
+        experimental: [false]
+        include:
+          - os: ubuntu-20.04
+            rust: nightly
+            release: false
+            experimental: true
+          - os: windows-2019
+            rust: nightly
+            release: false
+            experimental: true
+          - os: macos-10.15
+            rust: nightly
+            release: false
+            experimental: true
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Install Rust
+      run: rustup toolchain install ${{ matrix.rust }} --profile minimal --component rustfmt
+
+    - name: Check format
+      shell: bash
+      run: rustup run ${{ matrix.rust }} cargo fmt --all -- --check
+
+    - name: Test (release)
+      shell: bash
+      run: rustup run ${{ matrix.rust }} cargo test --all --verbose --release
+      if: matrix.release
+
+    - name: Test (debug)
+      shell: bash
+      run: rustup run ${{ matrix.rust }} cargo test --all --verbose
+      if: ${{ !matrix.release }}
+
+    # cargo-fuzz supports x86-64 Linux and x86-64 macOS, but macOS currently fails, see:
+    # https://github.com/mozilla/mp4parse-rust/pull/210#issuecomment-597420191
+    - name: Install cargo-fuzz
+      run: rustup run ${{ matrix.rust }} cargo install cargo-fuzz
+      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.rust == 'nightly' }}
+
+    - name: Build fuzzer
+      working-directory: mp4parse_capi
+      run: rustup run ${{ matrix.rust }} cargo fuzz build
+      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.rust == 'nightly' }}
+
