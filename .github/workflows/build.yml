@@ -34,11 +34,15 @@ jobs:
         submodules: recursive
 
     - name: Install Rust
-      run: rustup toolchain install ${{ matrix.rust }} --profile minimal --component rustfmt
+      run: rustup toolchain install ${{ matrix.rust }} --profile minimal --component rustfmt clippy
 
     - name: Check format
       shell: bash
       run: rustup run ${{ matrix.rust }} cargo fmt --all -- --check
+
+    - name: Clippy
+      shell: bash
+      run: rustup run ${{ matrix.rust }} cargo clippy --all -- -D warnings
 
     - name: Test (release)
       shell: bash
