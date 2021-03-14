@@ -998,14 +998,10 @@ fn get_track_audio_info(
                 sample_info.protected_data.is_encrypted = tenc.is_encrypted;
                 sample_info.protected_data.iv_size = tenc.iv_size;
                 sample_info.protected_data.kid.set_data(&(tenc.kid));
-                sample_info.protected_data.crypt_byte_block = match tenc.crypt_byte_block_count {
-                    Some(n) => n,
-                    None => 0,
-                };
-                sample_info.protected_data.skip_byte_block = match tenc.skip_byte_block_count {
-                    Some(n) => n,
-                    None => 0,
-                };
+                sample_info.protected_data.crypt_byte_block =
+                    tenc.crypt_byte_block_count.unwrap_or(0);
+                sample_info.protected_data.skip_byte_block =
+                    tenc.skip_byte_block_count.unwrap_or(0);
                 if let Some(ref iv_vec) = tenc.constant_iv {
                     if iv_vec.len() > std::u32::MAX as usize {
                         return Err(Mp4parseStatus::Invalid);
@@ -1164,14 +1160,10 @@ fn mp4parse_get_track_video_info_safe(
                 sample_info.protected_data.is_encrypted = tenc.is_encrypted;
                 sample_info.protected_data.iv_size = tenc.iv_size;
                 sample_info.protected_data.kid.set_data(&(tenc.kid));
-                sample_info.protected_data.crypt_byte_block = match tenc.crypt_byte_block_count {
-                    Some(n) => n,
-                    None => 0,
-                };
-                sample_info.protected_data.skip_byte_block = match tenc.skip_byte_block_count {
-                    Some(n) => n,
-                    None => 0,
-                };
+                sample_info.protected_data.crypt_byte_block =
+                    tenc.crypt_byte_block_count.unwrap_or(0);
+                sample_info.protected_data.skip_byte_block =
+                    tenc.skip_byte_block_count.unwrap_or(0);
                 if let Some(ref iv_vec) = tenc.constant_iv {
                     if iv_vec.len() > std::u32::MAX as usize {
                         return Err(Mp4parseStatus::Invalid);
@@ -1514,10 +1506,7 @@ fn create_sample_table(
     };
 
     // According to spec, no sync table means every sample is sync sample.
-    let has_sync_table = match track.stss {
-        Some(_) => true,
-        _ => false,
-    };
+    let has_sync_table = matches!(track.stss, Some(_));
 
     let mut sample_size_iter = stsz.sample_sizes.iter();
 
@@ -1575,10 +1564,7 @@ fn create_sample_table(
         }
     }
 
-    let ctts_iter = match track.ctts {
-        Some(ref v) => Some(v.samples.as_slice().iter()),
-        _ => None,
-    };
+    let ctts_iter = track.ctts.as_ref().map(|v| v.samples.as_slice().iter());
 
     let mut ctts_offset_iter = TimeOffsetIterator {
         cur_sample_range: (0..0),
