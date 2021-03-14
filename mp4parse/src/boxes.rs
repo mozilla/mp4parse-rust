@@ -31,10 +31,10 @@ macro_rules! box_database {
             }
         }
 
-        impl Into<u32> for BoxType {
-            fn into(self) -> u32 {
+        impl From<BoxType> for u32 {
+            fn from(b: BoxType) -> u32 {
                 use self::BoxType::*;
-                match self {
+                match b {
                     $($(#[$attr])* $boxenum => $boxtype),*,
                     UnknownBox(t) => t,
                 }
@@ -46,7 +46,7 @@ macro_rules! box_database {
 
 impl fmt::Debug for BoxType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let fourcc: FourCC = From::from(self.clone());
+        let fourcc: FourCC = From::from(*self);
         fourcc.fmt(f)
     }
 }

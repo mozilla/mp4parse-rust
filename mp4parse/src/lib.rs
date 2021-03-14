@@ -4,6 +4,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+// `clippy::upper_case_acronyms` is a nightly-only lint as of 2021-03-15, so we
+// allow `clippy::unknown_clippy_lints` to ignore it on stable - but
+// `clippy::unknown_clippy_lints` has been renamed in nightly, so we need to
+// allow `renamed_and_removed_lints` to ignore a warning for that.
+#![allow(renamed_and_removed_lints)]
+#![allow(clippy::unknown_clippy_lints)]
+#![allow(clippy::upper_case_acronyms)]
+
 #[macro_use]
 extern crate log;
 
@@ -41,6 +49,8 @@ const TABLE_SIZE_LIMIT: u32 = 30 * 60 * 60 * 24 * 7;
 /// A trait to indicate a type can be infallibly converted to `u64`.
 /// This should only be implemented for infallible conversions, so only unsigned types are valid.
 trait ToU64 {
+    // Remove when https://github.com/rust-lang/rust-clippy/issues/6727 is resolved
+    #[allow(clippy::wrong_self_convention)]
     fn to_u64(self) -> u64;
 }
 
@@ -59,6 +69,8 @@ impl ToU64 for usize {
 /// A trait to indicate a type can be infallibly converted to `usize`.
 /// This should only be implemented for infallible conversions, so only unsigned types are valid.
 pub trait ToUsize {
+    // Remove when https://github.com/rust-lang/rust-clippy/issues/6727 is resolved
+    #[allow(clippy::wrong_self_convention)]
     fn to_usize(self) -> usize;
 }
 
@@ -803,7 +815,7 @@ impl AvifContext {
                     "AvifItem::Location requires the location exists in AvifContext::item_storage"
                 );
             }
-            AvifItem::Data(data) => return data.as_slice(),
+            AvifItem::Data(data) => data.as_slice(),
         }
     }
 }
@@ -1923,8 +1935,8 @@ impl std::ops::Add<U32MulU16> for U32MulU8 {
 
     fn add(self, rhs: U32MulU16) -> Self::Output {
         static_assertions::const_assert!(U32MulU8::MAX + U32MulU16::MAX < U64::MAX);
-        let lhs: u64 = self.get().into();
-        let rhs: u64 = rhs.get().into();
+        let lhs: u64 = self.get();
+        let rhs: u64 = rhs.get();
         Self::Output::new(lhs.checked_add(rhs).expect("infallible"))
     }
 }
@@ -2003,6 +2015,7 @@ fn read_ipma<T: Read>(
         };
 
         if let Some(previous_association) = associations.last() {
+            #[allow(clippy::comparison_chain)]
             if previous_association.item_id > item_id {
                 return Err(Error::InvalidData(
                     "Each ItemPropertyAssociation box shall be ordered by increasing item_ID",
@@ -2088,7 +2101,7 @@ fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<u8>> {
     let mut channels = TryVec::with_capacity(num_channels)?;
     let num_channels_read = src.try_read_to_end(&mut channels)?;
 
-    if num_channels_read != num_channels.into() {
+    if num_channels_read != num_channels {
         return Err(Error::InvalidData("invalid num_channels"));
     }
 
@@ -3711,7 +3724,7 @@ fn read_qt_wave_atom<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
         }
     }
 
-    codec_specific.ok_or_else(|| Error::InvalidData("malformed audio sample entry"))
+    codec_specific.ok_or(Error::InvalidData("malformed audio sample entry"))
 }
 
 /// Parse an audio description inside an stsd box.
