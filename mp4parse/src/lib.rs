@@ -473,6 +473,7 @@ pub struct VPxConfigBox {
     pub codec_init: TryVec<u8>,
 }
 
+/// See AV1-ISOBMFF § 2.3.3 https://aomediacodec.github.io/av1-isobmff/#av1codecconfigurationbox-syntax
 #[derive(Debug)]
 pub struct AV1ConfigBox {
     pub profile: u8,
@@ -3046,6 +3047,7 @@ fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
     })
 }
 
+/// See AV1-ISOBMFF § 2.3.3 https://aomediacodec.github.io/av1-isobmff/#av1codecconfigurationbox-syntax
 fn read_av1c<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1ConfigBox> {
     // We want to store the raw config as well as a structured (parsed) config, so create a copy of
     // the raw config so we have it later, and then parse the structured data from that.
@@ -3560,7 +3562,8 @@ fn read_alac<T: Read>(src: &mut BMFFBox<T>) -> Result<ALACSpecificBox> {
     Ok(ALACSpecificBox { version, data })
 }
 
-/// Parse a hdlr box.
+/// Parse a Handler Reference Box.
+/// See ISOBMFF (ISO 14496-12:2015) § 8.4.3
 fn read_hdlr<T: Read>(src: &mut BMFFBox<T>) -> Result<HandlerBox> {
     let (_, _) = read_fullbox_extra(src)?;
 
