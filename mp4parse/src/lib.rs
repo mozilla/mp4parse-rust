@@ -752,6 +752,10 @@ pub struct MetadataBox {
     pub sort_album_artist: Option<TryString>,
     /// The name of the composer to sort by 'soco'
     pub sort_composer: Option<TryString>,
+    /// XML metadata
+    pub xml: Option<TryString>,
+    /// Binary XML metadata
+    pub bxml: Option<TryVec<u8>>,
 }
 
 /// Internal data structures.
@@ -763,6 +767,7 @@ pub struct MediaContext {
     pub mvex: Option<MovieExtendsBox>,
     pub psshs: TryVec<ProtectionSystemSpecificHeaderBox>,
     pub userdata: Option<Result<UserdataBox>>,
+    pub metadata: Option<Result<MetadataBox>>,
 }
 
 /// An ISOBMFF item as described by an iloc box. For the sake of avoiding copies,
@@ -2307,6 +2312,11 @@ pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
             BoxType::MovieBox => {
                 context = Some(read_moov(&mut b, context)?);
             }
+            BoxType::MetadataBox => {
+                if let Some(ctx) = &mut context {
+                    ctx.metadata = Some(read_meta(&mut b));
+                }
+            }
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
@@ -2352,6 +2362,7 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Resu
         mut mvex,
         mut psshs,
         mut userdata,
+        mut metadata,
     } = context.unwrap_or_default();
 
     let mut iter = f.box_iter();
@@ -2394,6 +2405,7 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Resu
         mvex,
         psshs,
         userdata,
+        metadata,
     })
 }
 
@@ -4058,11 +4070,29 @@ fn read_meta<T: Read>(src: &mut BMFFBox<T>) -> Result<MetadataBox> {
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::MetadataItemListEntry => read_ilst(&mut b, &mut meta)?,
+            BoxType::MetadataXMLBox => read_xml_(&mut b, &mut meta)?,
+            BoxType::MetadataBXMLBox => read_bxml(&mut b, &mut meta)?,
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
     }
     Ok(meta)
+}
+
+/// Parse a XML box inside a meta box
+fn read_xml_<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()> {
+    let (_, _) = read_fullbox_extra(src)?;
+    let size = src.content.limit();
+    meta.xml = Some(read_buf(&mut src.content, size)?);
+    Ok(())
+}
+
+/// Parse a Binary XML box inside a meta box
+fn read_bxml<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()> {
+    let (_, _) = read_fullbox_extra(src)?;
+    let size = src.content.limit();
+    meta.bxml = Some(read_buf(&mut src.content, size)?);
+    Ok(())
 }
 
 /// Parse a metadata box inside a udta box
