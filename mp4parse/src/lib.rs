@@ -2362,7 +2362,7 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Resu
         mut mvex,
         mut psshs,
         mut userdata,
-        mut metadata,
+        metadata,
     } = context.unwrap_or_default();
 
     let mut iter = f.box_iter();
