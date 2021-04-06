@@ -9,7 +9,7 @@ edition = "2018"
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = "=0.3.2"
+libfuzzer-sys = "=0.4.0"
 
 [dependencies.mp4parse_capi]
 path = ".."
