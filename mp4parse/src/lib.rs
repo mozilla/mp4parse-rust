@@ -776,6 +776,7 @@ pub struct MediaContext {
     pub mvex: Option<MovieExtendsBox>,
     pub psshs: TryVec<ProtectionSystemSpecificHeaderBox>,
     pub userdata: Option<Result<UserdataBox>>,
+    #[cfg(feature = "meta-xml")]
     pub metadata: Option<Result<MetadataBox>>,
 }
 
@@ -2321,6 +2322,7 @@ pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
             BoxType::MovieBox => {
                 context = Some(read_moov(&mut b, context)?);
             }
+            #[cfg(feature = "meta-xml")]
             BoxType::MetadataBox => {
                 if let Some(ctx) = &mut context {
                     ctx.metadata = Some(read_meta(&mut b));
@@ -2371,6 +2373,7 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Resu
         mut mvex,
         mut psshs,
         mut userdata,
+        #[cfg(feature = "meta-xml")]
         metadata,
     } = context.unwrap_or_default();
 
@@ -2414,6 +2417,7 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Resu
         mvex,
         psshs,
         userdata,
+        #[cfg(feature = "meta-xml")]
         metadata,
     })
 }
