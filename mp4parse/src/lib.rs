@@ -752,6 +752,19 @@ pub struct MetadataBox {
     pub sort_album_artist: Option<TryString>,
     /// The name of the composer to sort by 'soco'
     pub sort_composer: Option<TryString>,
+    /// Metadata
+    #[cfg(feature = "meta-xml")]
+    pub xml: Option<XmlBox>,
+}
+
+/// See ISOBMFF (ISO 14496-12:2015) § 8.11.2.1
+#[cfg(feature = "meta-xml")]
+#[derive(Debug)]
+pub enum XmlBox {
+    /// XML metadata
+    StringXmlBox(TryString),
+    /// Binary XML metadata
+    BinaryXmlBox(TryVec<u8>),
 }
 
 /// Internal data structures.
@@ -763,6 +776,8 @@ pub struct MediaContext {
     pub mvex: Option<MovieExtendsBox>,
     pub psshs: TryVec<ProtectionSystemSpecificHeaderBox>,
     pub userdata: Option<Result<UserdataBox>>,
+    #[cfg(feature = "meta-xml")]
+    pub metadata: Option<Result<MetadataBox>>,
 }
 
 /// An ISOBMFF item as described by an iloc box. For the sake of avoiding copies,
@@ -2307,6 +2322,12 @@ pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
             BoxType::MovieBox => {
                 context = Some(read_moov(&mut b, context)?);
             }
+            #[cfg(feature = "meta-xml")]
+            BoxType::MetadataBox => {
+                if let Some(ctx) = &mut context {
+                    ctx.metadata = Some(read_meta(&mut b));
+                }
+            }
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
@@ -2352,6 +2373,8 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Resu
         mut mvex,
         mut psshs,
         mut userdata,
+        #[cfg(feature = "meta-xml")]
+        metadata,
     } = context.unwrap_or_default();
 
     let mut iter = f.box_iter();
@@ -2394,6 +2417,8 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Resu
         mvex,
         psshs,
         userdata,
+        #[cfg(feature = "meta-xml")]
+        metadata,
     })
 }
 
@@ -4050,7 +4075,8 @@ fn read_udta<T: Read>(src: &mut BMFFBox<T>) -> Result<UserdataBox> {
     Ok(udta)
 }
 
-/// Parse a metadata box inside a udta box
+/// Parse the meta box
+/// See ISOBMFF (ISO 14496-12:2015) § 8.111.
 fn read_meta<T: Read>(src: &mut BMFFBox<T>) -> Result<MetadataBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let mut iter = src.box_iter();
@@ -4058,11 +4084,37 @@ fn read_meta<T: Read>(src: &mut BMFFBox<T>) -> Result<MetadataBox> {
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::MetadataItemListEntry => read_ilst(&mut b, &mut meta)?,
+            #[cfg(feature = "meta-xml")]
+            BoxType::MetadataXMLBox => read_xml_(&mut b, &mut meta)?,
+            #[cfg(feature = "meta-xml")]
+            BoxType::MetadataBXMLBox => read_bxml(&mut b, &mut meta)?,
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
     }
     Ok(meta)
+}
+
+/// Parse a XML box inside a meta box
+/// See ISOBMFF (ISO 14496-12:2015) § 8.11.2
+#[cfg(feature = "meta-xml")]
+fn read_xml_<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()> {
+    if read_fullbox_version_no_flags(src)? != 0 {
+        return Err(Error::Unsupported("unsupported XmlBox version"));
+    }
+    meta.xml = Some(XmlBox::StringXmlBox(src.read_into_try_vec()?));
+    Ok(())
+}
+
+/// Parse a Binary XML box inside a meta box
+/// See ISOBMFF (ISO 14496-12:2015) § 8.11.2
+#[cfg(feature = "meta-xml")]
+fn read_bxml<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()> {
+    if read_fullbox_version_no_flags(src)? != 0 {
+        return Err(Error::Unsupported("unsupported XmlBox version"));
+    }
+    meta.xml = Some(XmlBox::BinaryXmlBox(src.read_into_try_vec()?));
+    Ok(())
 }
 
 /// Parse a metadata box inside a udta box
