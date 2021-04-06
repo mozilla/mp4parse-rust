@@ -176,7 +176,9 @@ box_database!(
     MetadataItemListEntry             0x696c_7374, // "ilst"
     MetadataItemDataEntry             0x6461_7461, // "data"
     MetadataItemNameBox               0x6e61_6d65, // "name"
+    #[cfg(feature = "meta-xml")]
     MetadataXMLBox                    0x786d_6c20, // "xml "
+    #[cfg(feature = "meta-xml")]
     MetadataBXMLBox                   0x6278_6d6c, // "bxml"
     UserdataBox                       0x7564_7461, // "udta"
     AlbumEntry                        0xa961_6c62, // "©alb"
