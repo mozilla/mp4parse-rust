@@ -1491,7 +1491,7 @@ impl<'a> SampleToChunkIterator<'a> {
 }
 
 #[allow(clippy::reversed_empty_ranges)]
-fn create_sample_table(
+pub fn create_sample_table(
     track: &Track,
     track_offset_time: CheckedInteger<i64>,
 ) -> Option<TryVec<Mp4parseIndice>> {
