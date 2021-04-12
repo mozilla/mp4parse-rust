@@ -19,3 +19,11 @@ rename_variants = "QualifiedScreamingSnakeCase"
 [defines]
 "feature = 3gpp" = "MP4PARSE_FEATURE_3GPP"
 "feature = meta-xml" = "MP4PARSE_FEATURE_META_XML"
+
+[parse]
+parse_deps = true
+include = ["mp4parse"]
+
+[export.rename]
+"Indice" = "Mp4parseIndice"
+"TrackType" = "Mp4parseTrackType"

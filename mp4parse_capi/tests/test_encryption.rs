@@ -1,5 +1,7 @@
 extern crate mp4parse_capi;
+extern crate mp4parse;
 use mp4parse_capi::*;
+use mp4parse::TrackType;
 use std::io::Read;
 
 extern "C" fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
@@ -33,13 +35,13 @@ fn parse_cenc() {
         let mut video_track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 0, &mut video_track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(video_track_info.track_type, Mp4parseTrackType::Video);
+        assert_eq!(video_track_info.track_type, TrackType::Video);
 
         // Make sure we have a audio track and it's at index 1
         let mut audio_track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 1, &mut audio_track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(audio_track_info.track_type, Mp4parseTrackType::Audio);
+        assert_eq!(audio_track_info.track_type, TrackType::Audio);
 
         // Verify video track and crypto information
         let mut video = Mp4parseTrackVideoInfo::default();
@@ -124,7 +126,7 @@ fn parse_cbcs() {
         let mut video_track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 0, &mut video_track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(video_track_info.track_type, Mp4parseTrackType::Video);
+        assert_eq!(video_track_info.track_type, TrackType::Video);
 
         // Verify video track and crypto information
         let mut video = Mp4parseTrackVideoInfo::default();
@@ -190,7 +192,7 @@ fn parse_unencrypted() {
         let mut track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
+        assert_eq!(track_info.track_type, TrackType::Audio);
 
         let mut audio = Mp4parseTrackAudioInfo::default();
         rv = mp4parse_get_track_audio_info(parser, 0, &mut audio);
@@ -241,7 +243,7 @@ fn parse_encrypted_av1() {
         let mut video_track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 0, &mut video_track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(video_track_info.track_type, Mp4parseTrackType::Video);
+        assert_eq!(video_track_info.track_type, TrackType::Video);
 
         // Verify video track and crypto information
         let mut video = Mp4parseTrackVideoInfo::default();

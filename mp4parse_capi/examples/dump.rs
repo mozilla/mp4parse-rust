@@ -7,6 +7,7 @@ extern crate log;
 extern crate env_logger;
 
 use mp4parse_capi::*;
+use mp4parse::TrackType;
 use std::env;
 use std::fs::File;
 use std::io::Read;
@@ -79,7 +80,7 @@ fn dump_file(filename: &str) {
 
         for i in 0..counts {
             let mut track_info = Mp4parseTrackInfo {
-                track_type: Mp4parseTrackType::Audio,
+                track_type: TrackType::Audio,
                 ..Default::default()
             };
             match mp4parse_get_track_info(parser, i, &mut track_info) {
@@ -93,7 +94,7 @@ fn dump_file(filename: &str) {
             }
 
             match track_info.track_type {
-                Mp4parseTrackType::Audio => {
+                TrackType::Audio => {
                     let mut audio_info = Mp4parseTrackAudioInfo::default();
                     match mp4parse_get_track_audio_info(parser, i, &mut audio_info) {
                         Mp4parseStatus::Ok => {
@@ -112,7 +113,7 @@ fn dump_file(filename: &str) {
                         }
                     }
                 }
-                Mp4parseTrackType::Video => {
+                TrackType::Video => {
                     let mut video_info = Mp4parseTrackVideoInfo::default();
                     match mp4parse_get_track_video_info(parser, i, &mut video_info) {
                         Mp4parseStatus::Ok => {
@@ -131,8 +132,11 @@ fn dump_file(filename: &str) {
                         }
                     }
                 }
-                Mp4parseTrackType::Metadata => {
+                TrackType::Metadata => {
                     println!("TODO metadata track");
+                }
+                TrackType::Unknown => {
+                    println!("Unknown track");
                 }
             }
 

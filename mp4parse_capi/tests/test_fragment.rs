@@ -1,5 +1,7 @@
 extern crate mp4parse_capi;
+extern crate mp4parse;
 use mp4parse_capi::*;
+use mp4parse::TrackType;
 use std::io::Read;
 
 extern "C" fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
@@ -33,7 +35,7 @@ fn parse_fragment() {
         let mut track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
+        assert_eq!(track_info.track_type, TrackType::Audio);
         assert_eq!(track_info.track_id, 1);
         assert_eq!(track_info.duration, 0);
         assert_eq!(track_info.media_time, 0);
@@ -86,7 +88,7 @@ fn parse_opus_fragment() {
         let mut track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
+        assert_eq!(track_info.track_type, TrackType::Audio);
         assert_eq!(track_info.track_id, 1);
         assert_eq!(track_info.duration, 0);
         assert_eq!(track_info.media_time, 0);
