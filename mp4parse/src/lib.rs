@@ -25,13 +25,13 @@ use byteorder::{ReadBytesExt, WriteBytesExt};
 use fallible_collections::TryRead;
 use fallible_collections::TryReserveError;
 use num_traits::Num;
+use num_traits::{CheckedAdd, CheckedSub};
+use num_traits::{PrimInt, Zero};
 use std::convert::{TryFrom, TryInto as _};
 use std::io::Cursor;
 use std::io::{Read, Take};
 use std::ops::Neg;
 use std::ops::{Add, Sub};
-use num_traits::{CheckedAdd, CheckedSub};
-use num_traits::{PrimInt, Zero};
 
 #[macro_use]
 mod macros;

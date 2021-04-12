@@ -50,17 +50,17 @@ use std::io::Read;
 use mp4parse::serialize_opus_header;
 use mp4parse::AudioCodecSpecific;
 use mp4parse::AvifContext;
+use mp4parse::CheckedInteger;
 use mp4parse::CodecType;
+use mp4parse::Error;
+use mp4parse::Indice;
 use mp4parse::MediaContext;
 use mp4parse::SampleEntry;
 use mp4parse::TrackType;
-use mp4parse::Error;
 use mp4parse::TryBox;
 use mp4parse::TryHashMap;
 use mp4parse::TryVec;
 use mp4parse::VideoCodecSpecific;
-use mp4parse::CheckedInteger;
-use mp4parse::Indice;
 
 // To ensure we don't use stdlib allocating types by accident
 #[allow(dead_code)]

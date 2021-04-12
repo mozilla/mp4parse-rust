@@ -6,8 +6,8 @@ extern crate log;
 
 extern crate env_logger;
 
-use mp4parse_capi::*;
 use mp4parse::TrackType;
+use mp4parse_capi::*;
 use std::env;
 use std::fs::File;
 use std::io::Read;

@@ -1,8 +1,8 @@
-extern crate mp4parse_capi;
 extern crate mp4parse;
-use mp4parse_capi::*;
-use mp4parse::TrackType;
+extern crate mp4parse_capi;
 use mp4parse::Indice;
+use mp4parse::TrackType;
+use mp4parse_capi::*;
 use std::io::Read;
 
 extern "C" fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
