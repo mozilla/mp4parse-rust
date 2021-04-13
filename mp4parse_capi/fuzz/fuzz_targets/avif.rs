@@ -25,7 +25,7 @@ fuzz_target!(|data: &[u8]| {
     };
     unsafe {
         let mut context = std::ptr::null_mut();
-        if mp4parse_avif_new(&io, &mut context) != Mp4parseStatus::Ok {
+        if mp4parse_avif_new(&io, ParseStrictness::Normal, &mut context) != Mp4parseStatus::Ok {
             return;
         }
 

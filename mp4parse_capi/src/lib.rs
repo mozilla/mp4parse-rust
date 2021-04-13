@@ -59,6 +59,8 @@ use mp4parse::Error;
 use mp4parse::MediaContext;
 use mp4parse::MediaScaledTime;
 use mp4parse::MediaTimeScale;
+// Re-exported so consumers don't have to depend on mp4parse as well
+pub use mp4parse::ParseStrictness;
 use mp4parse::SampleEntry;
 use mp4parse::ToUsize;
 use mp4parse::Track;
@@ -458,7 +460,7 @@ where
 
     fn with_context(context: Self::Context) -> Self;
 
-    fn read<T: Read>(io: &mut T) -> mp4parse::Result<Self::Context>;
+    fn read<T: Read>(io: &mut T, strictness: ParseStrictness) -> mp4parse::Result<Self::Context>;
 }
 
 impl Mp4parseParser {
@@ -481,7 +483,7 @@ impl ContextParser for Mp4parseParser {
         }
     }
 
-    fn read<T: Read>(io: &mut T) -> mp4parse::Result<Self::Context> {
+    fn read<T: Read>(io: &mut T, _strictness: ParseStrictness) -> mp4parse::Result<Self::Context> {
         let r = mp4parse::read_mp4(io);
         log::debug!("mp4parse::read_mp4 -> {:?}", r);
         r
@@ -505,9 +507,12 @@ impl ContextParser for Mp4parseAvifParser {
         Self { context }
     }
 
-    fn read<T: Read>(io: &mut T) -> mp4parse::Result<Self::Context> {
-        let r = mp4parse::read_avif(io);
-        log::debug!("mp4parse::read_avif -> {:?}", r);
+    fn read<T: Read>(io: &mut T, strictness: ParseStrictness) -> mp4parse::Result<Self::Context> {
+        let r = mp4parse::read_avif(io, strictness);
+        if r.is_err() {
+            log::debug!("{:?}", r);
+        }
+        log::trace!("mp4parse::read_avif -> {:?}", r);
         r
     }
 }
@@ -565,7 +570,7 @@ pub unsafe extern "C" fn mp4parse_new(
     io: *const Mp4parseIo,
     parser_out: *mut *mut Mp4parseParser,
 ) -> Mp4parseStatus {
-    mp4parse_new_common(io, parser_out)
+    mp4parse_new_common(io, ParseStrictness::Normal, parser_out)
 }
 
 /// Allocate an `Mp4parseAvifParser*` to read from the supplied `Mp4parseIo`.
@@ -580,13 +585,15 @@ pub unsafe extern "C" fn mp4parse_new(
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_avif_new(
     io: *const Mp4parseIo,
+    strictness: ParseStrictness,
     parser_out: *mut *mut Mp4parseAvifParser,
 ) -> Mp4parseStatus {
-    mp4parse_new_common(io, parser_out)
+    mp4parse_new_common(io, strictness, parser_out)
 }
 
 unsafe fn mp4parse_new_common<P: ContextParser>(
     io: *const Mp4parseIo,
+    strictness: ParseStrictness,
     parser_out: *mut *mut P,
 ) -> Mp4parseStatus {
     // Validate arguments from C.
@@ -598,7 +605,7 @@ unsafe fn mp4parse_new_common<P: ContextParser>(
     {
         Mp4parseStatus::BadArg
     } else {
-        match mp4parse_new_common_safe(&mut (*io).clone()) {
+        match mp4parse_new_common_safe(&mut (*io).clone(), strictness) {
             Ok(parser) => {
                 *parser_out = parser;
                 Mp4parseStatus::Ok
@@ -610,8 +617,9 @@ unsafe fn mp4parse_new_common<P: ContextParser>(
 
 fn mp4parse_new_common_safe<T: Read, P: ContextParser>(
     io: &mut T,
+    strictness: ParseStrictness,
 ) -> Result<*mut P, Mp4parseStatus> {
-    P::read(io)
+    P::read(io, strictness)
         .map(P::with_context)
         .and_then(|x| TryBox::try_new(x).map_err(mp4parse::Error::from))
         .map(TryBox::into_raw)
