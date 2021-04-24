@@ -1052,7 +1052,7 @@ enum IlocFieldSize {
 }
 
 impl IlocFieldSize {
-    fn to_bits(&self) -> u8 {
+    fn as_bits(&self) -> u8 {
         match self {
             IlocFieldSize::Zero => 0,
             IlocFieldSize::Four => 32,
@@ -2454,7 +2454,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<u32, ItemLocati
             ));
         }
 
-        let base_offset = iloc.read_u64(base_offset_size.to_bits())?;
+        let base_offset = iloc.read_u64(base_offset_size.as_bits())?;
         let extent_count = iloc.read_u16(16)?;
 
         if extent_count < 1 {
@@ -2481,7 +2481,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<u32, ItemLocati
                 None | Some(IlocFieldSize::Zero) => None,
                 Some(index_size) => {
                     debug_assert!(version == IlocVersion::One || version == IlocVersion::Two);
-                    Some(iloc.read_u64(index_size.to_bits())?)
+                    Some(iloc.read_u64(index_size.as_bits())?)
                 }
             };
 
@@ -2489,8 +2489,8 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<u32, ItemLocati
             // "If the offset is not identified (the field has a length of zero), then the
             //  beginning of the source (offset 0) is implied"
             // This behavior will follow from BitReader::read_u64(0) -> 0.
-            let extent_offset = iloc.read_u64(offset_size.to_bits())?;
-            let extent_length = iloc.read_u64(length_size.to_bits())?.try_into()?;
+            let extent_offset = iloc.read_u64(offset_size.as_bits())?;
+            let extent_length = iloc.read_u64(length_size.as_bits())?.try_into()?;
 
             // "If the length is not specified, or specified as zero, then the entire length of
             //  the source is implied" (ibid)
