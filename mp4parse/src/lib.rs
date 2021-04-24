@@ -26,16 +26,12 @@ use fallible_collections::TryRead;
 use fallible_collections::TryReserveError;
 use num_traits::Num;
 #[cfg(feature = "unstable-api")]
-use num_traits::{CheckedAdd, CheckedSub};
-#[cfg(feature = "unstable-api")]
-use num_traits::{PrimInt, Zero};
+use num_traits::{CheckedAdd, CheckedSub, PrimInt, Zero};
 use std::convert::{TryFrom, TryInto as _};
 use std::io::Cursor;
 use std::io::{Read, Take};
 #[cfg(feature = "unstable-api")]
-use std::ops::Neg;
-#[cfg(feature = "unstable-api")]
-use std::ops::{Add, Sub};
+use std::ops::{Add, Neg, Sub};
 
 #[macro_use]
 mod macros;
