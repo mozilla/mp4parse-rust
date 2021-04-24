@@ -25,12 +25,16 @@ use byteorder::{ReadBytesExt, WriteBytesExt};
 use fallible_collections::TryRead;
 use fallible_collections::TryReserveError;
 use num_traits::Num;
+#[cfg(feature = "unstable-api")]
 use num_traits::{CheckedAdd, CheckedSub};
+#[cfg(feature = "unstable-api")]
 use num_traits::{PrimInt, Zero};
 use std::convert::{TryFrom, TryInto as _};
 use std::io::Cursor;
 use std::io::{Read, Take};
+#[cfg(feature = "unstable-api")]
 use std::ops::Neg;
+#[cfg(feature = "unstable-api")]
 use std::ops::{Add, Sub};
 
 #[macro_use]
@@ -398,10 +402,12 @@ pub enum SampleEntry {
 
 /// A zero-overhead wrapper around integer types for the sake of always
 /// requiring checked arithmetic
+#[cfg(feature = "unstable-api")]
 #[repr(transparent)]
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CheckedInteger<T>(pub T);
 
+#[cfg(feature = "unstable-api")]
 impl<T> From<T> for CheckedInteger<T> {
     fn from(i: T) -> Self {
         Self(i)
@@ -409,12 +415,14 @@ impl<T> From<T> for CheckedInteger<T> {
 }
 
 // Orphan rules prevent a more general implementation, but this suffices
+#[cfg(feature = "unstable-api")]
 impl From<CheckedInteger<i64>> for i64 {
     fn from(checked: CheckedInteger<i64>) -> i64 {
         checked.0
     }
 }
 
+#[cfg(feature = "unstable-api")]
 impl<T, U: Into<T>> Add<U> for CheckedInteger<T>
 where
     T: CheckedAdd,
@@ -426,6 +434,7 @@ where
     }
 }
 
+#[cfg(feature = "unstable-api")]
 impl<T, U: Into<T>> Sub<U> for CheckedInteger<T>
 where
     T: CheckedSub,
@@ -439,6 +448,7 @@ where
 
 /// Implement subtraction of checked `u64`s returning i64
 // This is necessary for handling Mp4parseTrackInfo::media_time gracefully
+#[cfg(feature = "unstable-api")]
 impl Sub for CheckedInteger<u64> {
     type Output = Option<CheckedInteger<i64>>;
 
@@ -460,6 +470,7 @@ impl Sub for CheckedInteger<u64> {
 }
 
 #[test]
+#[cfg(feature = "unstable-api")]
 fn u64_subtraction_returning_i64() {
     // self > other
     assert_eq!(
@@ -486,15 +497,17 @@ fn u64_subtraction_returning_i64() {
     assert_eq!(CheckedInteger(1u64) - CheckedInteger(u64::MAX), None);
 }
 
+#[cfg(feature = "unstable-api")]
 impl<T: std::cmp::PartialEq> PartialEq<T> for CheckedInteger<T> {
     fn eq(&self, other: &T) -> bool {
         self.0 == *other
     }
 }
 
-/// Provides the following information about a sample in the source file: 
-/// sample data offset (start and end), composition time in microseconds 
+/// Provides the following information about a sample in the source file:
+/// sample data offset (start and end), composition time in microseconds
 /// (start and end) and whether it is a sync sample
+#[cfg(feature = "unstable-api")]
 #[repr(C)]
 #[derive(Default, Debug, PartialEq)]
 pub struct Indice {
@@ -525,6 +538,7 @@ pub struct Indice {
 /// It uses `stsc`, `stco`, `stsz` and `stts` boxes to construct a list of
 /// every sample in the file and provides offsets which can be used to read
 /// raw sample data from the file.
+#[cfg(feature = "unstable-api")]
 #[allow(clippy::reversed_empty_ranges)]
 pub fn create_sample_table(
     track: &Track,
@@ -674,6 +688,7 @@ pub fn create_sample_table(
 //
 // For example:
 // (2, 10), (4, 9) into (10, 10, 9, 9, 9, 9) by calling next_offset_time().
+#[cfg(feature = "unstable-api")]
 struct TimeOffsetIterator<'a> {
     cur_sample_range: std::ops::Range<u32>,
     cur_offset: i64,
@@ -681,6 +696,7 @@ struct TimeOffsetIterator<'a> {
     track_id: usize,
 }
 
+#[cfg(feature = "unstable-api")]
 impl<'a> Iterator for TimeOffsetIterator<'a> {
     type Item = i64;
 
@@ -716,6 +732,7 @@ impl<'a> Iterator for TimeOffsetIterator<'a> {
     }
 }
 
+#[cfg(feature = "unstable-api")]
 impl<'a> TimeOffsetIterator<'a> {
     fn next_offset_time(&mut self) -> TrackScaledTime<i64> {
         match self.next() {
@@ -731,6 +748,7 @@ impl<'a> TimeOffsetIterator<'a> {
 //
 // For example:
 // (2, 3000), (1, 2999) to (3000, 3000, 2999).
+#[cfg(feature = "unstable-api")]
 struct TimeToSampleIterator<'a> {
     cur_sample_count: std::ops::Range<u32>,
     cur_sample_delta: u32,
@@ -738,6 +756,7 @@ struct TimeToSampleIterator<'a> {
     track_id: usize,
 }
 
+#[cfg(feature = "unstable-api")]
 impl<'a> Iterator for TimeToSampleIterator<'a> {
     type Item = u32;
 
@@ -759,6 +778,7 @@ impl<'a> Iterator for TimeToSampleIterator<'a> {
     }
 }
 
+#[cfg(feature = "unstable-api")]
 impl<'a> TimeToSampleIterator<'a> {
     fn next_delta(&mut self) -> TrackScaledTime<i64> {
         match self.next() {
@@ -779,6 +799,7 @@ impl<'a> TimeToSampleIterator<'a> {
 // For example:
 // (1, 5), (5, 10), (9, 2) => (1, 5), (2, 5), (3, 5), (4, 5), (5, 10), (6, 10),
 // (7, 10), (8, 10), (9, 2)
+#[cfg(feature = "unstable-api")]
 fn sample_to_chunk_iter<'a>(
     stsc_samples: &'a TryVec<SampleToChunk>,
     stco_offsets: &'a TryVec<u64>,
@@ -794,6 +815,7 @@ fn sample_to_chunk_iter<'a>(
     }
 }
 
+#[cfg(feature = "unstable-api")]
 struct SampleToChunkIterator<'a> {
     chunks: std::ops::Range<u32>,
     sample_count: u32,
@@ -801,6 +823,7 @@ struct SampleToChunkIterator<'a> {
     remain_chunk_count: u32, // total chunk number from 'stco'.
 }
 
+#[cfg(feature = "unstable-api")]
 impl<'a> Iterator for SampleToChunkIterator<'a> {
     type Item = (u32, u32);
 
@@ -824,6 +847,7 @@ impl<'a> Iterator for SampleToChunkIterator<'a> {
     }
 }
 
+#[cfg(feature = "unstable-api")]
 impl<'a> SampleToChunkIterator<'a> {
     #[allow(clippy::reversed_empty_ranges)]
     fn locate(&mut self) -> std::ops::Range<u32> {
@@ -861,6 +885,7 @@ impl<'a> SampleToChunkIterator<'a> {
 /// (n * s) / d is split into floor(n / d) * s + (n % d) * s / d.
 ///
 /// Return None on overflow or if the denominator is zero.
+#[cfg(feature = "unstable-api")]
 fn rational_scale<T, S>(numerator: T, denominator: T, scale2: S) -> Option<T>
 where
     T: PrimInt + Zero,
@@ -880,15 +905,17 @@ where
     })
 }
 
-/// Convert `time` in media's global (mvhd) timescale to microseconds, 
+/// Convert `time` in media's global (mvhd) timescale to microseconds,
 /// using provided `MediaTimeScale`
+#[cfg(feature = "unstable-api")]
 pub fn media_time_to_us(time: MediaScaledTime, scale: MediaTimeScale) -> Option<u64> {
     let microseconds_per_second = 1_000_000;
     rational_scale::<u64, u64>(time.0, scale.0, microseconds_per_second)
 }
 
-/// Convert `time` in track's local (mdhd) timescale to microseconds, 
+/// Convert `time` in track's local (mdhd) timescale to microseconds,
 /// using provided `TrackTimeScale<T>`
+#[cfg(feature = "unstable-api")]
 pub fn track_time_to_us<T>(time: TrackScaledTime<T>, scale: TrackTimeScale<T>) -> Option<T>
 where
     T: PrimInt + Zero,
@@ -899,6 +926,7 @@ where
 }
 
 #[test]
+#[cfg(feature = "unstable-api")]
 fn rational_scale_overflow() {
     assert_eq!(rational_scale::<u64, u64>(17, 3, 1000), Some(5666));
     let large = 0x4000_0000_0000_0000;
@@ -911,6 +939,7 @@ fn rational_scale_overflow() {
 }
 
 #[test]
+#[cfg(feature = "unstable-api")]
 fn media_time_overflow() {
     let scale = MediaTimeScale(90000);
     let duration = MediaScaledTime(9_007_199_254_710_000);
@@ -921,6 +950,7 @@ fn media_time_overflow() {
 }
 
 #[test]
+#[cfg(feature = "unstable-api")]
 fn track_time_overflow() {
     let scale = TrackTimeScale(44100u64, 0);
     let duration = TrackScaledTime(4_413_527_634_807_900u64, 0);
