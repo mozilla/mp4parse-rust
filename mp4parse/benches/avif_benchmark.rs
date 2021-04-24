@@ -19,5 +19,5 @@ fn avif_largest() {
         "av1-avif/testFiles/Netflix/avif/cosmos_frame05000_yuv444_12bpc_bt2020_pq_qlossless.avif",
     )
     .expect("Unknown file");
-    assert!(mp4::read_avif(input).is_ok());
+    assert!(mp4::read_avif(input, mp4::ParseStrictness::Normal).is_ok());
 }

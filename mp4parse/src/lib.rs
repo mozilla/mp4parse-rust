@@ -50,6 +50,10 @@ const BUF_SIZE_LIMIT: u64 = 10 * 1024 * 1024;
 // frame per table entry in 30 fps.
 const TABLE_SIZE_LIMIT: u32 = 30 * 60 * 60 * 24 * 7;
 
+/// The 'mif1' brand indicates structural requirements on files
+/// See HEIF (ISO 23008-12:2017) § 10.2.1
+const MIF1_BRAND: FourCC = FourCC { value: *b"mif1" };
+
 /// A trait to indicate a type can be infallibly converted to `u64`.
 /// This should only be implemented for infallible conversions, so only unsigned types are valid.
 trait ToU64 {
@@ -1665,6 +1669,25 @@ impl Default for TrackType {
     }
 }
 
+// This type is used by mp4parse_capi since it needs to be passed from FFI consumers
+// The C-visible struct is renamed via mp4parse_capi/cbindgen.toml to match naming conventions
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ParseStrictness {
+    Permissive, // Error only on ambiguous inputs
+    Normal,     // Error on "shall" directives, log warnings for "should"
+    Strict,     // Error on "should" directives
+}
+
+fn fail_if(violation: bool, message: &'static str) -> Result<()> {
+    if violation {
+        Err(Error::InvalidData(message))
+    } else {
+        warn!("{}", message);
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CodecType {
     Unknown,
@@ -1929,8 +1952,10 @@ fn skip_box_remain<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
 }
 
 /// Read the contents of an AVIF file
-pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
+pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<AvifContext> {
     let _ = env_logger::try_init();
+
+    debug!("read_avif(strictness: {:?})", strictness);
 
     let mut f = OffsetReader::new(f);
 
@@ -1940,8 +1965,16 @@ pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
     if let Some(mut b) = iter.next_box()? {
         if b.head.name == BoxType::FileTypeBox {
             let ftyp = read_ftyp(&mut b)?;
-            if !ftyp.compatible_brands.contains(&FourCC::from(*b"mif1")) {
-                return Err(Error::InvalidData("compatible_brands must contain 'mif1'"));
+            if !ftyp.compatible_brands.contains(&MIF1_BRAND) {
+                // This mandatory inclusion of this brand is in the process of being changed
+                // to optional. In anticipation of that, only give an error in strict mode
+                // See https://github.com/MPEGGroup/MIAF/issues/5
+                // and https://github.com/MPEGGroup/FileFormat/issues/23
+                fail_if(
+                    strictness == ParseStrictness::Strict,
+                    "The FileTypeBox should contain 'mif1' in the compatible_brands list \
+                     per MIAF (ISO 23000-22:2019) § 7.2.1.2",
+                )?;
             }
         } else {
             return Err(Error::InvalidData("'ftyp' box must occur first"));
@@ -1960,7 +1993,7 @@ pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
                         "There should be zero or one meta boxes per ISOBMFF (ISO 14496-12:2015) § 8.11.1.1",
                     ));
                 }
-                meta = Some(read_avif_meta(&mut b)?);
+                meta = Some(read_avif_meta(&mut b, strictness)?);
             }
             BoxType::MediaDataBox => {
                 if b.bytes_left() > 0 {
@@ -2070,8 +2103,31 @@ pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
         assert!(item.is_some());
     }
 
-    let primary_item =
-        primary_item.ok_or(Error::InvalidData("Required primary item data not found"))?;
+    let primary_item = primary_item.ok_or(Error::InvalidData(
+        "Missing 'pitm' box, required per HEIF (ISO/IEC 23008-12:2017) § 10.2.1",
+    ))?;
+
+    let mut has_primary_pixi = false;
+    let mut has_alpha_pixi = false;
+
+    for assoc_prop in meta.properties {
+        if let ItemProperty::Channels(_) = assoc_prop.property {
+            if assoc_prop.item_id == meta.primary_item_id {
+                has_primary_pixi = true;
+            } else if Some(assoc_prop.item_id) == alpha_item_id {
+                has_alpha_pixi = true;
+            }
+        }
+    }
+
+    if !has_primary_pixi || (alpha_item.is_some() && !has_alpha_pixi) {
+        fail_if(
+            strictness != ParseStrictness::Permissive,
+            "The pixel information property shall be associated with every image \
+             that is displayable (not hidden) \
+             per MIAF (ISO/IEC 23000-22:2019) specification § 7.3.6.6",
+        )?;
+    }
 
     // We could potentially optimize memory usage by trying to avoid reading
     // or storing mdat boxes which aren't used by our API, but for now it seems
@@ -2088,13 +2144,17 @@ pub fn read_avif<T: Read>(f: &mut T) -> Result<AvifContext> {
 /// Currently requires the primary item to be an av01 item type and generates
 /// an error otherwise.
 /// See ISOBMFF (ISO 14496-12:2015) § 8.11.1
-fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
+fn read_avif_meta<T: Read + Offset>(
+    src: &mut BMFFBox<T>,
+    strictness: ParseStrictness,
+) -> Result<AvifMeta> {
     let version = read_fullbox_version_no_flags(src)?;
 
     if version != 0 {
         return Err(Error::Unsupported("unsupported meta version"));
     }
 
+    let mut read_handler_box = false;
     let mut primary_item_id = None;
     let mut item_infos = None;
     let mut iloc_items = None;
@@ -2104,19 +2164,44 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         trace!("read_avif_meta parsing {:?} box", b.head.name);
+
+        if !read_handler_box && b.head.name != BoxType::HandlerBox {
+            fail_if(
+                strictness != ParseStrictness::Permissive,
+                "The HandlerBox shall be the first contained box within the MetaBox \
+                 per MIAF (ISO 23000-22:2019) § 7.2.1.5",
+            )?;
+        }
+
         match b.head.name {
+            BoxType::HandlerBox => {
+                if read_handler_box {
+                    return Err(Error::InvalidData(
+                        "There shall be exactly one hdlr box per ISOBMFF (ISO 14496-12:2015) § 8.4.3.1",
+                    ));
+                }
+                let HandlerBox { handler_type } = read_hdlr(&mut b)?;
+                if handler_type != b"pict" {
+                    fail_if(
+                        strictness != ParseStrictness::Permissive,
+                        "The HandlerBox handler_type must be 'pict' \
+                         per MIAF (ISO 23000-22:2019) § 7.2.1.5",
+                    )?;
+                }
+                read_handler_box = true;
+            }
             BoxType::ItemInfoBox => {
                 if item_infos.is_some() {
                     return Err(Error::InvalidData(
-                        "There should be zero or one iinf boxes per ISOBMFF (ISO 14496-12:2015) § 8.11.6.1",
+                        "There shall be zero or one iinf boxes per ISOBMFF (ISO 14496-12:2015) § 8.11.6.1",
                     ));
                 }
-                item_infos = Some(read_iinf(&mut b)?);
+                item_infos = Some(read_iinf(&mut b, strictness)?);
             }
             BoxType::ItemLocationBox => {
                 if iloc_items.is_some() {
                     return Err(Error::InvalidData(
-                        "There should be zero or one iloc boxes per ISOBMFF (ISO 14496-12:2015) § 8.11.3.1",
+                        "There shall be zero or one iloc boxes per ISOBMFF (ISO 14496-12:2015) § 8.11.3.1",
                     ));
                 }
                 iloc_items = Some(read_iloc(&mut b)?);
@@ -2124,22 +2209,22 @@ fn read_avif_meta<T: Read + Offset>(src: &mut BMFFBox<T>) -> Result<AvifMeta> {
             BoxType::PrimaryItemBox => {
                 if primary_item_id.is_some() {
                     return Err(Error::InvalidData(
-                        "There should be zero or one pitm boxes per ISOBMFF (ISO 14496-12:2015) § 8.11.4.1",
+                        "There shall be zero or one pitm boxes per ISOBMFF (ISO 14496-12:2015) § 8.11.4.1",
                     ));
                 }
                 primary_item_id = Some(read_pitm(&mut b)?);
             }
-            BoxType::ImageReferenceBox => {
+            BoxType::ItemReferenceBox => {
                 if item_references.is_some() {
-                    return Err(Error::InvalidData("There should be zero or one iref boxes"));
+                    return Err(Error::InvalidData("There shall be zero or one iref boxes per ISOBMFF (ISO 14496-12:2015) § 8.11.12.1"));
                 }
                 item_references = Some(read_iref(&mut b)?);
             }
-            BoxType::ImagePropertiesBox => {
+            BoxType::ItemPropertiesBox => {
                 if properties.is_some() {
-                    return Err(Error::InvalidData("There should be zero or one iprp boxes"));
+                    return Err(Error::InvalidData("There shall be zero or one iprp boxes per HEIF (ISO 23008-12:2017) § 9.3.1"));
                 }
-                properties = Some(read_iprp(&mut b)?);
+                properties = Some(read_iprp(&mut b, MIF1_BRAND, strictness)?);
             }
             _ => skip_box_content(&mut b)?,
         }
@@ -2188,7 +2273,10 @@ fn read_pitm<T: Read>(src: &mut BMFFBox<T>) -> Result<u32> {
 
 /// Parse an Item Information Box
 /// See ISOBMFF (ISO 14496-12:2015) § 8.11.6
-fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemInfoEntry>> {
+fn read_iinf<T: Read>(
+    src: &mut BMFFBox<T>,
+    strictness: ParseStrictness,
+) -> Result<TryVec<ItemInfoEntry>> {
     let version = read_fullbox_version_no_flags(src)?;
 
     match version {
@@ -2207,11 +2295,11 @@ fn read_iinf<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<ItemInfoEntry>> {
     while let Some(mut b) = iter.next_box()? {
         if b.head.name != BoxType::ItemInfoEntry {
             return Err(Error::InvalidData(
-                "iinf box should contain only infe boxes",
+                "iinf box shall contain only infe boxes per ISOBMFF (ISO 14496-12:2015) § 8.11.6.2",
             ));
         }
 
-        item_infos.push(read_infe(&mut b)?)?;
+        item_infos.push(read_infe(&mut b, strictness)?)?;
 
         check_parser_state!(b.content);
     }
@@ -2234,10 +2322,19 @@ impl std::fmt::Display for U32BE {
 
 /// Parse an Item Info Entry
 /// See ISOBMFF (ISO 14496-12:2015) § 8.11.6.2
-fn read_infe<T: Read>(src: &mut BMFFBox<T>) -> Result<ItemInfoEntry> {
-    // According to the standard, it seems the flags field should be 0, but
-    // at least one sample AVIF image has a nonzero value.
-    let (version, _) = read_fullbox_extra(src)?;
+fn read_infe<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Result<ItemInfoEntry> {
+    let (version, flags) = read_fullbox_extra(src)?;
+
+    // According to the standard, it seems the flags field shall be 0, but at
+    // least one sample AVIF image has a nonzero value.
+    // See https://github.com/AOMediaCodec/av1-avif/issues/146
+    if flags != 0 {
+        fail_if(
+            strictness == ParseStrictness::Strict,
+            "'infe' flags field shall be 0 \
+             per ISOBMFF (ISO 14496-12:2015) § 8.11.6.2",
+        )?;
+    }
 
     // mif1 brand (see HEIF (ISO 23008-12:2017) § 10.2.1) only requires v2 and 3
     let item_id = match version {
@@ -2306,7 +2403,11 @@ fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<SingleItemTypeRefer
 
 /// Parse an Item Properties Box
 /// See HEIF (ISO 23008-12:2017) § 9.3.1
-fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>> {
+fn read_iprp<T: Read>(
+    src: &mut BMFFBox<T>,
+    brand: FourCC,
+    strictness: ParseStrictness,
+) -> Result<TryVec<AssociatedProperty>> {
     let mut iter = src.box_iter();
 
     let mut properties = match iter.next_box()? {
@@ -2315,9 +2416,6 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
         None => Err(Error::UnexpectedEOF),
     }?;
 
-    // Per HEIF (ISO 23008-12:2017) § 9.3.1: There can be zero or more ipma boxes
-    // but "There shall be at most one ItemPropertyAssociationbox with a given
-    // pair of values of version and flags"
     let mut ipma_version_and_flag_values_seen = TryVec::with_capacity(1)?;
     let mut associated = TryVec::new();
 
@@ -2328,22 +2426,57 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
 
         let (version, flags) = read_fullbox_extra(&mut b)?;
         if ipma_version_and_flag_values_seen.contains(&(version, flags)) {
-            return Err(Error::InvalidData("Duplicate ipma with same version/flags"));
+            fail_if(
+                strictness != ParseStrictness::Permissive,
+                "There shall be at most one ItemPropertyAssociationbox with a given pair of \
+                 values of version and flags \
+                 per HEIF (ISO 23008-12:2017) § 9.3.1",
+            )?;
         }
         if flags != 0 && properties.len() <= 127 {
-            return Err(Error::InvalidData("flags should be equal to 0 unless there are more than 127 properties in the ItemPropertyContainerBox"));
+            fail_if(
+                strictness == ParseStrictness::Strict,
+                "Unless there are more than 127 properties in the ItemPropertyContainerBox, \
+                 flags should be equal to 0 \
+                 per HEIF (ISO 23008-12:2017) § 9.3.1",
+            )?;
         }
         ipma_version_and_flag_values_seen.push((version, flags))?;
-        let associations = read_ipma(&mut b, version, flags)?;
+        let associations = read_ipma(&mut b, strictness, version, flags)?;
         for a in associations {
             if a.property_index == 0 {
                 if a.essential {
-                    return Err(Error::InvalidData("0 property index can't be essential"));
+                    fail_if(
+                        strictness != ParseStrictness::Permissive,
+                        "the essential indicator shall be 0 for property index 0 \
+                         per HEIF (ISO 23008-12:2017) § 9.3.3",
+                    )?;
                 }
                 continue;
             }
 
             if let Some(property) = properties.remove(&a.property_index) {
+                if brand == MIF1_BRAND {
+                    match property {
+                        ItemProperty::AV1Config(_)
+                        | ItemProperty::CleanAperture(_)
+                        | ItemProperty::Mirroring(_)
+                        | ItemProperty::Rotation(_) => {
+                            if !a.essential {
+                                fail_if(
+                                    strictness == ParseStrictness::Strict,
+                                    "All transformative properties associated with coded and \
+                                     derived images required or conditionally required by this \
+                                     document shall be marked as essential \
+                                     per MIAF (ISO 23000-22:2019) § 7.3.9",
+                                )?;
+                            }
+                        }
+                        _ => {}
+                    }
+                } else {
+                    unreachable!("read_iprp expects mif1 brand")
+                }
                 associated.push(AssociatedProperty {
                     item_id: a.item_id,
                     property,
@@ -2358,10 +2491,14 @@ fn read_iprp<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<AssociatedProperty>
 }
 
 /// See HEIF (ISO 23008-12:2017) § 9.3.1
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum ItemProperty {
-    Channels(TryVec<u8>),
     AuxiliaryType(AuxiliaryTypeProperty),
+    AV1Config(AV1ConfigBox),
+    CleanAperture(CleanApertureBox),
+    Channels(TryVec<u8>),
+    Mirroring(ImageMirror),
+    Rotation(ImageRotation),
 }
 
 /// For storing ItemPropertyAssociation data
@@ -2536,6 +2673,7 @@ fn calculate_ipma_total_associations(
 /// See HEIF (ISO 23008-12:2017) § 9.3.1
 fn read_ipma<T: Read>(
     src: &mut BMFFBox<T>,
+    strictness: ParseStrictness,
     version: u8,
     flags: u32,
 ) -> Result<TryVec<Association>> {
@@ -2594,9 +2732,11 @@ fn read_ipma<T: Read>(
         }) = associations.last()
         {
             if *max_item_id <= u16::MAX.into() {
-                return Err(Error::InvalidData(
-                    "The version 0 should be used unless 32-bit item_ID values are needed",
-                ));
+                fail_if(
+                    strictness == ParseStrictness::Strict,
+                    "The ipma version 0 should be used unless 32-bit item_ID values are needed \
+                     per HEIF (ISO 23008-12:2017) § 9.3.1",
+                )?;
             }
         }
     }
@@ -2613,8 +2753,12 @@ fn read_ipco<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<u16, ItemProper
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         if let Some(property) = match b.head.name {
-            BoxType::PixelInformationBox => Some(ItemProperty::Channels(read_pixi(&mut b)?)),
             BoxType::AuxiliaryTypeProperty => Some(ItemProperty::AuxiliaryType(read_auxc(&mut b)?)),
+            BoxType::AV1CodecConfigurationBox => Some(ItemProperty::AV1Config(read_av1c(&mut b)?)),
+            BoxType::CleanApertureBox => Some(ItemProperty::CleanAperture(read_clap(&mut b)?)),
+            BoxType::ImageMirror => Some(ItemProperty::Mirroring(read_imir(&mut b)?)),
+            BoxType::ImageRotation => Some(ItemProperty::Rotation(read_irot(&mut b)?)),
+            BoxType::PixelInformationBox => Some(ItemProperty::Channels(read_pixi(&mut b)?)),
             _ => {
                 skip_box_remain(&mut b)?;
                 None
@@ -2651,6 +2795,98 @@ fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<u8>> {
 
     check_parser_state!(src.content);
     Ok(channels)
+}
+
+#[derive(Debug)]
+pub struct U32Fraction {
+    numerator: u32,
+    denominator: u32,
+}
+
+fn read_u32_fraction<T: Read>(src: &mut BMFFBox<T>) -> Result<U32Fraction> {
+    let numerator = be_u32(src)?;
+    let denominator = be_u32(src)?;
+
+    Ok(U32Fraction {
+        numerator,
+        denominator,
+    })
+}
+
+#[derive(Debug)]
+pub struct CleanApertureBox {
+    width: U32Fraction,
+    height: U32Fraction,
+    horizontal_offset: U32Fraction,
+    vertical_offset: U32Fraction,
+}
+
+/// Parse clean aperture box
+/// See HEIF (ISO 23008-12:2017) § 6.5.9
+fn read_clap<T: Read>(src: &mut BMFFBox<T>) -> Result<CleanApertureBox> {
+    let width = read_u32_fraction(src)?;
+    let height = read_u32_fraction(src)?;
+    let horizontal_offset = read_u32_fraction(src)?;
+    let vertical_offset = read_u32_fraction(src)?;
+
+    check_parser_state!(src.content);
+
+    Ok(CleanApertureBox {
+        width,
+        height,
+        horizontal_offset,
+        vertical_offset,
+    })
+}
+
+#[derive(Debug)]
+pub enum ImageRotation {
+    Zero,
+    AntiClockwise90Degrees,
+    AntiClockwise180Degrees,
+    AntiClockwise270Degrees,
+}
+
+/// Parse image rotation box
+/// See HEIF (ISO 23008-12:2017) § 6.5.10
+fn read_irot<T: Read>(src: &mut BMFFBox<T>) -> Result<ImageRotation> {
+    let irot = src.read_into_try_vec()?;
+    let mut irot = BitReader::new(&irot);
+    let _reserved = irot.read_u8(6)?;
+    let image_rotation = match irot.read_u8(2)? {
+        0 => ImageRotation::Zero,
+        1 => ImageRotation::AntiClockwise90Degrees,
+        2 => ImageRotation::AntiClockwise180Degrees,
+        3 => ImageRotation::AntiClockwise270Degrees,
+        _ => unreachable!(),
+    };
+
+    check_parser_state!(src.content);
+
+    Ok(image_rotation)
+}
+
+#[derive(Debug)]
+pub enum ImageMirror {
+    Vertical,
+    Horizontal,
+}
+
+/// Parse image mirroring box
+/// See HEIF (ISO 23008-12:2017) § 6.5.12
+fn read_imir<T: Read>(src: &mut BMFFBox<T>) -> Result<ImageMirror> {
+    let imir = src.read_into_try_vec()?;
+    let mut imir = BitReader::new(&imir);
+    let _reserved = imir.read_u8(7)?;
+    let image_mirror = match imir.read_u8(1)? {
+        0 => ImageMirror::Vertical,
+        1 => ImageMirror::Horizontal,
+        _ => unreachable!(),
+    };
+
+    check_parser_state!(src.content);
+
+    Ok(image_mirror)
 }
 
 /// See HEIF (ISO 23008-12:2017) § 6.5.8

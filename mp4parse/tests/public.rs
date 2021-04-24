@@ -5,9 +5,10 @@
 extern crate mp4parse as mp4;
 
 use mp4::Error;
+use mp4::ParseStrictness;
 use std::convert::TryInto;
 use std::fs::File;
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
 
 static MINI_MP4: &str = "tests/minimal.mp4";
@@ -32,12 +33,24 @@ static VIDEO_AV1_MP4: &str = "tests/tiny_av1.mp4";
 // https://bugzilla.mozilla.org/show_bug.cgi?id=1687357 for more information.
 static VIDEO_INVALID_USERDATA: &str = "tests/invalid_userdata.mp4";
 static IMAGE_AVIF: &str = "av1-avif/testFiles/Microsoft/Monochrome.avif";
-static IMAGE_AVIF_EXTENTS: &str = "tests/kodim-extents.avif";
+static IMAGE_AVIF_EXTENTS: &str = "tests/multiple-extents.avif";
 static IMAGE_AVIF_ALPHA: &str = "tests/bug-1661347.avif";
 static IMAGE_AVIF_CORRUPT: &str = "tests/corrupt/bug-1655846.avif";
 static IMAGE_AVIF_CORRUPT_2: &str = "tests/corrupt/bug-1661347.avif";
-static IMAGE_AVIF_CORRUPT_3: &str = "tests/corrupt/bad-ipma-version.avif";
-static IMAGE_AVIF_CORRUPT_4: &str = "tests/corrupt/bad-ipma-flags.avif";
+static IMAGE_AVIF_IPMA_BAD_VERSION: &str = "tests/corrupt/bad-ipma-version.avif";
+static IMAGE_AVIF_IPMA_BAD_FLAGS: &str = "tests/corrupt/bad-ipma-flags.avif";
+static IMAGE_AVIF_IPMA_DUPLICATE_VERSION_AND_FLAGS: &str =
+    "tests/corrupt/ipma-duplicate-version-and-flags.avif";
+static IMAGE_AVIF_NO_HDLR: &str = "tests/corrupt/hdlr-not-first.avif";
+static IMAGE_AVIF_HDLR_NOT_FIRST: &str = "tests/corrupt/no-hdlr.avif";
+static IMAGE_AVIF_HDLR_NOT_PICT: &str = "tests/corrupt/hdlr-not-pict.avif";
+static IMAGE_AVIF_NO_MIF1: &str = "tests/corrupt/no-mif1.avif";
+static IMAGE_AVIF_NO_PIXI: &str = "tests/corrupt/no-pixi.avif";
+static IMAGE_AVIF_NO_ALPHA_PIXI: &str = "tests/corrupt/no-pixi-for-alpha.avif";
+static IMAGE_AVIF_AV1C_MISSING_ESSENTIAL: &str = "tests/corrupt/av1C-missing-essential.avif";
+static IMAGE_AVIF_CLAP_MISSING_ESSENTIAL: &str = "tests/corrupt/clap-missing-essential.avif";
+static IMAGE_AVIF_IMIR_MISSING_ESSENTIAL: &str = "tests/corrupt/imir-missing-essential.avif";
+static IMAGE_AVIF_IROT_MISSING_ESSENTIAL: &str = "tests/corrupt/irot-missing-essential.avif";
 static IMAGE_AVIF_GRID: &str = "av1-avif/testFiles/Microsoft/Summer_in_Tomsk_720p_5x4_grid.avif";
 static AVIF_TEST_DIRS: &[&str] = &["tests", "av1-avif/testFiles"];
 static AVIF_CORRUPT_IMAGES: &str = "tests/corrupt";
@@ -695,7 +708,7 @@ fn public_mp4_bug_1185230() {
 #[test]
 fn public_avif_primary_item() {
     let input = &mut File::open(IMAGE_AVIF).expect("Unknown file");
-    let context = mp4::read_avif(input).expect("read_avif failed");
+    let context = mp4::read_avif(input, ParseStrictness::Normal).expect("read_avif failed");
     assert_eq!(context.primary_item().len(), 6979);
     assert_eq!(context.primary_item()[0..4], [0x12, 0x00, 0x0a, 0x0a]);
 }
@@ -703,14 +716,14 @@ fn public_avif_primary_item() {
 #[test]
 fn public_avif_primary_item_split_extents() {
     let input = &mut File::open(IMAGE_AVIF_EXTENTS).expect("Unknown file");
-    let context = mp4::read_avif(input).expect("read_avif failed");
-    assert_eq!(context.primary_item().len(), 4387);
+    let context = mp4::read_avif(input, ParseStrictness::Normal).expect("read_avif failed");
+    assert_eq!(context.primary_item().len(), 52);
 }
 
 #[test]
 fn public_avif_alpha_item() {
     let input = &mut File::open(IMAGE_AVIF_ALPHA).expect("Unknown file");
-    let context = mp4::read_avif(input).expect("read_avif failed");
+    let context = mp4::read_avif(input, ParseStrictness::Normal).expect("read_avif failed");
     assert!(context.alpha_item().is_some());
     assert!(!context.premultiplied_alpha);
 }
@@ -718,49 +731,139 @@ fn public_avif_alpha_item() {
 #[test]
 fn public_avif_bug_1655846() {
     let input = &mut File::open(IMAGE_AVIF_CORRUPT).expect("Unknown file");
-    assert!(mp4::read_avif(input).is_err());
+    assert!(mp4::read_avif(input, ParseStrictness::Normal).is_err());
 }
 
 #[test]
 fn public_avif_bug_1661347() {
     let input = &mut File::open(IMAGE_AVIF_CORRUPT_2).expect("Unknown file");
-    assert!(mp4::read_avif(input).is_err());
+    assert!(mp4::read_avif(input, ParseStrictness::Normal).is_err());
 }
 
 fn assert_invalid_data<T: std::fmt::Debug>(result: mp4::Result<T>, expected_msg: &str) {
     match result {
         Err(Error::InvalidData(msg)) if msg == expected_msg => {}
+        Err(Error::InvalidData(msg)) if msg != expected_msg => {
+            panic!(
+                "Error message mismtatch\nExpected: {}\nFound:    {}",
+                expected_msg, msg
+            );
+        }
         r => panic!(
-            "Expected Err(Error::InvalidData({:?})), found {:?}",
+            "Expected Err(Error::InvalidData({:?}), found {:?}",
             expected_msg, r
         ),
     }
 }
 
-#[test]
-fn public_avif_bad_ipma_version() {
-    let input = &mut File::open(IMAGE_AVIF_CORRUPT_3).expect("Unknown file");
-    let expected_msg = "The version 0 should be used unless 32-bit item_ID values are needed";
-    assert_invalid_data(mp4::read_avif(input), expected_msg);
+/// Check that input generates the expected error only in strict parsing mode
+fn assert_avif_should(path: &str, expected_msg: &str) {
+    let input = &mut File::open(path).expect("Unknown file");
+    assert_invalid_data(mp4::read_avif(input, ParseStrictness::Strict), expected_msg);
+    input.seek(SeekFrom::Start(0)).expect("rewind failed");
+    mp4::read_avif(input, ParseStrictness::Normal).expect("ParseStrictness::Normal failed");
+    input.seek(SeekFrom::Start(0)).expect("rewind failed");
+    mp4::read_avif(input, ParseStrictness::Permissive).expect("ParseStrictness::Permissive failed");
+}
+
+/// Check that input generates the expected unless in permissive parsing mode
+fn assert_avif_shall(path: &str, expected_msg: &str) {
+    let input = &mut File::open(path).expect("Unknown file");
+    assert_invalid_data(mp4::read_avif(input, ParseStrictness::Strict), expected_msg);
+    input.seek(SeekFrom::Start(0)).expect("rewind failed");
+    assert_invalid_data(mp4::read_avif(input, ParseStrictness::Normal), expected_msg);
+    input.seek(SeekFrom::Start(0)).expect("rewind failed");
+    mp4::read_avif(input, ParseStrictness::Permissive).expect("ParseStrictness::Permissive failed");
 }
 
 #[test]
-fn public_avif_bad_ipma_flags() {
-    let input = &mut File::open(IMAGE_AVIF_CORRUPT_4).expect("Unknown file");
-    let expected_msg = "flags should be equal to 0 unless there are more than 127 properties in the ItemPropertyContainerBox";
-    assert_invalid_data(mp4::read_avif(input), expected_msg);
+fn public_avif_ipma_missing_essential() {
+    let expected_msg = "All transformative properties associated with \
+                        coded and derived images required or conditionally \
+                        required by this document shall be marked as essential \
+                        per MIAF (ISO 23000-22:2019) § 7.3.9";
+    assert_avif_should(IMAGE_AVIF_AV1C_MISSING_ESSENTIAL, expected_msg);
+    assert_avif_should(IMAGE_AVIF_CLAP_MISSING_ESSENTIAL, expected_msg);
+    assert_avif_should(IMAGE_AVIF_IMIR_MISSING_ESSENTIAL, expected_msg);
+    assert_avif_should(IMAGE_AVIF_IROT_MISSING_ESSENTIAL, expected_msg);
+}
+
+#[test]
+fn public_avif_ipma_bad_version() {
+    let expected_msg = "The ipma version 0 should be used unless 32-bit \
+                        item_ID values are needed \
+                        per HEIF (ISO 23008-12:2017) § 9.3.1";
+    assert_avif_should(IMAGE_AVIF_IPMA_BAD_VERSION, expected_msg);
+}
+
+#[test]
+fn public_avif_ipma_bad_flags() {
+    let expected_msg = "Unless there are more than 127 properties in the \
+                        ItemPropertyContainerBox, flags should be equal to 0 \
+                        per HEIF (ISO 23008-12:2017) § 9.3.1";
+    assert_avif_should(IMAGE_AVIF_IPMA_BAD_FLAGS, expected_msg);
+}
+
+#[test]
+fn public_avif_ipma_duplicate_version_and_flags() {
+    let expected_msg = "There shall be at most one ItemPropertyAssociationbox \
+                        with a given pair of values of version and flags \
+                        per HEIF (ISO 23008-12:2017) § 9.3.1";
+    assert_avif_shall(IMAGE_AVIF_IPMA_DUPLICATE_VERSION_AND_FLAGS, expected_msg);
+}
+
+#[test]
+fn public_avif_hdlr_first_in_meta() {
+    let expected_msg = "The HandlerBox shall be the first contained box within \
+                        the MetaBox \
+                        per MIAF (ISO 23000-22:2019) § 7.2.1.5";
+    assert_avif_shall(IMAGE_AVIF_NO_HDLR, expected_msg);
+    assert_avif_shall(IMAGE_AVIF_HDLR_NOT_FIRST, expected_msg);
+}
+
+#[test]
+fn public_avif_hdlr_is_pict() {
+    let expected_msg = "The HandlerBox handler_type must be 'pict' \
+                        per MIAF (ISO 23000-22:2019) § 7.2.1.5";
+    assert_avif_shall(IMAGE_AVIF_HDLR_NOT_PICT, expected_msg);
+}
+
+#[test]
+fn public_avif_no_mif1() {
+    let expected_msg = "The FileTypeBox should contain 'mif1' in the compatible_brands list \
+                        per MIAF (ISO 23000-22:2019) § 7.2.1.2";
+    assert_avif_should(IMAGE_AVIF_NO_MIF1, expected_msg);
+}
+
+#[test]
+fn public_avif_pixi_present_for_displayable_images() {
+    let expected_msg = "The pixel information property shall be associated with every image \
+                        that is displayable (not hidden) \
+                        per MIAF (ISO/IEC 23000-22:2019) specification § 7.3.6.6";
+    assert_avif_shall(IMAGE_AVIF_NO_PIXI, expected_msg);
+    assert_avif_shall(IMAGE_AVIF_NO_ALPHA_PIXI, expected_msg);
 }
 
 #[test]
 #[ignore] // Remove when we add support; see https://github.com/mozilla/mp4parse-rust/issues/198
 fn public_avif_primary_item_is_grid() {
     let input = &mut File::open(IMAGE_AVIF_GRID).expect("Unknown file");
-    mp4::read_avif(input).expect("read_avif failed");
+    mp4::read_avif(input, ParseStrictness::Normal).expect("read_avif failed");
     // Add some additional checks
 }
 
 #[test]
 fn public_avif_read_samples() {
+    public_avif_read_samples_impl(ParseStrictness::Normal);
+}
+
+#[test]
+#[ignore] // See https://github.com/AOMediaCodec/av1-avif/issues/146
+fn public_avif_read_samples_strict() {
+    public_avif_read_samples_impl(ParseStrictness::Strict);
+}
+
+fn public_avif_read_samples_impl(strictness: ParseStrictness) {
     for dir in AVIF_TEST_DIRS {
         for entry in walkdir::WalkDir::new(dir) {
             let entry = entry.expect("AVIF entry");
@@ -779,7 +882,7 @@ fn public_avif_read_samples() {
             }
             println!("parsing {:?}", path);
             let input = &mut File::open(path).expect("Unknow file");
-            mp4::read_avif(input).expect("read_avif failed");
+            mp4::read_avif(input, strictness).expect("read_avif failed");
         }
     }
 }
