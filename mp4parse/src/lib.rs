@@ -854,7 +854,7 @@ impl<'a> SampleToChunkIterator<'a> {
 /// (n * s) / d is split into floor(n / d) * s + (n % d) * s / d.
 ///
 /// Return None on overflow or if the denominator is zero.
-pub fn rational_scale<T, S>(numerator: T, denominator: T, scale2: S) -> Option<T>
+fn rational_scale<T, S>(numerator: T, denominator: T, scale2: S) -> Option<T>
 where
     T: PrimInt + Zero,
     S: PrimInt,
