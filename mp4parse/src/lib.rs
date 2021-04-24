@@ -492,6 +492,9 @@ impl<T: std::cmp::PartialEq> PartialEq<T> for CheckedInteger<T> {
     }
 }
 
+/// Provides the following information about a sample in the source file: 
+/// sample data offset (start and end), composition time in microseconds 
+/// (start and end) and whether it is a sync sample
 #[repr(C)]
 #[derive(Default, Debug, PartialEq)]
 pub struct Indice {
@@ -518,6 +521,10 @@ pub struct Indice {
     pub sync: bool,
 }
 
+/// Create a vector of `Indice`s with the information about track samples.
+/// It uses `stsc`, `stco`, `stsz` and `stts` boxes to construct a list of
+/// every sample in the file and provides offsets which can be used to read
+/// raw sample data from the file.
 #[allow(clippy::reversed_empty_ranges)]
 pub fn create_sample_table(
     track: &Track,
@@ -873,11 +880,15 @@ where
     })
 }
 
+/// Convert `time` in media's global (mvhd) timescale to microseconds, 
+/// using provided `MediaTimeScale`
 pub fn media_time_to_us(time: MediaScaledTime, scale: MediaTimeScale) -> Option<u64> {
     let microseconds_per_second = 1_000_000;
     rational_scale::<u64, u64>(time.0, scale.0, microseconds_per_second)
 }
 
+/// Convert `time` in track's local (mdhd) timescale to microseconds, 
+/// using provided `TrackTimeScale<T>`
 pub fn track_time_to_us<T>(time: TrackScaledTime<T>, scale: TrackTimeScale<T>) -> Option<T>
 where
     T: PrimInt + Zero,
