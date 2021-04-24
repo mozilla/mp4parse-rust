@@ -29,4 +29,3 @@ include = ["mp4parse"]
 # header to match mp4parse_capi naming conventions
 "ParseStrictness" = "Mp4parseStrictness"
 "Indice" = "Mp4parseIndice"
-"TrackType" = "Mp4parseTrackType"

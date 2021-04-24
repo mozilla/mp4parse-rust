@@ -86,6 +86,20 @@ pub enum Mp4parseStatus {
     Oom = 6,
 }
 
+#[repr(C)]
+#[derive(PartialEq, Debug)]
+pub enum Mp4parseTrackType {
+    Video = 0,
+    Audio = 1,
+    Metadata = 2,
+}
+
+impl Default for Mp4parseTrackType {
+    fn default() -> Self {
+        Mp4parseTrackType::Video
+    }
+}
+
 #[allow(non_camel_case_types)]
 #[repr(C)]
 #[derive(PartialEq, Debug)]
@@ -138,7 +152,7 @@ impl Default for Mp4ParseEncryptionSchemeType {
 #[repr(C)]
 #[derive(Default, Debug)]
 pub struct Mp4parseTrackInfo {
-    pub track_type: TrackType,
+    pub track_type: Mp4parseTrackType,
     pub track_id: u32,
     pub duration: u64,
     pub media_time: CheckedInteger<i64>, // wants to be u64? understand how elst adjustment works
@@ -598,9 +612,9 @@ pub unsafe extern "C" fn mp4parse_get_track_info(
     }
 
     info.track_type = match context.tracks[track_index].track_type {
-        TrackType::Video => TrackType::Video,
-        TrackType::Audio => TrackType::Audio,
-        TrackType::Metadata => TrackType::Metadata,
+        TrackType::Video => Mp4parseTrackType::Video,
+        TrackType::Audio => Mp4parseTrackType::Audio,
+        TrackType::Metadata => Mp4parseTrackType::Metadata,
         TrackType::Unknown => return Mp4parseStatus::Unsupported,
     };
 
@@ -1338,7 +1352,7 @@ fn arg_validation() {
         assert!(parser.is_null());
 
         let mut dummy_info = Mp4parseTrackInfo {
-            track_type: TrackType::Video,
+            track_type: Mp4parseTrackType::Video,
             ..Default::default()
         };
         assert_eq!(
@@ -1406,7 +1420,7 @@ fn arg_validation_with_parser() {
         );
 
         let mut dummy_info = Mp4parseTrackInfo {
-            track_type: TrackType::Video,
+            track_type: Mp4parseTrackType::Video,
             ..Default::default()
         };
         assert_eq!(
@@ -1478,13 +1492,13 @@ fn minimal_mp4_get_track_info() {
     let parser = parse_minimal_mp4();
 
     let mut info = Mp4parseTrackInfo {
-        track_type: TrackType::Video,
+        track_type: Mp4parseTrackType::Video,
         ..Default::default()
     };
     assert_eq!(Mp4parseStatus::Ok, unsafe {
         mp4parse_get_track_info(parser, 0, &mut info)
     });
-    assert_eq!(info.track_type, TrackType::Video);
+    assert_eq!(info.track_type, Mp4parseTrackType::Video);
     assert_eq!(info.track_id, 1);
     assert_eq!(info.duration, 40000);
     assert_eq!(info.media_time, 0);
@@ -1492,7 +1506,7 @@ fn minimal_mp4_get_track_info() {
     assert_eq!(Mp4parseStatus::Ok, unsafe {
         mp4parse_get_track_info(parser, 1, &mut info)
     });
-    assert_eq!(info.track_type, TrackType::Audio);
+    assert_eq!(info.track_type, Mp4parseTrackType::Audio);
     assert_eq!(info.track_id, 2);
     assert_eq!(info.duration, 61333);
     assert_eq!(info.media_time, 21333);
@@ -1550,13 +1564,13 @@ fn minimal_mp4_get_track_info_invalid_track_number() {
     let parser = parse_minimal_mp4();
 
     let mut info = Mp4parseTrackInfo {
-        track_type: TrackType::Video,
+        track_type: Mp4parseTrackType::Video,
         ..Default::default()
     };
     assert_eq!(Mp4parseStatus::BadArg, unsafe {
         mp4parse_get_track_info(parser, 3, &mut info)
     });
-    assert_eq!(info.track_type, TrackType::Video);
+    assert_eq!(info.track_type, Mp4parseTrackType::Video);
     assert_eq!(info.track_id, 0);
     assert_eq!(info.duration, 0);
     assert_eq!(info.media_time, 0);

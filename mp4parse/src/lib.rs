@@ -1654,12 +1654,11 @@ enum Extent {
     ToEnd { offset: u64 },
 }
 
-#[repr(C)]
 #[derive(Debug, PartialEq)]
 pub enum TrackType {
-    Video = 0,
-    Audio = 1,
-    Metadata = 2,
+    Audio,
+    Video,
+    Metadata,
     Unknown,
 }
 

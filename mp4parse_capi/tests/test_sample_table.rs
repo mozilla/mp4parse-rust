@@ -1,7 +1,6 @@
 extern crate mp4parse;
 extern crate mp4parse_capi;
 use mp4parse::Indice;
-use mp4parse::TrackType;
 use mp4parse_capi::*;
 use std::io::Read;
 
@@ -37,7 +36,7 @@ fn parse_sample_table() {
         let mut track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 1, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(track_info.track_type, TrackType::Audio);
+        assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
 
         // Check audio smaple table
         let mut is_fragmented_file: u8 = 0;
@@ -73,7 +72,7 @@ fn parse_sample_table() {
         // Check video smaple table
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(track_info.track_type, TrackType::Video);
+        assert_eq!(track_info.track_type, Mp4parseTrackType::Video);
 
         let mut is_fragmented_file: u8 = 0;
         rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);
@@ -156,7 +155,7 @@ fn parse_sample_table_with_elst() {
         let mut track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 1, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(track_info.track_type, TrackType::Audio);
+        assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
 
         // Check audio sample table
         let mut is_fragmented_file: u8 = std::u8::MAX;
@@ -226,7 +225,7 @@ fn parse_sample_table_with_negative_ctts() {
         let mut track_info = Mp4parseTrackInfo::default();
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Ok);
-        assert_eq!(track_info.track_type, TrackType::Video);
+        assert_eq!(track_info.track_type, Mp4parseTrackType::Video);
 
         let mut is_fragmented_file: u8 = std::u8::MAX;
         rv = mp4parse_is_fragmented(parser, track_info.track_id, &mut is_fragmented_file);
