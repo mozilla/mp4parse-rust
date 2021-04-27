@@ -164,7 +164,7 @@ pub struct Mp4parseTrackInfo {
 #[repr(C)]
 #[derive(Debug)]
 pub struct Mp4parseByteData {
-    pub length: u32,
+    pub length: usize,
     // cheddar can't handle generic type, so it needs to be multiple data types here.
     pub data: *const u8,
     pub indices: *const Indice,
@@ -182,12 +182,12 @@ impl Default for Mp4parseByteData {
 
 impl Mp4parseByteData {
     fn set_data(&mut self, data: &[u8]) {
-        self.length = data.len() as u32;
+        self.length = data.len();
         self.data = data.as_ptr();
     }
 
     fn set_indices(&mut self, data: &[Indice]) {
-        self.length = data.len() as u32;
+        self.length = data.len();
         self.indices = data.as_ptr();
     }
 }
@@ -757,9 +757,9 @@ fn get_track_audio_info(
                 if esds.codec_esds.len() > std::u32::MAX as usize {
                     return Err(Mp4parseStatus::Invalid);
                 }
-                sample_info.extra_data.length = esds.codec_esds.len() as u32;
+                sample_info.extra_data.length = esds.codec_esds.len();
                 sample_info.extra_data.data = esds.codec_esds.as_ptr();
-                sample_info.codec_specific_config.length = esds.decoder_specific_data.len() as u32;
+                sample_info.codec_specific_config.length = esds.decoder_specific_data.len();
                 sample_info.codec_specific_config.data = esds.decoder_specific_data.as_ptr();
                 if let Some(rate) = esds.audio_sample_rate {
                     sample_info.sample_rate = rate;
@@ -781,7 +781,7 @@ fn get_track_audio_info(
                 if streaminfo.block_type != 0 || streaminfo.data.len() != 34 {
                     return Err(Mp4parseStatus::Invalid);
                 }
-                sample_info.codec_specific_config.length = streaminfo.data.len() as u32;
+                sample_info.codec_specific_config.length = streaminfo.data.len();
                 sample_info.codec_specific_config.data = streaminfo.data.as_ptr();
             }
             AudioCodecSpecific::OpusSpecificBox(ref opus) => {
@@ -796,14 +796,14 @@ fn get_track_audio_info(
                             if v.len() > std::u32::MAX as usize {
                                 return Err(Mp4parseStatus::Invalid);
                             }
-                            sample_info.codec_specific_config.length = v.len() as u32;
+                            sample_info.codec_specific_config.length = v.len();
                             sample_info.codec_specific_config.data = v.as_ptr();
                         }
                     }
                 }
             }
             AudioCodecSpecific::ALACSpecificBox(ref alac) => {
-                sample_info.codec_specific_config.length = alac.data.len() as u32;
+                sample_info.codec_specific_config.length = alac.data.len();
                 sample_info.codec_specific_config.data = alac.data.as_ptr();
             }
             AudioCodecSpecific::MP3 | AudioCodecSpecific::LPCM => (),
