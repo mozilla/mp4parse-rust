@@ -2026,7 +2026,7 @@ macro_rules! impl_bounded_product {
 
         impl $name {
             pub fn new(value: $inner) -> Self {
-                assert!(<$inner>::from(value) <= Self::MAX);
+                assert!(value <= Self::MAX);
                 Self(value)
             }
 
