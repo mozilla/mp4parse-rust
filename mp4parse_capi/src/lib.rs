@@ -48,12 +48,12 @@ use std::io::Read;
 
 // Symbols we need from our rust api.
 use mp4parse::serialize_opus_header;
+use mp4parse::unstable::CheckedInteger;
+use mp4parse::unstable::Indice;
 use mp4parse::AudioCodecSpecific;
 use mp4parse::AvifContext;
-use mp4parse::CheckedInteger;
 use mp4parse::CodecType;
 use mp4parse::Error;
-use mp4parse::Indice;
 use mp4parse::MediaContext;
 // Re-exported so consumers don't have to depend on mp4parse as well
 pub use mp4parse::ParseStrictness;
@@ -622,14 +622,14 @@ pub unsafe extern "C" fn mp4parse_get_track_info(
 
     if let (Some(track_timescale), Some(context_timescale)) = (track.timescale, context.timescale) {
         let media_time: CheckedInteger<_> = match track.media_time.map_or(Some(0), |media_time| {
-            mp4parse::track_time_to_us(media_time, track_timescale)
+            mp4parse::unstable::track_time_to_us(media_time, track_timescale)
         }) {
             Some(time) => time.into(),
             None => return Mp4parseStatus::Invalid,
         };
         let empty_duration: CheckedInteger<_> =
             match track.empty_duration.map_or(Some(0), |empty_duration| {
-                mp4parse::media_time_to_us(empty_duration, context_timescale)
+                mp4parse::unstable::media_time_to_us(empty_duration, context_timescale)
             }) {
                 Some(time) => time.into(),
                 None => return Mp4parseStatus::Invalid,
@@ -640,7 +640,7 @@ pub unsafe extern "C" fn mp4parse_get_track_info(
         };
 
         if let Some(track_duration) = track.duration {
-            match mp4parse::track_time_to_us(track_duration, track_timescale) {
+            match mp4parse::unstable::track_time_to_us(track_duration, track_timescale) {
                 Some(duration) => info.duration = duration,
                 None => return Mp4parseStatus::Invalid,
             }
@@ -1110,7 +1110,7 @@ fn get_indice_table(
     }
 
     let media_time = match (&track.media_time, &track.timescale) {
-        (&Some(t), &Some(s)) => mp4parse::track_time_to_us(t, s)
+        (&Some(t), &Some(s)) => mp4parse::unstable::track_time_to_us(t, s)
             .and_then(|v| i64::try_from(v).ok())
             .map(Into::into),
         _ => None,
@@ -1118,7 +1118,7 @@ fn get_indice_table(
 
     let empty_duration: Option<CheckedInteger<_>> =
         match (&track.empty_duration, &context.timescale) {
-            (&Some(e), &Some(s)) => mp4parse::media_time_to_us(e, s)
+            (&Some(e), &Some(s)) => mp4parse::unstable::media_time_to_us(e, s)
                 .and_then(|v| i64::try_from(v).ok())
                 .map(Into::into),
             _ => None,
@@ -1134,7 +1134,7 @@ fn get_indice_table(
         _ => 0.into(),
     };
 
-    if let Some(v) = mp4parse::create_sample_table(track, offset_time) {
+    if let Some(v) = mp4parse::unstable::create_sample_table(track, offset_time) {
         indices.set_indices(&v);
         index_table.insert(track_id, v)?;
         return Ok(());
@@ -1175,7 +1175,7 @@ pub unsafe extern "C" fn mp4parse_get_fragment_info(
     };
 
     if let (Some(time), Some(scale)) = (duration, context.timescale) {
-        info.fragment_duration = match mp4parse::media_time_to_us(time, scale) {
+        info.fragment_duration = match mp4parse::unstable::media_time_to_us(time, scale) {
             Some(time_us) => time_us as u64,
             None => return Mp4parseStatus::Invalid,
         }
