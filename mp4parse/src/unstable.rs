@@ -497,8 +497,7 @@ pub struct Microseconds<T>(pub T);
 /// using provided `MediaTimeScale`
 pub fn media_time_to_us(time: MediaScaledTime, scale: MediaTimeScale) -> Option<Microseconds<u64>> {
     let microseconds_per_second = 1_000_000;
-    rational_scale::<u64, u64>(time.0, scale.0, microseconds_per_second)
-        .map(|v| Microseconds(v))
+    rational_scale::<u64, u64>(time.0, scale.0, microseconds_per_second).map(|v| Microseconds(v))
 }
 
 /// Convert `time` in track's local (mdhd) timescale to microseconds,
@@ -512,8 +511,7 @@ where
 {
     assert_eq!(time.1, scale.1);
     let microseconds_per_second = 1_000_000;
-    rational_scale::<T, u64>(time.0, scale.0, microseconds_per_second)
-        .map(|v| Microseconds(v))
+    rational_scale::<T, u64>(time.0, scale.0, microseconds_per_second).map(|v| Microseconds(v))
 }
 
 #[test]
