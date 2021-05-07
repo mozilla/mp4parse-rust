@@ -239,11 +239,11 @@ pub fn create_sample_table(
         // ctts_offset is the current sample offset time.
         let ctts_offset = ctts_offset_iter.next_offset_time();
 
-        let start_composition = track_time_to_us((decode_time + ctts_offset)?, timescale)?;
+        let start_composition = track_time_to_us((decode_time + ctts_offset)?, timescale)?.0;
 
-        let end_composition = track_time_to_us((sum_delta + ctts_offset)?, timescale)?;
+        let end_composition = track_time_to_us((sum_delta + ctts_offset)?, timescale)?.0;
 
-        let start_decode = track_time_to_us(decode_time, timescale)?;
+        let start_decode = track_time_to_us(decode_time, timescale)?.0;
 
         sample.start_composition = (track_offset_time + start_composition)?;
         sample.end_composition = (track_offset_time + end_composition)?;
@@ -490,22 +490,30 @@ where
     })
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Microseconds<T>(pub T);
+
 /// Convert `time` in media's global (mvhd) timescale to microseconds,
 /// using provided `MediaTimeScale`
-pub fn media_time_to_us(time: MediaScaledTime, scale: MediaTimeScale) -> Option<u64> {
+pub fn media_time_to_us(time: MediaScaledTime, scale: MediaTimeScale) -> Option<Microseconds<u64>> {
     let microseconds_per_second = 1_000_000;
     rational_scale::<u64, u64>(time.0, scale.0, microseconds_per_second)
+        .and_then(|v| Some(Microseconds(v)))
 }
 
 /// Convert `time` in track's local (mdhd) timescale to microseconds,
 /// using provided `TrackTimeScale<T>`
-pub fn track_time_to_us<T>(time: TrackScaledTime<T>, scale: TrackTimeScale<T>) -> Option<T>
+pub fn track_time_to_us<T>(
+    time: TrackScaledTime<T>,
+    scale: TrackTimeScale<T>,
+) -> Option<Microseconds<T>>
 where
     T: PrimInt + Zero,
 {
     assert_eq!(time.1, scale.1);
     let microseconds_per_second = 1_000_000;
     rational_scale::<T, u64>(time.0, scale.0, microseconds_per_second)
+        .and_then(|v| Some(Microseconds(v)))
 }
 
 #[test]
@@ -526,7 +534,7 @@ fn media_time_overflow() {
     let duration = MediaScaledTime(9_007_199_254_710_000);
     assert_eq!(
         media_time_to_us(duration, scale),
-        Some(100_079_991_719_000_000)
+        Some(Microseconds(100_079_991_719_000_000u64))
     );
 }
 
@@ -536,6 +544,6 @@ fn track_time_overflow() {
     let duration = TrackScaledTime(4_413_527_634_807_900u64, 0);
     assert_eq!(
         track_time_to_us(duration, scale),
-        Some(100_079_991_719_000_000)
+        Some(Microseconds(100_079_991_719_000_000u64))
     );
 }

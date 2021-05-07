@@ -621,19 +621,23 @@ pub unsafe extern "C" fn mp4parse_get_track_info(
     let track = &context.tracks[track_index];
 
     if let (Some(track_timescale), Some(context_timescale)) = (track.timescale, context.timescale) {
-        let media_time: CheckedInteger<_> = match track.media_time.map_or(Some(0), |media_time| {
-            mp4parse::unstable::track_time_to_us(media_time, track_timescale)
-        }) {
-            Some(time) => time.into(),
+        let media_time: CheckedInteger<u64> = match track
+            .media_time
+            .map_or(Some(mp4parse::unstable::Microseconds(0)), |media_time| {
+                mp4parse::unstable::track_time_to_us(media_time, track_timescale)
+            }) {
+            Some(time) => time.0.into(),
             None => return Mp4parseStatus::Invalid,
         };
-        let empty_duration: CheckedInteger<_> =
-            match track.empty_duration.map_or(Some(0), |empty_duration| {
+        let empty_duration: CheckedInteger<u64> = match track.empty_duration.map_or(
+            Some(mp4parse::unstable::Microseconds(0)),
+            |empty_duration| {
                 mp4parse::unstable::media_time_to_us(empty_duration, context_timescale)
-            }) {
-                Some(time) => time.into(),
-                None => return Mp4parseStatus::Invalid,
-            };
+            },
+        ) {
+            Some(time) => time.0.into(),
+            None => return Mp4parseStatus::Invalid,
+        };
         info.media_time = match media_time - empty_duration {
             Some(difference) => difference,
             None => return Mp4parseStatus::Invalid,
@@ -641,7 +645,7 @@ pub unsafe extern "C" fn mp4parse_get_track_info(
 
         if let Some(track_duration) = track.duration {
             match mp4parse::unstable::track_time_to_us(track_duration, track_timescale) {
-                Some(duration) => info.duration = duration,
+                Some(duration) => info.duration = duration.0,
                 None => return Mp4parseStatus::Invalid,
             }
         } else {
@@ -1111,7 +1115,7 @@ fn get_indice_table(
 
     let media_time = match (&track.media_time, &track.timescale) {
         (&Some(t), &Some(s)) => mp4parse::unstable::track_time_to_us(t, s)
-            .and_then(|v| i64::try_from(v).ok())
+            .and_then(|v| i64::try_from(v.0).ok())
             .map(Into::into),
         _ => None,
     };
@@ -1119,7 +1123,7 @@ fn get_indice_table(
     let empty_duration: Option<CheckedInteger<_>> =
         match (&track.empty_duration, &context.timescale) {
             (&Some(e), &Some(s)) => mp4parse::unstable::media_time_to_us(e, s)
-                .and_then(|v| i64::try_from(v).ok())
+                .and_then(|v| i64::try_from(v.0).ok())
                 .map(Into::into),
             _ => None,
         };
@@ -1176,7 +1180,7 @@ pub unsafe extern "C" fn mp4parse_get_fragment_info(
 
     if let (Some(time), Some(scale)) = (duration, context.timescale) {
         info.fragment_duration = match mp4parse::unstable::media_time_to_us(time, scale) {
-            Some(time_us) => time_us as u64,
+            Some(time_us) => time_us.0 as u64,
             None => return Mp4parseStatus::Invalid,
         }
     }
