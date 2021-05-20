@@ -28,3 +28,4 @@ include = ["mp4parse"]
 # We need to declare this type in mp4parse, but we rename it in the generated
 # header to match mp4parse_capi naming conventions
 "ParseStrictness" = "Mp4parseStrictness"
+"Indice" = "Mp4parseIndice"

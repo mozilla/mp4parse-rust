@@ -39,6 +39,9 @@ use boxes::{BoxType, FourCC};
 #[cfg(test)]
 mod tests;
 
+#[cfg(feature = "unstable-api")]
+pub mod unstable;
+
 // Arbitrary buffer size limit used for raw read_bufs on a box.
 const BUF_SIZE_LIMIT: u64 = 10 * 1024 * 1024;
 
