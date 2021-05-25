@@ -29,8 +29,7 @@ fuzz_target!(|data: &[u8]| {
             return;
         }
 
-        let mut avif_image = Default::default();
-        mp4parse_avif_get_image(context, &mut avif_image);
+        mp4parse_avif_get_image_safe(&*context);
 
         mp4parse_avif_free(context);
     }
