@@ -815,18 +815,18 @@ struct AvifItem {
 }
 
 impl AvifItem {
-    fn with_data_location(id: ItemId, extent: Extent) -> Result<Self> {
-        Ok(Self {
+    fn with_data_location(id: ItemId, extent: Extent) -> Self {
+        Self {
             id,
             image_data: IsobmffItem::Location(extent),
-        })
+        }
     }
 
-    fn with_inline_data(id: ItemId) -> Result<Self> {
-        Ok(Self {
+    fn with_inline_data(id: ItemId) -> Self {
+        Self {
             id,
             image_data: IsobmffItem::Data(TryVec::new()),
-        })
+        }
     }
 }
 
@@ -858,42 +858,64 @@ impl AvifContext {
             .map(|item| self.item_as_slice(item))
     }
 
-    pub fn spatial_extents_ptr(&self) -> *const ImageSpatialExtentsProperty {
+    pub fn spatial_extents_ptr(&self) -> Result<*const ImageSpatialExtentsProperty> {
         match self
             .item_properties
-            .get(self.primary_item.id, BoxType::ImageSpatialExtentsProperty)
+            .get(self.primary_item.id, BoxType::ImageSpatialExtentsProperty)?
         {
-            Some(ItemProperty::ImageSpatialExtents(ispe)) => ispe,
+            Some(ItemProperty::ImageSpatialExtents(ispe)) => Ok(ispe),
             Some(other_property) => panic!("property key mismatch: {:?}", other_property),
             None => {
-                assert!(
+                fail_if(
                     self.strictness == ParseStrictness::Permissive,
                     "ispe is a mandatory property",
-                );
-                std::ptr::null()
+                )?;
+                Ok(std::ptr::null())
             }
         }
     }
 
-    pub fn image_rotation(&self) -> ImageRotation {
+    pub fn nclx_colour_information_ptr(&self) -> Result<*const NclxColourInformation> {
         match self
             .item_properties
-            .get(self.primary_item.id, BoxType::ImageRotation)
+            .get(self.primary_item.id, BoxType::ColourInformationBox)?
         {
-            Some(ItemProperty::Rotation(irot)) => *irot,
+            Some(ItemProperty::Colour(ColourInformation::Nclx(nclx))) => Ok(nclx),
+            None | Some(ItemProperty::Colour(ColourInformation::Icc(_))) => Ok(std::ptr::null()),
             Some(other_property) => panic!("property key mismatch: {:?}", other_property),
-            None => ImageRotation::D0,
         }
     }
 
-    pub fn image_mirror_ptr(&self) -> *const ImageMirror {
+    pub fn icc_colour_information(&self) -> Result<&[u8]> {
         match self
             .item_properties
-            .get(self.primary_item.id, BoxType::ImageMirror)
+            .get(self.primary_item.id, BoxType::ColourInformationBox)?
         {
-            Some(ItemProperty::Mirroring(imir)) => imir,
+            Some(ItemProperty::Colour(ColourInformation::Icc(icc))) => Ok(icc.bytes.as_slice()),
+            None | Some(ItemProperty::Colour(ColourInformation::Nclx(_))) => Ok(&[]),
             Some(other_property) => panic!("property key mismatch: {:?}", other_property),
-            None => std::ptr::null(),
+        }
+    }
+
+    pub fn image_rotation(&self) -> Result<ImageRotation> {
+        match self
+            .item_properties
+            .get(self.primary_item.id, BoxType::ImageRotation)?
+        {
+            Some(ItemProperty::Rotation(irot)) => Ok(*irot),
+            Some(other_property) => panic!("property key mismatch: {:?}", other_property),
+            None => Ok(ImageRotation::D0),
+        }
+    }
+
+    pub fn image_mirror_ptr(&self) -> Result<*const ImageMirror> {
+        match self
+            .item_properties
+            .get(self.primary_item.id, BoxType::ImageMirror)?
+        {
+            Some(ItemProperty::Mirroring(imir)) => Ok(imir),
+            Some(other_property) => panic!("property key mismatch: {:?}", other_property),
+            None => Ok(std::ptr::null()),
         }
     }
 
@@ -1602,11 +1624,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         })
         .map(|iref| iref.from_item_id)
         // which has the alpha property
-        .filter(|&item_id| {
-            item_properties.get_auxc(item_id).map_or(false, |urn| {
-                urn.aux_type.as_slice() == "urn:mpeg:mpegB:cicp:systems:auxiliary:alpha".as_bytes()
-            })
-        });
+        .filter(|&item_id| item_properties.is_alpha(item_id));
     let alpha_item_id = alpha_item_ids.next();
     if alpha_item_ids.next().is_some() {
         return Err(Error::InvalidData("multiple alpha planes"));
@@ -1643,7 +1661,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         // into a contiguous buffer. Otherwise, we can just store the extent
         // and return a pointer into the mdat later to avoid the copy.
         if loc.extents.len() > 1 {
-            *item = Some(AvifItem::with_inline_data(item_id)?)
+            *item = Some(AvifItem::with_inline_data(item_id))
         }
 
         for extent in loc.extents {
@@ -1654,7 +1672,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
                     match item {
                         None => {
                             trace!("Using IsobmffItem::Location");
-                            *item = Some(AvifItem::with_data_location(item_id, extent)?);
+                            *item = Some(AvifItem::with_data_location(item_id, extent));
                         }
                         Some(AvifItem {
                             image_data: IsobmffItem::Data(item_data),
@@ -1690,7 +1708,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
     let has_pixi = |item_id| {
         item_properties
             .get(item_id, BoxType::PixelInformationBox)
-            .is_some()
+            .map_or(false, |opt| opt.is_some())
     };
     if !has_pixi(primary_item_id) || !alpha_item_id.map_or(true, has_pixi) {
         fail_if(
@@ -1704,7 +1722,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
     let has_av1c = |item_id| {
         item_properties
             .get(item_id, BoxType::AV1CodecConfigurationBox)
-            .is_some()
+            .map_or(false, |opt| opt.is_some())
     };
     if !has_av1c(primary_item_id) || !alpha_item_id.map_or(true, has_av1c) {
         fail_if(
@@ -1715,7 +1733,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         )?;
     }
 
-    if item_properties.get_ispe(primary_item_id).is_none() {
+    if item_properties.get_ispe(primary_item_id)?.is_none() {
         fail_if(
             strictness != ParseStrictness::Permissive,
             "Missing 'ispe' property for primary item, required \
@@ -2000,7 +2018,9 @@ fn read_iprp<T: Read>(
     let mut iter = src.box_iter();
 
     let properties = match iter.next_box()? {
-        Some(mut b) if b.head.name == BoxType::ItemPropertyContainerBox => read_ipco(&mut b),
+        Some(mut b) if b.head.name == BoxType::ItemPropertyContainerBox => {
+            read_ipco(&mut b, strictness)
+        }
         Some(_) => Err(Error::InvalidData("unexpected iprp child")),
         None => Err(Error::UnexpectedEOF),
     }?;
@@ -2140,6 +2160,7 @@ pub enum ItemProperty {
     AuxiliaryType(AuxiliaryTypeProperty),
     AV1Config(AV1ConfigBox),
     Channels(TryVec<u8>),
+    Colour(ColourInformation),
     ImageSpatialExtents(ImageSpatialExtentsProperty),
     Mirroring(ImageMirror),
     Rotation(ImageRotation),
@@ -2152,6 +2173,7 @@ impl ItemProperty {
         match self {
             ItemProperty::AuxiliaryType(_) => BoxType::AuxiliaryTypeProperty,
             ItemProperty::AV1Config(_) => BoxType::AV1CodecConfigurationBox,
+            ItemProperty::Colour(_) => BoxType::ColourInformationBox,
             ItemProperty::Mirroring(_) => BoxType::ImageMirror,
             ItemProperty::Rotation(_) => BoxType::ImageRotation,
             ItemProperty::ImageSpatialExtents(_) => BoxType::ImageSpatialExtentsProperty,
@@ -2195,41 +2217,69 @@ impl ItemPropertiesBox {
     /// is typically included too, so we might as well use an even power of 2.
     const MIN_PROPERTIES: usize = 4;
 
-    fn get_auxc(&self, item_id: ItemId) -> Option<&AuxiliaryTypeProperty> {
-        if let Some(ItemProperty::AuxiliaryType(urn)) =
-            self.get(item_id, BoxType::AuxiliaryTypeProperty)
-        {
-            Some(urn)
-        } else {
-            None
+    fn is_alpha(&self, item_id: ItemId) -> bool {
+        match self.get(item_id, BoxType::AuxiliaryTypeProperty) {
+            Ok(Some(ItemProperty::AuxiliaryType(urn))) => {
+                urn.aux_type.as_slice() == "urn:mpeg:mpegB:cicp:systems:auxiliary:alpha".as_bytes()
+            }
+            Ok(Some(other_property)) => panic!("property key mismatch: {:?}", other_property),
+            Ok(None) => false,
+            Err(e) => {
+                error!(
+                    "is_alpha: Error checking AuxiliaryTypeProperty ({}), returning false",
+                    e
+                );
+                false
+            }
         }
     }
 
-    fn get_ispe(&self, item_id: ItemId) -> Option<&ImageSpatialExtentsProperty> {
+    fn get_ispe(&self, item_id: ItemId) -> Result<Option<&ImageSpatialExtentsProperty>> {
         if let Some(ItemProperty::ImageSpatialExtents(ispe)) =
-            self.get(item_id, BoxType::ImageSpatialExtentsProperty)
+            self.get(item_id, BoxType::ImageSpatialExtentsProperty)?
         {
-            Some(ispe)
+            Ok(Some(ispe))
         } else {
-            None
+            Ok(None)
         }
     }
 
-    fn get(&self, item_id: ItemId, property_type: BoxType) -> Option<&ItemProperty> {
+    fn get(&self, item_id: ItemId, property_type: BoxType) -> Result<Option<&ItemProperty>> {
+        match self.get_multiple(item_id, property_type)?.as_slice() {
+            &[] => Ok(None),
+            &[single_value] => Ok(Some(single_value)),
+            multiple_values => {
+                error!(
+                    "Multiple values for {:?}: {:?}",
+                    property_type, multiple_values
+                );
+                // TODO: add test
+                Err(Error::InvalidData("conflicting item property values"))
+            }
+        }
+    }
+
+    fn get_multiple(
+        &self,
+        item_id: ItemId,
+        property_type: BoxType,
+    ) -> Result<TryVec<&ItemProperty>> {
+        let mut values = TryVec::new();
         for entry in &self.association_entries {
             for a in &entry.associations {
                 if entry.item_id == item_id {
                     match self.properties.get(&a.property_index) {
                         Some(ItemProperty::Unsupported(_)) => {}
                         Some(property) if property.box_type() == property_type => {
-                            return Some(property)
+                            values.push(property)?
                         }
                         _ => {}
                     }
                 }
             }
         }
-        None
+
+        Ok(values)
     }
 }
 
@@ -2476,7 +2526,10 @@ fn read_ipma<T: Read>(
 /// Parse an ItemPropertyContainerBox
 ///
 /// See ISOBMFF (ISO 14496-12:2020 § 8.11.14.1
-fn read_ipco<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<PropertyIndex, ItemProperty>> {
+fn read_ipco<T: Read>(
+    src: &mut BMFFBox<T>,
+    strictness: ParseStrictness,
+) -> Result<TryHashMap<PropertyIndex, ItemProperty>> {
     let mut properties = TryHashMap::with_capacity(ItemPropertiesBox::MIN_PROPERTIES)?;
 
     let mut index = PropertyIndex(1); // ipma uses 1-based indexing
@@ -2485,6 +2538,9 @@ fn read_ipco<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<PropertyIndex, 
         if let Some(property) = match b.head.name {
             BoxType::AuxiliaryTypeProperty => Some(ItemProperty::AuxiliaryType(read_auxc(&mut b)?)),
             BoxType::AV1CodecConfigurationBox => Some(ItemProperty::AV1Config(read_av1c(&mut b)?)),
+            BoxType::ColourInformationBox => {
+                Some(ItemProperty::Colour(read_colr(&mut b, strictness)?))
+            }
             BoxType::ImageMirror => Some(ItemProperty::Mirroring(read_imir(&mut b)?)),
             BoxType::ImageRotation => Some(ItemProperty::Rotation(read_irot(&mut b)?)),
             BoxType::ImageSpatialExtentsProperty => {
@@ -2558,6 +2614,96 @@ fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<u8>> {
 
     check_parser_state!(src.content);
     Ok(channels)
+}
+
+/// Despite [Rec. ITU-T H.273] (12/2016) defining the CICP fields as having a
+/// range of 0-255, and only a small fraction of those values being used,
+/// ISOBMFF (ISO 14496-12:2020) § 12.1.5 defines them as 16-bit values in the
+/// `colr` box. Since we have no use for the additional range, and it would
+/// complicate matters later, we fallibly convert before storing the input.
+///
+/// [Rec. ITU-T H.273]: https://www.itu.int/rec/T-REC-H.273-201612-I/en
+#[repr(C)]
+#[derive(Debug)]
+pub struct NclxColourInformation {
+    colour_primaries: u8,
+    transfer_characteristics: u8,
+    matrix_coefficients: u8,
+    full_range_flag: bool,
+}
+
+/// The raw bytes of the ICC profile
+#[repr(C)]
+pub struct IccColourInformation {
+    bytes: TryVec<u8>,
+}
+
+impl fmt::Debug for IccColourInformation {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("IccColourInformation")
+            .field("data", &format_args!("{} bytes", self.bytes.len()))
+            .finish()
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub enum ColourInformation {
+    Nclx(NclxColourInformation),
+    Icc(IccColourInformation),
+}
+
+/// Parse colour information
+/// See ISOBMFF (ISO 14496-12:2020) § 12.1.5
+fn read_colr<T: Read>(
+    src: &mut BMFFBox<T>,
+    strictness: ParseStrictness,
+) -> Result<ColourInformation> {
+    let colour_type = be_u32(src)?.to_be_bytes();
+
+    match &colour_type {
+        b"nclx" => {
+            const NUM_RESERVED_BITS: u8 = 7;
+            let colour_primaries = be_u16(src)?.try_into()?;
+            let transfer_characteristics = be_u16(src)?.try_into()?;
+            let matrix_coefficients = be_u16(src)?.try_into()?;
+            let bytes = src.read_into_try_vec()?;
+            let mut bit_reader = BitReader::new(&bytes);
+            let full_range_flag = bit_reader.read_bool()?;
+            if bit_reader.remaining() != NUM_RESERVED_BITS.into() {
+                error!(
+                    "read_colr expected {} reserved bits, found {}",
+                    NUM_RESERVED_BITS,
+                    bit_reader.remaining()
+                );
+                return Err(Error::InvalidData("Unexpected size for colr box"));
+            }
+            if bit_reader.read_u8(NUM_RESERVED_BITS)? != 0 {
+                fail_if(
+                    strictness != ParseStrictness::Permissive,
+                    "The 7 reserved bits at the end of the ColourInformationBox \
+                     for colour_type == 'nclx' must be 0 \
+                     per ISOBMFF (ISO 14496-12:2020) § 12.1.5.2",
+                )?;
+            }
+
+            Ok(ColourInformation::Nclx(NclxColourInformation {
+                colour_primaries,
+                transfer_characteristics,
+                matrix_coefficients,
+                full_range_flag,
+            }))
+        }
+        b"rICC" | b"prof" => Ok(ColourInformation::Icc(IccColourInformation {
+            bytes: src.read_into_try_vec()?,
+        })),
+        _ => {
+            error!("read_colr colour_type: {:?}", colour_type);
+            Err(Error::InvalidData(
+                "Unsupported colour_type for ColourInformationBox",
+            ))
+        }
+    }
 }
 
 #[repr(C)]
