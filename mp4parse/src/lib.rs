@@ -2594,29 +2594,45 @@ fn read_irot<T: Read>(src: &mut BMFFBox<T>) -> Result<ImageRotation> {
     Ok(image_rotation)
 }
 
-#[repr(C)]
-#[derive(Debug)]
 /// The axis about which the image is mirrored (opposite of flip)
 /// Visualized in terms of starting with (⥠) UPWARDS HARPOON WITH BARB LEFT FROM BAR
 /// similar to a DIGIT ONE (1)
+#[repr(C)]
+#[derive(Debug)]
 pub enum ImageMirror {
-    /// left and right sides swapped
-    /// ⥜ UPWARDS HARPOON WITH BARB RIGHT FROM BAR
-    V,
-    /// top and bottom halves swapped
+    /// top and bottom parts exchanged
     /// ⥡ DOWNWARDS HARPOON WITH BARB LEFT FROM BAR
-    H,
+    TopBottom,
+    /// left and right parts exchanged
+    /// ⥜ UPWARDS HARPOON WITH BARB RIGHT FROM BAR
+    LeftRight,
 }
 
 /// Parse image mirroring box
-/// See HEIF (ISO 23008-12:2017) § 6.5.12
+/// See HEIF (ISO 23008-12:2017) § 6.5.12<br />
+/// Note: [ISO/IEC 23008-12:2017/DAmd 2](https://www.iso.org/standard/81688.html)
+/// reverses the interpretation of the 'imir' box in § 6.5.12.3:
+/// > `axis` specifies a vertical (`axis` = 0) or horizontal (`axis` = 1) axis
+/// > for the mirroring operation.
+///
+/// is replaced with:
+/// > `mode` specifies how the mirroring is performed: 0 indicates that the top
+/// > and bottom parts of the image are exchanged; 1 specifies that the left and
+/// > right parts are exchanged.
+/// >
+/// > NOTE: In Exif, orientation tag can be used to signal mirroring operations.
+/// > Exif orientation tag 4 corresponds to `mode` = 0 of `ImageMirror`, and
+/// > Exif orientation tag 2 corresponds to `mode` = 1 accordingly.
+///
+/// This implementation conforms to the text in Draft Amendment 2, which is the
+/// opposite of the published standard as of 4 June 2021.
 fn read_imir<T: Read>(src: &mut BMFFBox<T>) -> Result<ImageMirror> {
     let imir = src.read_into_try_vec()?;
     let mut imir = BitReader::new(&imir);
     let _reserved = imir.read_u8(7)?;
     let image_mirror = match imir.read_u8(1)? {
-        0 => ImageMirror::V,
-        1 => ImageMirror::H,
+        0 => ImageMirror::TopBottom,
+        1 => ImageMirror::LeftRight,
         _ => unreachable!(),
     };
 
