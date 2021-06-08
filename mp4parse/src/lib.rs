@@ -902,7 +902,7 @@ impl AvifContext {
         match &item.image_data {
             IsobmffItem::Location(extent) => {
                 for mdat in &self.item_storage {
-                    if let Some(slice) = mdat.get(&extent) {
+                    if let Some(slice) = mdat.get(extent) {
                         return slice;
                     }
                 }
