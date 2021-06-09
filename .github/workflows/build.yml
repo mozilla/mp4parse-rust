@@ -22,15 +22,15 @@ jobs:
           - os: ubuntu-20.04
             rust: nightly
             release: false
-            experimental: true
+            experimental: false
           - os: windows-2019
             rust: nightly
             release: false
-            experimental: true
+            experimental: false
           - os: macos-10.15
             rust: nightly
             release: false
-            experimental: true
+            experimental: false
 
     steps:
     - uses: actions/checkout@v2
