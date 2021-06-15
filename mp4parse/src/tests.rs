@@ -7,6 +7,7 @@
 
 use super::read_mp4;
 use super::Error;
+use super::ParseStrictness;
 use fallible_collections::TryRead as _;
 
 use std::convert::TryInto as _;
@@ -470,7 +471,7 @@ fn read_hdlr() {
     let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::HandlerBox);
     assert_eq!(stream.head.size, 45);
-    let parsed = super::read_hdlr(&mut stream).unwrap();
+    let parsed = super::read_hdlr(&mut stream, ParseStrictness::Normal).unwrap();
     assert_eq!(parsed.handler_type, b"vide");
 }
 
@@ -483,8 +484,70 @@ fn read_hdlr_short_name() {
     let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::HandlerBox);
     assert_eq!(stream.head.size, 33);
-    let parsed = super::read_hdlr(&mut stream).unwrap();
+    let parsed = super::read_hdlr(&mut stream, ParseStrictness::Normal).unwrap();
     assert_eq!(parsed.handler_type, b"vide");
+}
+
+#[test]
+fn read_hdlr_unsupported_version() {
+    let mut stream = make_fullbox(BoxSize::Short(32), b"hdlr", 1, |s| {
+        s.B32(0).append_bytes(b"vide").B32(0).B32(0).B32(0)
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    assert_eq!(stream.head.name, BoxType::HandlerBox);
+    assert_eq!(stream.head.size, 32);
+    match super::read_hdlr(&mut stream, ParseStrictness::Normal) {
+        Err(Error::Unsupported(msg)) => assert_eq!("hdlr version", msg),
+        result => {
+            eprintln!("{:?}", result);
+            panic!("expected Error::Unsupported")
+        }
+    }
+}
+
+#[test]
+fn read_hdlr_invalid_pre_defined_field() {
+    let mut stream = make_fullbox(BoxSize::Short(32), b"hdlr", 0, |s| {
+        s.B32(1).append_bytes(b"vide").B32(0).B32(0).B32(0)
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    assert_eq!(stream.head.name, BoxType::HandlerBox);
+    assert_eq!(stream.head.size, 32);
+    match super::read_hdlr(&mut stream, ParseStrictness::Normal) {
+        Err(Error::InvalidData(msg)) => assert_eq!(
+            "The HandlerBox 'pre_defined' field shall be 0 \
+             per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+            msg
+        ),
+        result => {
+            eprintln!("{:?}", result);
+            panic!("expected Error::InvalidData")
+        }
+    }
+}
+
+#[test]
+fn read_hdlr_invalid_reserved_field() {
+    let mut stream = make_fullbox(BoxSize::Short(32), b"hdlr", 0, |s| {
+        s.B32(0).append_bytes(b"vide").B32(0).B32(1).B32(0)
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    assert_eq!(stream.head.name, BoxType::HandlerBox);
+    assert_eq!(stream.head.size, 32);
+    match super::read_hdlr(&mut stream, ParseStrictness::Normal) {
+        Err(Error::InvalidData(msg)) => assert_eq!(
+            "The HandlerBox 'reserved' fields shall be 0 \
+             per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+            msg
+        ),
+        result => {
+            eprintln!("{:?}", result);
+            panic!("expected Error::InvalidData")
+        }
+    }
 }
 
 #[test]
@@ -496,7 +559,29 @@ fn read_hdlr_zero_length_name() {
     let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::HandlerBox);
     assert_eq!(stream.head.size, 32);
-    let parsed = super::read_hdlr(&mut stream).unwrap();
+    match super::read_hdlr(&mut stream, ParseStrictness::Normal) {
+        Err(Error::InvalidData(msg)) => assert_eq!(
+            "The HandlerBox 'name' field shall be null-terminated \
+             per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+            msg
+        ),
+        result => {
+            eprintln!("{:?}", result);
+            panic!("expected Error::InvalidData")
+        }
+    }
+}
+
+#[test]
+fn read_hdlr_zero_length_name_permissive() {
+    let mut stream = make_fullbox(BoxSize::Short(32), b"hdlr", 0, |s| {
+        s.B32(0).append_bytes(b"vide").B32(0).B32(0).B32(0)
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    assert_eq!(stream.head.name, BoxType::HandlerBox);
+    assert_eq!(stream.head.size, 32);
+    let parsed = super::read_hdlr(&mut stream, ParseStrictness::Permissive).unwrap();
     assert_eq!(parsed.handler_type, b"vide");
 }
 

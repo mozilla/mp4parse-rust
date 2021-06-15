@@ -204,6 +204,12 @@ impl From<std::string::FromUtf8Error> for Error {
     }
 }
 
+impl From<std::str::Utf8Error> for Error {
+    fn from(_: std::str::Utf8Error) -> Error {
+        Error::InvalidData("invalid utf8")
+    }
+}
+
 impl From<std::num::TryFromIntError> for Error {
     fn from(_: std::num::TryFromIntError) -> Error {
         Error::Unsupported("integer conversion failed")
@@ -1774,7 +1780,7 @@ fn read_avif_meta<T: Read + Offset>(
                         "There shall be exactly one hdlr box per ISOBMFF (ISO 14496-12:2015) § 8.4.3.1",
                     ));
                 }
-                let HandlerBox { handler_type } = read_hdlr(&mut b)?;
+                let HandlerBox { handler_type } = read_hdlr(&mut b, strictness)?;
                 if handler_type != b"pict" {
                     fail_if(
                         strictness != ParseStrictness::Permissive,
@@ -1816,7 +1822,7 @@ fn read_avif_meta<T: Read + Offset>(
             }
             BoxType::ItemPropertiesBox => {
                 if item_properties.is_some() {
-                    return Err(Error::InvalidData("There shall be zero or one iprp boxes per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1"));
+                    return Err(Error::InvalidData("There shall be zero or one iprp boxes per ISOBMFF (ISO 14496-12:2020) § 8.11.14.1"));
                 }
                 item_properties = Some(read_iprp(&mut b, MIF1_BRAND, strictness)?);
             }
@@ -3099,7 +3105,7 @@ fn read_mdia<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
                 debug!("{:?}", mdhd);
             }
             BoxType::HandlerBox => {
-                let hdlr = read_hdlr(&mut b)?;
+                let hdlr = read_hdlr(&mut b, ParseStrictness::Permissive)?;
 
                 match hdlr.handler_type.value.as_ref() {
                     b"vide" => track.track_type = TrackType::Video,
@@ -4122,20 +4128,50 @@ fn read_alac<T: Read>(src: &mut BMFFBox<T>) -> Result<ALACSpecificBox> {
 }
 
 /// Parse a Handler Reference Box.
-/// See ISOBMFF (ISO 14496-12:2015) § 8.4.3
-fn read_hdlr<T: Read>(src: &mut BMFFBox<T>) -> Result<HandlerBox> {
-    let (_, _) = read_fullbox_extra(src)?;
+/// See ISOBMFF (ISO 14496-12:2020) § 8.4.3
+fn read_hdlr<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Result<HandlerBox> {
+    if read_fullbox_version_no_flags(src)? != 0 {
+        return Err(Error::Unsupported("hdlr version"));
+    }
 
-    // Skip uninteresting fields.
-    skip(src, 4)?;
+    let pre_defined = be_u32(src)?;
+    if pre_defined != 0 {
+        fail_if(
+            strictness != ParseStrictness::Permissive,
+            "The HandlerBox 'pre_defined' field shall be 0 \
+             per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+        )?;
+    }
 
     let handler_type = FourCC::from(be_u32(src)?);
 
-    // Skip uninteresting fields.
-    skip(src, 12)?;
+    for _ in 1..=3 {
+        let reserved = be_u32(src)?;
+        if reserved != 0 {
+            fail_if(
+                strictness != ParseStrictness::Permissive,
+                "The HandlerBox 'reserved' fields shall be 0 \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+            )?;
+        }
+    }
 
-    // Skip name.
-    skip_box_remain(src)?;
+    match std::str::from_utf8(src.read_into_try_vec()?.as_slice()) {
+        Ok(name) => {
+            if name.bytes().last() != Some(b'\0') {
+                fail_if(
+                    strictness != ParseStrictness::Permissive,
+                    "The HandlerBox 'name' field shall be null-terminated \
+                     per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+                )?
+            }
+        }
+        Err(_) => fail_if(
+            strictness != ParseStrictness::Permissive,
+            "The HandlerBox 'name' field shall be valid utf8 \
+             per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+        )?,
+    }
 
     Ok(HandlerBox { handler_type })
 }
