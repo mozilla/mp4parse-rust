@@ -1219,23 +1219,6 @@ fn read_f4v_stsd() {
 }
 
 #[test]
-fn max_table_limit() {
-    let elst = make_fullbox(BoxSize::Auto, b"elst", 1, |s| {
-        s.B32(super::TABLE_SIZE_LIMIT + 1)
-    })
-    .into_inner();
-    let mut stream = make_box(BoxSize::Auto, b"edts", |s| s.append_bytes(elst.as_slice()));
-    let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next_box().unwrap().unwrap();
-    let mut track = super::Track::new(0);
-    match super::read_edts(&mut stream, &mut track) {
-        Err(Error::OutOfMemory) => (),
-        Ok(_) => panic!("expected an error result"),
-        _ => panic!("expected a different error result"),
-    }
-}
-
-#[test]
 fn unknown_video_sample_entry() {
     let unknown_codec = make_box(BoxSize::Auto, b"yyyy", |s| s.append_repeated(0, 16)).into_inner();
     let mut stream = make_box(BoxSize::Auto, b"xxxx", |s| {
