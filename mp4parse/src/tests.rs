@@ -803,56 +803,7 @@ fn read_alac() {
 }
 
 #[test]
-fn avcc_limit() {
-    let mut stream = make_box(BoxSize::Auto, b"avc1", |s| {
-        s.append_repeated(0, 6)
-            .B16(1)
-            .append_repeated(0, 16)
-            .B16(320)
-            .B16(240)
-            .append_repeated(0, 14)
-            .append_repeated(0, 32)
-            .append_repeated(0, 4)
-            .B32(0xffff_ffff)
-            .append_bytes(b"avcC")
-            .append_repeated(0, 100)
-    });
-    let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next_box().unwrap().unwrap();
-    match super::read_video_sample_entry(&mut stream) {
-        Err(Error::InvalidData(s)) => assert_eq!(s, "read_buf size exceeds BUF_SIZE_LIMIT"),
-        Ok(_) => panic!("expected an error result"),
-        _ => panic!("expected a different error result"),
-    }
-}
-
-#[test]
 fn esds_limit() {
-    let mut stream = make_box(BoxSize::Auto, b"mp4a", |s| {
-        s.append_repeated(0, 6)
-            .B16(1)
-            .B32(0)
-            .B32(0)
-            .B16(2)
-            .B16(16)
-            .B16(0)
-            .B16(0)
-            .B32(48000 << 16)
-            .B32(0xffff_ffff)
-            .append_bytes(b"esds")
-            .append_repeated(0, 100)
-    });
-    let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next_box().unwrap().unwrap();
-    match super::read_audio_sample_entry(&mut stream) {
-        Err(Error::InvalidData(s)) => assert_eq!(s, "read_buf size exceeds BUF_SIZE_LIMIT"),
-        Ok(_) => panic!("expected an error result"),
-        _ => panic!("expected a different error result"),
-    }
-}
-
-#[test]
-fn esds_limit_2() {
     let mut stream = make_box(BoxSize::Auto, b"mp4a", |s| {
         s.append_repeated(0, 6)
             .B16(1)
@@ -1301,25 +1252,6 @@ fn read_esds_redundant_descriptor() {
 
     match super::read_esds(&mut stream) {
         Ok(esds) => assert_eq!(esds.audio_codec, super::CodecType::AAC),
-        _ => panic!("unexpected result with invalid descriptor"),
-    }
-}
-
-#[test]
-fn read_invalid_pssh() {
-    // invalid pssh header length
-    let pssh = vec![
-        0x00, 0x00, 0x00, 0x01, 0x70, 0x73, 0x73, 0x68, 0x01, 0x00, 0x00, 0x00, 0x10, 0x77, 0xef,
-        0xec, 0xc0, 0xb2, 0x4d, 0x02, 0xac, 0xe3, 0x3c, 0x1e, 0x52, 0xe2, 0xfb, 0x4b, 0x00, 0x00,
-        0x00, 0x02, 0x7e, 0x57, 0x1d, 0x01, 0x7e,
-    ];
-
-    let mut stream = make_box(BoxSize::Auto, b"moov", |s| s.append_bytes(pssh.as_slice()));
-    let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next_box().unwrap().unwrap();
-
-    match super::read_moov(&mut stream, None) {
-        Err(Error::InvalidData(s)) => assert_eq!(s, "read_buf size exceeds BUF_SIZE_LIMIT"),
         _ => panic!("unexpected result with invalid descriptor"),
     }
 }
