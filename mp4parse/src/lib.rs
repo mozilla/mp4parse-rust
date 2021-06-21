@@ -47,10 +47,6 @@ pub mod unstable;
 // Arbitrary buffer size limit used for raw read_bufs on a box.
 const BUF_SIZE_LIMIT: u64 = 10 * 1024 * 1024;
 
-// Max table length. Calculating in worst case for one week long video, one
-// frame per table entry in 30 fps.
-const TABLE_SIZE_LIMIT: u32 = 30 * 60 * 60 * 24 * 7;
-
 /// The 'mif1' brand indicates structural requirements on files
 /// See HEIF (ISO 23008-12:2017) § 10.2.1
 const MIF1_BRAND: FourCC = FourCC { value: *b"mif1" };
@@ -2958,14 +2954,14 @@ fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHe
 
         let mut kid = TryVec::<ByteData>::new();
         if version > 0 {
-            let count = be_u32_with_limit(pssh)?;
+            let count = be_u32(pssh)?;
             for _ in 0..count {
                 let item = read_buf(pssh, 16)?;
                 kid.push(item)?;
             }
         }
 
-        let data_size = be_u32_with_limit(pssh)?;
+        let data_size = be_u32(pssh)?;
         let data = read_buf(pssh, data_size.into())?;
 
         (system_id, kid, data)
@@ -3296,7 +3292,7 @@ fn read_tkhd<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackHeaderBox> {
 /// See ISOBMFF (ISO 14496-12:2015) § 8.6.6
 fn read_elst<T: Read>(src: &mut BMFFBox<T>) -> Result<EditListBox> {
     let (version, _) = read_fullbox_extra(src)?;
-    let edit_count = be_u32_with_limit(src)?;
+    let edit_count = be_u32(src)?;
     let mut edits = TryVec::with_capacity(edit_count.to_usize())?;
     for _ in 0..edit_count {
         let (segment_duration, media_time) = match version {
@@ -3372,7 +3368,7 @@ fn read_mdhd<T: Read>(src: &mut BMFFBox<T>) -> Result<MediaHeaderBox> {
 /// See ISOBMFF (ISO 14496-12:2015) § 8.7.5
 fn read_stco<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
     let (_, _) = read_fullbox_extra(src)?;
-    let offset_count = be_u32_with_limit(src)?;
+    let offset_count = be_u32(src)?;
     let mut offsets = TryVec::with_capacity(offset_count.to_usize())?;
     for _ in 0..offset_count {
         offsets.push(be_u32(src)?.into())?;
@@ -3388,7 +3384,7 @@ fn read_stco<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
 /// See ISOBMFF (ISO 14496-12:2015) § 8.7.5
 fn read_co64<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
     let (_, _) = read_fullbox_extra(src)?;
-    let offset_count = be_u32_with_limit(src)?;
+    let offset_count = be_u32(src)?;
     let mut offsets = TryVec::with_capacity(offset_count.to_usize())?;
     for _ in 0..offset_count {
         offsets.push(be_u64(src)?)?;
@@ -3404,7 +3400,7 @@ fn read_co64<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
 /// See ISOBMFF (ISO 14496-12:2015) § 8.6.2
 fn read_stss<T: Read>(src: &mut BMFFBox<T>) -> Result<SyncSampleBox> {
     let (_, _) = read_fullbox_extra(src)?;
-    let sample_count = be_u32_with_limit(src)?;
+    let sample_count = be_u32(src)?;
     let mut samples = TryVec::with_capacity(sample_count.to_usize())?;
     for _ in 0..sample_count {
         samples.push(be_u32(src)?)?;
@@ -3420,11 +3416,11 @@ fn read_stss<T: Read>(src: &mut BMFFBox<T>) -> Result<SyncSampleBox> {
 /// See ISOBMFF (ISO 14496-12:2015) § 8.7.4
 fn read_stsc<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleToChunkBox> {
     let (_, _) = read_fullbox_extra(src)?;
-    let sample_count = be_u32_with_limit(src)?;
+    let sample_count = be_u32(src)?;
     let mut samples = TryVec::with_capacity(sample_count.to_usize())?;
     for _ in 0..sample_count {
         let first_chunk = be_u32(src)?;
-        let samples_per_chunk = be_u32_with_limit(src)?;
+        let samples_per_chunk = be_u32(src)?;
         let sample_description_index = be_u32(src)?;
         samples.push(SampleToChunk {
             first_chunk,
@@ -3444,7 +3440,7 @@ fn read_stsc<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleToChunkBox> {
 fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
     let (version, _) = read_fullbox_extra(src)?;
 
-    let counts = be_u32_with_limit(src)?;
+    let counts = be_u32(src)?;
 
     if src.bytes_left()
         < counts
@@ -3462,7 +3458,7 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
             // however, some buggy contents have negative value when version == 0.
             // So we always use Version1 here.
             0..=1 => {
-                let count = be_u32_with_limit(src)?;
+                let count = be_u32(src)?;
                 let offset = TimeOffsetVersion::Version1(be_i32(src)?);
                 (count, offset)
             }
@@ -3486,7 +3482,7 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
 fn read_stsz<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleSizeBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let sample_size = be_u32(src)?;
-    let sample_count = be_u32_with_limit(src)?;
+    let sample_count = be_u32(src)?;
     let mut sample_sizes = TryVec::new();
     if sample_size == 0 {
         sample_sizes.reserve(sample_count.to_usize())?;
@@ -3508,10 +3504,10 @@ fn read_stsz<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleSizeBox> {
 /// See ISOBMFF (ISO 14496-12:2015) § 8.6.1.2
 fn read_stts<T: Read>(src: &mut BMFFBox<T>) -> Result<TimeToSampleBox> {
     let (_, _) = read_fullbox_extra(src)?;
-    let sample_count = be_u32_with_limit(src)?;
+    let sample_count = be_u32(src)?;
     let mut samples = TryVec::with_capacity(sample_count.to_usize())?;
     for _ in 0..sample_count {
-        let sample_count = be_u32_with_limit(src)?;
+        let sample_count = be_u32(src)?;
         let sample_delta = be_u32(src)?;
         samples.push(Sample {
             sample_count,
@@ -4879,16 +4875,6 @@ fn be_u24<T: ReadBytesExt>(src: &mut T) -> Result<u32> {
 
 fn be_u32<T: ReadBytesExt>(src: &mut T) -> Result<u32> {
     src.read_u32::<byteorder::BigEndian>().map_err(From::from)
-}
-
-/// Using in reading table size and return error if it exceeds limitation.
-fn be_u32_with_limit<T: ReadBytesExt>(src: &mut T) -> Result<u32> {
-    be_u32(src).and_then(|v| {
-        if v > TABLE_SIZE_LIMIT {
-            return Err(Error::OutOfMemory);
-        }
-        Ok(v)
-    })
 }
 
 fn be_u64<T: ReadBytesExt>(src: &mut T) -> Result<u64> {
