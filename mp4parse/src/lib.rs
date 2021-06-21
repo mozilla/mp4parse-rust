@@ -44,9 +44,6 @@ mod tests;
 #[cfg(feature = "unstable-api")]
 pub mod unstable;
 
-// Arbitrary buffer size limit used for raw read_bufs on a box.
-const BUF_SIZE_LIMIT: u64 = 10 * 1024 * 1024;
-
 /// The 'mif1' brand indicates structural requirements on files
 /// See HEIF (ISO 23008-12:2017) § 10.2.1
 const MIF1_BRAND: FourCC = FourCC { value: *b"mif1" };
@@ -4841,10 +4838,6 @@ fn skip<T: Read>(src: &mut T, bytes: u64) -> Result<()> {
 
 /// Read size bytes into a Vector or return error.
 fn read_buf<T: Read>(src: &mut T, size: u64) -> Result<TryVec<u8>> {
-    if size > BUF_SIZE_LIMIT {
-        return Err(Error::InvalidData("read_buf size exceeds BUF_SIZE_LIMIT"));
-    }
-
     let buf = src.take(size).read_into_try_vec()?;
     if buf.len().to_u64() != size {
         return Err(Error::InvalidData("failed buffer read"));
