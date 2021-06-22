@@ -3439,11 +3439,9 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
 
     let counts = be_u32(src)?;
 
-    if src.bytes_left()
-        < counts
-            .checked_mul(8)
-            .expect("counts -> bytes overflow")
-            .into()
+    if counts
+        .checked_mul(8)
+        .map_or(true, |bytes| u64::from(bytes) > src.bytes_left())
     {
         return Err(Error::InvalidData("insufficient data in 'ctts' box"));
     }
@@ -3469,7 +3467,7 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
         })?;
     }
 
-    skip_box_remain(src)?;
+    check_parser_state!(src.content);
 
     Ok(CompositionOffsetBox { samples: offsets })
 }
