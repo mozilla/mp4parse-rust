@@ -724,6 +724,13 @@ fn public_mp4_bug_1185230() {
 }
 
 #[test]
+fn public_mp4_ctts_overflow() {
+    let input = &mut File::open("tests/clusterfuzz-testcase-minimized-mp4-6093954524250112")
+        .expect("Unknown file");
+    assert_invalid_data(mp4::read_mp4(input), "insufficient data in 'ctts' box");
+}
+
+#[test]
 fn public_avif_primary_item() {
     let input = &mut File::open(IMAGE_AVIF).expect("Unknown file");
     let context = mp4::read_avif(input, ParseStrictness::Normal).expect("read_avif failed");
