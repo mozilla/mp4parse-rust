@@ -449,7 +449,7 @@ fn read_vpcc_version_1() {
         Ok(vpcc) => {
             assert_eq!(vpcc.bit_depth, 8);
             assert_eq!(vpcc.chroma_subsampling, 3);
-            assert_eq!(vpcc.video_full_range_flag, false);
+            assert!(!vpcc.video_full_range_flag);
             assert_eq!(vpcc.matrix_coefficients.unwrap(), 1);
         }
         _ => panic!("vpcc parsing error"),
