@@ -401,7 +401,7 @@ fn public_audio_tenc() {
         };
         assert_eq!(a.codec_type, mp4::CodecType::EncryptedAudio);
         match a.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
-            Some(ref p) => {
+            Some(p) => {
                 assert_eq!(p.original_format, b"mp4a");
                 if let Some(ref schm) = p.scheme_type {
                     assert_eq!(schm.scheme_type, b"cenc");
@@ -459,7 +459,7 @@ fn public_video_cenc() {
         };
         assert_eq!(v.codec_type, mp4::CodecType::EncryptedVideo);
         match v.protection_info.iter().find(|sinf| sinf.tenc.is_some()) {
-            Some(ref p) => {
+            Some(p) => {
                 assert_eq!(p.original_format, b"avc1");
                 if let Some(ref schm) = p.scheme_type {
                     assert_eq!(schm.scheme_type, b"cenc");
