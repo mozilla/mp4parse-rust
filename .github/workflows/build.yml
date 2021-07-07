@@ -46,7 +46,7 @@ jobs:
 
     - name: Clippy
       shell: bash
-      run: rustup run ${{ matrix.rust }} cargo clippy --all -- -D warnings
+      run: rustup run ${{ matrix.rust }} cargo clippy --all --bins --all-targets --examples --benches --tests -- -D warnings 
 
     - name: Test (release)
       shell: bash
