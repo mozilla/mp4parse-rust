@@ -401,7 +401,7 @@ fn read_mvhd_invalid_timescale() {
     let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::MovieHeaderBox);
     assert_eq!(stream.head.size, 120);
-    let r = super::parse_mvhd(&mut stream);
+    let r = super::validate_timescale(&super::read_mvhd(&mut stream).unwrap());
     assert!(r.is_err());
 }
 
