@@ -98,7 +98,6 @@ impl PartialEq<&[u8; 4]> for FourCC {
     }
 }
 
-#[deny(unreachable_patterns)]
 box_database!(
     FileTypeBox                       0x6674_7970, // "ftyp"
     MediaDataBox                      0x6d64_6174, // "mdat"
