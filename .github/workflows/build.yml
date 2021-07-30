@@ -44,9 +44,13 @@ jobs:
       shell: bash
       run: rustup run ${{ matrix.rust }} cargo fmt --all -- --check
 
-    - name: Clippy
+    - name: Clippy (default features)
       shell: bash
       run: rustup run ${{ matrix.rust }} cargo clippy --all --bins --all-targets --examples --benches --tests -- -D warnings 
+
+    - name: Clippy (all features)
+      shell: bash
+      run: rustup run ${{ matrix.rust }} cargo clippy --all --all-features --bins --all-targets --examples --benches --tests -- -D warnings 
 
     - name: Test (release)
       shell: bash
