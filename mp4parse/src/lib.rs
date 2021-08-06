@@ -1711,8 +1711,12 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
             .map_or(false, |opt| opt.is_some())
     };
     if !has_pixi(primary_item_id) || !alpha_item_id.map_or(true, has_pixi) {
+        // The requirement to include pixi is in the process of being changed
+        // to allowing its omission to imply a default value. In anticipation
+        // of that, only give an error in strict mode
+        // See https://github.com/MPEGGroup/MIAF/issues/9
         fail_if(
-            strictness != ParseStrictness::Permissive,
+            strictness == ParseStrictness::Strict,
             "The pixel information property shall be associated with every image \
              that is displayable (not hidden) \
              per MIAF (ISO/IEC 23000-22:2019) specification § 7.3.6.6",
