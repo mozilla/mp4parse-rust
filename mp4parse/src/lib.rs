@@ -1716,7 +1716,11 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         // of that, only give an error in strict mode
         // See https://github.com/MPEGGroup/MIAF/issues/9
         fail_if(
-            strictness == ParseStrictness::Strict,
+            if cfg!(feature = "missing-pixi-permitted") {
+                strictness == ParseStrictness::Strict
+            } else {
+                strictness != ParseStrictness::Permissive
+            },
             "The pixel information property shall be associated with every image \
              that is displayable (not hidden) \
              per MIAF (ISO/IEC 23000-22:2019) specification § 7.3.6.6",
