@@ -29,7 +29,7 @@ fuzz_target!(|data: &[u8]| {
             return;
         }
 
-        mp4parse_avif_get_image_safe(&*context);
+        let _ = mp4parse_avif_get_image_safe(&*context);
 
         mp4parse_avif_free(context);
     }
