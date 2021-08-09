@@ -62,6 +62,13 @@ jobs:
       run: rustup run ${{ matrix.rust }} cargo test --all --verbose
       if: ${{ !matrix.release }}
 
+    - name: Doc (release)
+      shell: bash
+      run: rustup run ${{ matrix.rust }} cargo doc --document-private-items
+      env:
+        RUSTDOCFLAGS: "-Dwarnings"
+      if: matrix.release
+
     # cargo-fuzz supports x86-64 Linux and x86-64 macOS, but macOS currently fails, see:
     # https://github.com/mozilla/mp4parse-rust/pull/210#issuecomment-597420191
     - name: Install cargo-fuzz
