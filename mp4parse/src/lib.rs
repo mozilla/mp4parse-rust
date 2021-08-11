@@ -483,7 +483,7 @@ pub struct VPxConfigBox {
     pub codec_init: TryVec<u8>,
 }
 
-/// See AV1-ISOBMFF § 2.3.3 https://aomediacodec.github.io/av1-isobmff/#av1codecconfigurationbox-syntax
+/// See [AV1-ISOBMFF § 2.3.3](https://aomediacodec.github.io/av1-isobmff/#av1codecconfigurationbox-syntax)
 #[derive(Debug)]
 pub struct AV1ConfigBox {
     pub profile: u8,
@@ -502,7 +502,6 @@ pub struct AV1ConfigBox {
 }
 
 impl AV1ConfigBox {
-    /// See https://aomediacodec.github.io/av1-isobmff/#av1codecconfigurationbox-syntax
     const CONFIG_OBUS_OFFSET: usize = 4;
 
     pub fn config_obus(&self) -> &[u8] {
@@ -3733,7 +3732,7 @@ fn read_vpcc<T: Read>(src: &mut BMFFBox<T>) -> Result<VPxConfigBox> {
     })
 }
 
-/// See AV1-ISOBMFF § 2.3.3 https://aomediacodec.github.io/av1-isobmff/#av1codecconfigurationbox-syntax
+/// See [AV1-ISOBMFF § 2.3.3](https://aomediacodec.github.io/av1-isobmff/#av1codecconfigurationbox-syntax)
 fn read_av1c<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1ConfigBox> {
     // We want to store the raw config as well as a structured (parsed) config, so create a copy of
     // the raw config so we have it later, and then parse the structured data from that.
@@ -4124,7 +4123,7 @@ fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
 }
 
 /// Parse `FLACSpecificBox`.
-/// See https://github.com/xiph/flac/blob/master/doc/isoflac.txt §  3.3.2
+/// See [Encapsulation of FLAC in ISO Base Media File Format](https://github.com/xiph/flac/blob/master/doc/isoflac.txt) §  3.3.2
 fn read_dfla<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACSpecificBox> {
     let (version, flags) = read_fullbox_extra(src)?;
     if version != 0 {
