@@ -1,7 +1,7 @@
 This is an mp4 track metadata parser.
 
 [![Latest crate version](https://img.shields.io/crates/v/mp4parse.svg)](https://crates.io/crates/mp4parse)
-[![Travis build status](https://travis-ci.org/mozilla/mp4parse-rust.svg)](https://travis-ci.org/mozilla/mp4parse-rust)
+[![Build status](https://github.com/mozilla/mp4parse-rust/actions/workflows/build/badge.svg)](https://github.com/mozilla/mp4parse-rust/actions)
 
 Our primary interest is writing a pure-rust replacement for the
 track metadata parser needed by Firefox.
