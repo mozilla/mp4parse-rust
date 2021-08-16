@@ -923,8 +923,14 @@ fn public_avif_pixi_present_for_displayable_images() {
     let expected_msg = "The pixel information property shall be associated with every image \
                         that is displayable (not hidden) \
                         per MIAF (ISO/IEC 23000-22:2019) specification § 7.3.6.6";
-    assert_avif_shall(IMAGE_AVIF_NO_PIXI, expected_msg);
-    assert_avif_shall(IMAGE_AVIF_NO_ALPHA_PIXI, expected_msg);
+    let pixi_test = if cfg!(feature = "missing-pixi-permitted") {
+        assert_avif_should
+    } else {
+        assert_avif_shall
+    };
+
+    pixi_test(IMAGE_AVIF_NO_PIXI, expected_msg);
+    pixi_test(IMAGE_AVIF_NO_ALPHA_PIXI, expected_msg);
 }
 
 #[test]
