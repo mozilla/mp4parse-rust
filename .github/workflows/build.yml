@@ -81,3 +81,7 @@ jobs:
       run: rustup run ${{ matrix.rust }} cargo fuzz build
       if: ${{ matrix.os == 'ubuntu-20.04' && matrix.rust == 'nightly' }}
 
+    - name: Clippy fuzzer
+      working-directory: mp4parse_capi/fuzz
+      run: rustup run ${{ matrix.rust }} cargo clippy -- -D warnings
+      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.rust == 'nightly' }}
