@@ -65,6 +65,7 @@ static AVIF_CLAP: &str = "tests/clap-basic-1_3x3-to-1x1.avif";
 static AVIF_GRID: &str = "av1-avif/testFiles/Microsoft/Summer_in_Tomsk_720p_5x4_grid.avif";
 static AVIF_LSEL: &str =
     "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_lsel.avif";
+static AVIF_NO_PIXI_IMAGES: &[&str] = &[IMAGE_AVIF_NO_PIXI, IMAGE_AVIF_NO_ALPHA_PIXI];
 static AVIF_UNSUPPORTED_IMAGES: &[&str] = &[
     AVIF_A1OP,
     AVIF_A1LX,
@@ -1054,6 +1055,11 @@ fn to_canonical_paths(strs: &[&str]) -> Vec<std::path::PathBuf> {
 fn public_avif_read_samples_impl(strictness: ParseStrictness) {
     let corrupt_images = to_canonical_paths(AV1_AVIF_CORRUPT_IMAGES);
     let unsupported_images = to_canonical_paths(AVIF_UNSUPPORTED_IMAGES);
+    let legal_no_pixi_images = if cfg!(feature = "missing-pixi-permitted") {
+        to_canonical_paths(AVIF_NO_PIXI_IMAGES)
+    } else {
+        vec![]
+    };
     for dir in AVIF_TEST_DIRS {
         for entry in walkdir::WalkDir::new(dir) {
             let entry = entry.expect("AVIF entry");
@@ -1062,9 +1068,11 @@ fn public_avif_read_samples_impl(strictness: ParseStrictness) {
                 eprintln!("Skipping {:?}", path);
                 continue; // Skip directories, ReadMe.txt, etc.
             }
-            let corrupt = path.canonicalize().unwrap().parent().unwrap()
+            let corrupt = (path.canonicalize().unwrap().parent().unwrap()
                 == std::fs::canonicalize(AVIF_CORRUPT_IMAGES_DIR).unwrap()
-                || corrupt_images.contains(&path.canonicalize().unwrap());
+                || corrupt_images.contains(&path.canonicalize().unwrap()))
+                && !legal_no_pixi_images.contains(&path.canonicalize().unwrap());
+
             let unsupported = unsupported_images.contains(&path.canonicalize().unwrap());
             println!(
                 "parsing {}{}{:?}",
