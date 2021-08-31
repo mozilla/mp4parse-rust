@@ -71,8 +71,6 @@ impl ToU64 for usize {
 /// A trait to indicate a type can be infallibly converted to `usize`.
 /// This should only be implemented for infallible conversions, so only unsigned types are valid.
 pub trait ToUsize {
-    // Remove when https://github.com/rust-lang/rust-clippy/issues/6727 is resolved
-    #[allow(clippy::wrong_self_convention)]
     fn to_usize(self) -> usize;
 }
 
