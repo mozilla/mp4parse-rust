@@ -994,24 +994,40 @@ impl AvifContext {
     }
 
     pub fn nclx_colour_information_ptr(&self) -> Result<*const NclxColourInformation> {
-        match self
+        let nclx_colr_boxes = self
             .item_properties
-            .get(self.primary_item.id, BoxType::ColourInformationBox)?
-        {
-            Some(ItemProperty::Colour(ColourInformation::Nclx(nclx))) => Ok(nclx),
-            None | Some(ItemProperty::Colour(ColourInformation::Icc(_))) => Ok(std::ptr::null()),
-            Some(other_property) => panic!("property key mismatch: {:?}", other_property),
+            .get_multiple(self.primary_item.id, |prop| {
+                matches!(prop, ItemProperty::Colour(ColourInformation::Nclx(_)))
+            })?;
+
+        match *nclx_colr_boxes.as_slice() {
+            [] => Ok(std::ptr::null()),
+            [ItemProperty::Colour(ColourInformation::Nclx(nclx)), ..] => {
+                if nclx_colr_boxes.len() > 1 {
+                    warn!("Multiple nclx colr boxes, using first");
+                }
+                Ok(nclx)
+            }
+            _ => unreachable!("Expect only ColourInformation::Nclx(_) matches"),
         }
     }
 
     pub fn icc_colour_information(&self) -> Result<&[u8]> {
-        match self
+        let icc_colr_boxes = self
             .item_properties
-            .get(self.primary_item.id, BoxType::ColourInformationBox)?
-        {
-            Some(ItemProperty::Colour(ColourInformation::Icc(icc))) => Ok(icc.bytes.as_slice()),
-            None | Some(ItemProperty::Colour(ColourInformation::Nclx(_))) => Ok(&[]),
-            Some(other_property) => panic!("property key mismatch: {:?}", other_property),
+            .get_multiple(self.primary_item.id, |prop| {
+                matches!(prop, ItemProperty::Colour(ColourInformation::Icc(_, _)))
+            })?;
+
+        match *icc_colr_boxes.as_slice() {
+            [] => Ok(&[]),
+            [ItemProperty::Colour(ColourInformation::Icc(icc, _)), ..] => {
+                if icc_colr_boxes.len() > 1 {
+                    warn!("Multiple ICC profiles in colr boxes, using first");
+                }
+                Ok(icc.bytes.as_slice())
+            }
+            _ => unreachable!("Expect only ColourInformation::Icc(_) matches"),
         }
     }
 
@@ -2140,6 +2156,11 @@ fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<SingleItemTypeRefer
 ///
 /// Note: HEIF (ISO 23008-12:2017) § 9.3.1 also defines the `iprp` box and
 /// related types, but lacks additional requirements specified in 14496-12:2020.
+///
+/// Note: Currently HEIF (ISO 23008-12:2017) § 6.5.5.1 specifies "At most one"
+/// `colr` box per item, but this is being amended in [DIS 23008-12](https://www.iso.org/standard/83650.html).
+/// The new text is likely to be "At most one for a given value of `colour_type`",
+/// so this implementation adheres to that language for forward compatibility.
 fn read_iprp<T: Read>(
     src: &mut BMFFBox<T>,
     brand: FourCC,
@@ -2211,6 +2232,9 @@ fn read_iprp<T: Read>(
                 BoxType::ImageMirror,
             ];
             let mut prev_transform_index = None;
+            // Realistically, there should only ever be 1 nclx and 1 icc
+            let mut colour_type_indexes: TryHashMap<FourCC, PropertyIndex> =
+                TryHashMap::with_capacity(2)?;
 
             for a in &association_entry.associations {
                 if a.property_index == PropertyIndex(0) {
@@ -2242,6 +2266,28 @@ fn read_iprp<T: Read>(
                                      document shall be marked as essential \
                                      per MIAF (ISO 23000-22:2019) § 7.3.9",
                                 )?;
+                            }
+                        }
+                        // XXX this is contrary to the published specification; see doc comment
+                        // at the beginning of this function for more details
+                        ItemProperty::Colour(colr) => {
+                            let colour_type = colr.colour_type();
+                            if let Some(prev_colr_index) = colour_type_indexes.get(&colour_type) {
+                                warn!(
+                                    "Multiple '{}' type colr associations with {:?}: {:?} and {:?}",
+                                    colour_type,
+                                    association_entry.item_id,
+                                    a.property_index,
+                                    prev_colr_index
+                                );
+                                fail_if(
+                                    strictness != ParseStrictness::Permissive,
+                                    "Each item shall have at most one property association with a
+                                     ColourInformationBox (colr) for a given value of colour_type \
+                                     per HEIF (ISO/IEC DIS 23008-12) § 6.5.5.1",
+                                )?;
+                            } else {
+                                colour_type_indexes.insert(colour_type, a.property_index)?;
                             }
                         }
                         _ => {}
@@ -2378,7 +2424,10 @@ impl ItemPropertiesBox {
     }
 
     fn get(&self, item_id: ItemId, property_type: BoxType) -> Result<Option<&ItemProperty>> {
-        match self.get_multiple(item_id, property_type)?.as_slice() {
+        match self
+            .get_multiple(item_id, |prop| prop.box_type() == property_type)?
+            .as_slice()
+        {
             &[] => Ok(None),
             &[single_value] => Ok(Some(single_value)),
             multiple_values => {
@@ -2395,7 +2444,7 @@ impl ItemPropertiesBox {
     fn get_multiple(
         &self,
         item_id: ItemId,
-        property_type: BoxType,
+        filter: impl Fn(&ItemProperty) -> bool,
     ) -> Result<TryVec<&ItemProperty>> {
         let mut values = TryVec::new();
         for entry in &self.association_entries {
@@ -2403,9 +2452,7 @@ impl ItemPropertiesBox {
                 if entry.item_id == item_id {
                     match self.properties.get(&a.property_index) {
                         Some(ItemProperty::Unsupported(_)) => {}
-                        Some(property) if property.box_type() == property_type => {
-                            values.push(property)?
-                        }
+                        Some(property) if filter(property) => values.push(property)?,
                         _ => {}
                     }
                 }
@@ -2809,7 +2856,16 @@ impl fmt::Debug for IccColourInformation {
 #[derive(Debug)]
 pub enum ColourInformation {
     Nclx(NclxColourInformation),
-    Icc(IccColourInformation),
+    Icc(IccColourInformation, FourCC),
+}
+
+impl ColourInformation {
+    fn colour_type(&self) -> FourCC {
+        match self {
+            Self::Nclx(_) => FourCC::from(*b"nclx"),
+            Self::Icc(_, colour_type) => colour_type.clone(),
+        }
+    }
 }
 
 /// Parse colour information
@@ -2853,9 +2909,12 @@ fn read_colr<T: Read>(
                 full_range_flag,
             }))
         }
-        b"rICC" | b"prof" => Ok(ColourInformation::Icc(IccColourInformation {
-            bytes: src.read_into_try_vec()?,
-        })),
+        b"rICC" | b"prof" => Ok(ColourInformation::Icc(
+            IccColourInformation {
+                bytes: src.read_into_try_vec()?,
+            },
+            FourCC::from(colour_type),
+        )),
         _ => {
             error!("read_colr colour_type: {:?}", colour_type);
             Err(Error::InvalidData(
