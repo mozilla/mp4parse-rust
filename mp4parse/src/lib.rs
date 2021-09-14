@@ -330,6 +330,7 @@ struct BoxHeader {
     /// Offset to the start of the contained data (or header size).
     offset: u64,
     /// Uuid for extended type.
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     uuid: Option<[u8; 16]>,
 }
 
@@ -341,7 +342,9 @@ impl BoxHeader {
 /// File type box 'ftyp'.
 #[derive(Debug)]
 struct FileTypeBox {
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     major_brand: FourCC,
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     minor_version: u32,
     compatible_brands: TryVec<FourCC>,
 }
@@ -350,6 +353,7 @@ struct FileTypeBox {
 #[derive(Debug)]
 struct MovieHeaderBox {
     pub timescale: u32,
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     duration: u64,
 }
 
@@ -387,7 +391,9 @@ struct EditListBox {
 struct Edit {
     segment_duration: u64,
     media_time: i64,
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     media_rate_integer: i16,
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     media_rate_fraction: i16,
 }
 
@@ -511,6 +517,7 @@ pub enum AudioCodecSpecific {
 #[derive(Debug)]
 pub struct AudioSampleEntry {
     pub codec_type: CodecType,
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     data_reference_index: u16,
     pub channelcount: u32,
     pub samplesize: u16,
@@ -531,6 +538,7 @@ pub enum VideoCodecSpecific {
 #[derive(Debug)]
 pub struct VideoSampleEntry {
     pub codec_type: CodecType,
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     data_reference_index: u16,
     pub width: u16,
     pub height: u16,
@@ -543,9 +551,11 @@ pub struct VideoSampleEntry {
 #[derive(Debug)]
 pub struct VPxConfigBox {
     /// An integer that specifies the VP codec profile.
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     profile: u8,
     /// An integer that specifies a VP codec level all samples conform to the following table.
     /// For a description of the various levels, please refer to the VP9 Bitstream Specification.
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     level: u8,
     /// An integer that specifies the bit depth of the luma and color components. Valid values
     /// are 8, 10, and 12.
@@ -555,12 +565,15 @@ pub struct VPxConfigBox {
     /// Really an enum defined by "VP Codec ISO Media File Format Binding".
     pub chroma_subsampling: u8,
     /// Really an enum defined by the "Transfer characteristics" section of ISO 23091-2:2019 § 8.2.
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     transfer_characteristics: u8,
     /// Really an enum defined by the "Matrix coefficients" section of ISO 23091-2:2019 § 8.3.
     /// Available in 'VP Codec ISO Media File Format' version 1 only.
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     matrix_coefficients: Option<u8>,
     /// Indicates the black level and range of the luma and chroma signals. 0 = legal range
     /// (e.g. 16-235 for 8 bit sample depth); 1 = full range (e.g. 0-255 for 8-bit sample depth).
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     video_full_range_flag: bool,
     /// This is not used for VP8 and VP9 . Intended for binary codec initialization data.
     pub codec_init: TryVec<u8>,
@@ -601,6 +614,7 @@ pub struct FLACMetadataBlock {
 /// Represents a FLACSpecificBox 'dfLa'
 #[derive(Debug)]
 pub struct FLACSpecificBox {
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     version: u8,
     pub blocks: TryVec<FLACMetadataBlock>,
 }
@@ -627,6 +641,7 @@ pub struct OpusSpecificBox {
 /// Represent an ALACSpecificBox 'alac'
 #[derive(Debug)]
 pub struct ALACSpecificBox {
+    #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     version: u8,
     pub data: TryVec<u8>,
 }
