@@ -1312,8 +1312,8 @@ extern "C" fn error_read(_: *mut u8, _: usize, _: *mut std::os::raw::c_void) -> 
 extern "C" fn valid_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
     let input: &mut std::fs::File = unsafe { &mut *(userdata as *mut _) };
 
-    let mut buf = unsafe { std::slice::from_raw_parts_mut(buf, size) };
-    match input.read(&mut buf) {
+    let buf = unsafe { std::slice::from_raw_parts_mut(buf, size) };
+    match input.read(buf) {
         Ok(n) => n as isize,
         Err(_) => -1,
     }
