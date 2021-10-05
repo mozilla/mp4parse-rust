@@ -352,6 +352,8 @@ struct FileTypeBox {
 /// Movie header box 'mvhd'.
 #[derive(Debug)]
 struct MovieHeaderBox {
+    creation: u64,
+    modification: u64,
     pub timescale: u32,
     #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     duration: u64,
@@ -874,9 +876,14 @@ pub enum XmlBox {
     BinaryXmlBox(TryVec<u8>),
 }
 
+#[derive(Debug)]
+pub struct UtcSecondsSince1904(pub u64);
+
 /// Internal data structures.
 #[derive(Debug, Default)]
 pub struct MediaContext {
+    pub creation: Option<UtcSecondsSince1904>,
+    pub modification: Option<UtcSecondsSince1904>,
     pub timescale: Option<MediaTimeScale>,
     /// Tracks found in the file.
     pub tracks: TryVec<Track>,
@@ -3230,16 +3237,12 @@ pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
     context.ok_or(Error::NoMoov)
 }
 
-/// Parse a Movie Header Box
-/// See ISOBMFF (ISO 14496-12:2015) § 8.2.2
-fn parse_mvhd<T: Read>(f: &mut BMFFBox<T>) -> Result<Option<MediaTimeScale>> {
-    let mvhd = read_mvhd(f)?;
-    debug!("{:?}", mvhd);
+fn validate_timescale(mvhd: &MovieHeaderBox) -> Result<Option<MediaTimeScale>> {
     if mvhd.timescale == 0 {
-        return Err(Error::InvalidData("zero timescale in mdhd"));
+        Err(Error::InvalidData("zero timescale in mdhd"))
+    } else {
+        Ok(Some(MediaTimeScale(u64::from(mvhd.timescale))))
     }
-    let timescale = Some(MediaTimeScale(u64::from(mvhd.timescale)));
-    Ok(timescale)
 }
 
 /// Parse a Movie Box
@@ -3249,6 +3252,8 @@ fn parse_mvhd<T: Read>(f: &mut BMFFBox<T>) -> Result<Option<MediaTimeScale>> {
 /// such as with tests/test_case_1185230.mp4.
 fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Result<MediaContext> {
     let MediaContext {
+        mut creation,
+        mut modification,
         mut timescale,
         mut tracks,
         mut mvex,
@@ -3262,7 +3267,11 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Resu
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::MovieHeaderBox => {
-                timescale = parse_mvhd(&mut b)?;
+                let mvhd = read_mvhd(&mut b)?;
+                debug!("{:?}", mvhd);
+                creation = Some(UtcSecondsSince1904(mvhd.creation));
+                modification = Some(UtcSecondsSince1904(mvhd.modification));
+                timescale = validate_timescale(&mvhd)?;
             }
             BoxType::TrackBox => {
                 let mut track = Track::new(tracks.len());
@@ -3293,6 +3302,8 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Resu
     }
 
     Ok(MediaContext {
+        creation,
+        modification,
         timescale,
         tracks,
         mvex,
@@ -3568,33 +3579,39 @@ fn read_ftyp<T: Read>(src: &mut BMFFBox<T>) -> Result<FileTypeBox> {
 /// Parse an mvhd box.
 fn read_mvhd<T: Read>(src: &mut BMFFBox<T>) -> Result<MovieHeaderBox> {
     let (version, _) = read_fullbox_extra(src)?;
+    let to_u64 = |n| {
+        if n == std::u32::MAX {
+            std::u64::MAX
+        } else {
+            u64::from(n)
+        }
+    };
+    let creation;
+    let modification;
     match version {
         // 64 bit creation and modification times.
         1 => {
-            skip(src, 16)?;
+            creation = be_u64(src)?;
+            modification = be_u64(src)?;
         }
         // 32 bit creation and modification times.
         0 => {
-            skip(src, 8)?;
+            creation = to_u64(be_u32(src)?);
+            modification = to_u64(be_u32(src)?);
         }
         _ => return Err(Error::InvalidData("unhandled mvhd version")),
     }
     let timescale = be_u32(src)?;
     let duration = match version {
         1 => be_u64(src)?,
-        0 => {
-            let d = be_u32(src)?;
-            if d == std::u32::MAX {
-                std::u64::MAX
-            } else {
-                u64::from(d)
-            }
-        }
+        0 => to_u64(be_u32(src)?),
         _ => return Err(Error::InvalidData("unhandled mvhd version")),
     };
     // Skip remaining fields.
     skip(src, 80)?;
     Ok(MovieHeaderBox {
+        creation,
+        modification,
         timescale,
         duration,
     })
