@@ -26,3 +26,12 @@ Test coverage comes from several sources:
 - Examples are included under `mp4parse_capi/examples`. These programs should
 continue to build and run after changes are made. Note, these programs are not
 typically run by `cargo test`, so manual verification is required.
+
+# Versioning
+
+Prior to Firefox 95, versions of this library have been updated sporadically,
+and uploaded to crates.io even less frequently. Going forward, there will be
+a new release on github and crates.io whenever the version of the code used
+in Firefox (see [toolkit/library/rust/shared/Cargo.toml](https://searchfox.org/mozilla-central/source/toolkit/library/rust/shared/Cargo.toml#12)) is updated. For convenience, the
+patch version will correspond to the first Firefox version the code is used in.
+For example, v0.12.95 will be the version of the code used in Firefox 95.
