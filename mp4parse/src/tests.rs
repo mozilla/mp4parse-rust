@@ -476,6 +476,24 @@ fn read_hdlr() {
 }
 
 #[test]
+fn read_hdlr_multiple_nul_in_name() {
+    let mut stream = make_fullbox(BoxSize::Short(45), b"hdlr", 0, |s| {
+        s.B32(0)
+            .append_bytes(b"vide")
+            .B32(0)
+            .B32(0)
+            .B32(0)
+            .append_bytes(b"Vide\0Handler")
+            .B8(0) // null-terminate string
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    assert_eq!(stream.head.name, BoxType::HandlerBox);
+    assert_eq!(stream.head.size, 45);
+    assert!(super::read_hdlr(&mut stream, ParseStrictness::Strict).is_err());
+}
+
+#[test]
 fn read_hdlr_short_name() {
     let mut stream = make_fullbox(BoxSize::Short(33), b"hdlr", 0, |s| {
         s.B32(0).append_bytes(b"vide").B32(0).B32(0).B32(0).B8(0) // null-terminate string

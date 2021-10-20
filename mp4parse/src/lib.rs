@@ -4514,12 +4514,23 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Resu
 
     match std::str::from_utf8(src.read_into_try_vec()?.as_slice()) {
         Ok(name) => {
-            if name.bytes().last() != Some(b'\0') {
-                fail_if(
+            match name.bytes().filter(|&b| b == b'\0').count() {
+                0 => fail_if(
                     strictness != ParseStrictness::Permissive,
                     "The HandlerBox 'name' field shall be null-terminated \
                      per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
-                )?
+                )?,
+                1 => (),
+                _ =>
+                // See https://github.com/MPEGGroup/FileFormat/issues/35
+                {
+                    fail_if(
+                        strictness == ParseStrictness::Strict,
+                        "The HandlerBox 'name' field shall have a NUL byte \
+                         only in the final position \
+                         per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+                    )?
+                }
             }
         }
         Err(_) => fail_if(
