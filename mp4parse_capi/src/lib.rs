@@ -1287,12 +1287,7 @@ fn get_pssh_info(
             .try_into()
             .map_err(|_| Mp4parseStatus::Invalid)?;
         let mut data_len = TryVec::new();
-        if data_len
-            .write_u32::<byteorder::NativeEndian>(content_len)
-            .is_err()
-        {
-            return Err(Mp4parseStatus::Io);
-        }
+        data_len.write_u32::<byteorder::NativeEndian>(content_len)?;
         pssh_data.extend_from_slice(pssh.system_id.as_slice())?;
         pssh_data.extend_from_slice(data_len.as_slice())?;
         pssh_data.extend_from_slice(pssh.box_content.as_slice())?;
