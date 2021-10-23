@@ -227,6 +227,12 @@ impl From<fallible_collections::TryReserveError> for Status {
     }
 }
 
+impl From<std::io::Error> for Status {
+    fn from(_: std::io::Error) -> Self {
+        Status::Io
+    }
+}
+
 /// Describes parser failures.
 ///
 /// This enum wraps the standard `io::Error` type, unified with
