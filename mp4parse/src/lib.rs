@@ -494,6 +494,7 @@ pub enum SampleEntry {
 #[allow(non_camel_case_types)]
 #[derive(Debug, Default)]
 pub struct ES_Descriptor {
+    pub object_profile: u8,
     pub audio_codec: CodecType,
     pub audio_object_type: Option<u16>,
     pub extended_audio_object_type: Option<u16>,
@@ -4065,7 +4066,16 @@ fn find_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
                 read_dc_descriptor(descriptor, esds)?;
             }
             DECODER_SPECIFIC_TAG => {
-                read_ds_descriptor(descriptor, esds)?;
+                match esds.object_profile {
+                    0x69 | 0x6B => {
+                        // Could parse these object types' decoder specific info
+                        // to discover the MPEG audio layer, etc., if needed.
+                        break;
+                    }
+                    _ => {
+                        read_ds_descriptor(descriptor, esds)?;
+                    }
+                };
             }
             _ => {
                 debug!("Unsupported descriptor, tag {}", tag);
@@ -4272,7 +4282,7 @@ fn read_surround_channel_count(bit_reader: &mut BitReader, channels: u8) -> Resu
 /// See MPEG-4 Systems (ISO 14496-1:2010) § 7.2.6.6
 fn read_dc_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
     let des = &mut Cursor::new(data);
-    let object_profile = des.read_u8()?;
+    esds.object_profile = des.read_u8()?;
 
     #[cfg(feature = "mp4v")]
     {
@@ -4289,7 +4299,7 @@ fn read_dc_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
         find_descriptor(&data[des.position().try_into()?..data.len()], esds)?;
     }
 
-    esds.audio_codec = match object_profile {
+    esds.audio_codec = match esds.object_profile {
         0x40 | 0x41 => CodecType::AAC,
         0x69 | 0x6B => CodecType::MP3,
         _ => CodecType::Unknown,
