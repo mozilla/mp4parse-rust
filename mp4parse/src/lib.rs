@@ -2594,16 +2594,15 @@ fn calculate_ipma_total_associations(
             .unwrap();
 
     let total_non_association_bytes: U32MulU8 = entry_count * min_entry_bytes;
-    let total_association_bytes: u64;
-
-    if let Some(difference) = bytes_left.checked_sub(total_non_association_bytes.get()) {
-        // All the storage for the `essential` and `property_index` parts (assuming a valid ipma box size)
-        total_association_bytes = difference;
-    } else {
-        return Err(Error::InvalidData(
-            "ipma box below minimum size for entry_count",
-        ));
-    }
+    let total_association_bytes: u64 =
+        if let Some(difference) = bytes_left.checked_sub(total_non_association_bytes.get()) {
+            // All the storage for the `essential` and `property_index` parts (assuming a valid ipma box size)
+            difference
+        } else {
+            return Err(Error::InvalidData(
+                "ipma box below minimum size for entry_count",
+            ));
+        };
 
     let max_association_bytes_per_entry: U16 = MAX_IPMA_ASSOCIATION_COUNT * num_association_bytes;
     let max_total_association_bytes: U32MulU16 = entry_count * max_association_bytes_per_entry;
