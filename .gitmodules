@@ -1,3 +1,6 @@
 [submodule "mp4parse/av1-avif"]
 	path = mp4parse/av1-avif
 	url = https://github.com/AOMediaCodec/av1-avif.git
+[submodule "mp4parse/link-u-avif-sample-images"]
+	path = mp4parse/link-u-avif-sample-images
+	url = https://github.com/link-u/avif-sample-images

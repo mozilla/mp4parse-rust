@@ -1,4 +1,6 @@
 name: Build
+env:
+  RUST_BACKTRACE: 1
 
 on:
   push:
@@ -55,12 +57,12 @@ jobs:
 
     - name: Test (release)
       shell: bash
-      run: rustup run ${{ matrix.rust }} cargo test --all --features "${{ matrix.features }}" --verbose --release
+      run: rustup run ${{ matrix.rust }} cargo test --all --features "${{ matrix.features }}" --verbose --release -- --nocapture
       if: matrix.release
 
     - name: Test (debug)
       shell: bash
-      run: rustup run ${{ matrix.rust }} cargo test --all --features "${{ matrix.features }}" --verbose
+      run: rustup run ${{ matrix.rust }} cargo test --all --features "${{ matrix.features }}" --verbose -- --nocapture
       if: ${{ !matrix.release }}
 
     - name: Doc (release)
