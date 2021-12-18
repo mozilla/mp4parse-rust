@@ -3961,9 +3961,15 @@ fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHe
 
         let mut kid = TryVec::<ByteData>::new();
         if version > 0 {
-            let count = be_u32(pssh)?;
+            const KID_ELEMENT_SIZE: usize = 16;
+            let count = be_u32(pssh)?.to_usize();
+            kid.reserve(
+                count
+                    .checked_mul(KID_ELEMENT_SIZE)
+                    .ok_or(Error::InvalidData("overflow in read_pssh"))?,
+            )?;
             for _ in 0..count {
-                let item = read_buf(pssh, 16)?;
+                let item = read_buf(pssh, KID_ELEMENT_SIZE.to_u64())?;
                 kid.push(item)?;
             }
         }
