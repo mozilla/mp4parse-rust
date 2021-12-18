@@ -173,7 +173,8 @@ pub enum Status {
     Eof = 4,
     Io = 5,
     Oom = 6,
-    MissingBrand,
+    MissingAvifOrAvisBrand,
+    MissingMif1Brand,
     FtypNotFirst,
     NoImage,
     MultipleMoov,
@@ -303,14 +304,14 @@ impl<T> From<Status> for Result<T> {
     /// # extern crate mp4parse;
     /// # use mp4parse::{Result,Status};
     /// # let _: Result<()> =
-    /// Status::MissingBrand.into();
+    /// Status::MissingAvifOrAvisBrand.into();
     /// ```
     /// instead of
     /// ```
     /// # extern crate mp4parse;
     /// # use mp4parse::{Error,Result,Status};
     /// # let _: Result<()> =
-    /// Err(Error::from(Status::MissingBrand));
+    /// Err(Error::from(Status::MissingAvifOrAvisBrand));
     /// ```
     /// Note that `Status::Ok` can't be supported this way and will panic.
     fn from(parse_status: Status) -> Self {
@@ -335,7 +336,8 @@ impl From<Status> for Error {
             | Status::Oom => {
                 panic!("Status -> Error is only for Status:InvalidDataDetail errors")
             }
-            Status::MissingBrand
+            Status::MissingAvifOrAvisBrand
+            | Status::MissingMif1Brand
             | Status::FtypNotFirst
             | Status::NoImage
             | Status::MultipleMoov
@@ -366,10 +368,14 @@ impl From<Status> for &str {
             | Status::Oom => {
                 panic!("Status -> Error is only for specific parsing errors")
             }
-            Status::MissingBrand => {
+            Status::MissingAvifOrAvisBrand => {
                 "The file shall list 'avif' or 'avis' in the compatible_brands field
                  of the FileTypeBox \
                  per https://aomediacodec.github.io/av1-avif/#file-constraints"
+            }
+            Status::MissingMif1Brand => {
+                "The FileTypeBox should contain 'mif1' in the compatible_brands list \
+                 per MIAF (ISO 23000-22:2019/Amd. 2:2021) § 7.2.1.2"
             }
             Status::FtypNotFirst => {
                 "The FileTypeBox shall be placed as early as possible in the file \
@@ -2115,21 +2121,16 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
             debug!("expected_image_type: {:?}", expected_image_type);
 
             if primary_image_expected && !has_mif1_brand {
-                // This mandatory inclusion of this brand is in the process of being changed
-                // to optional. In anticipation of that, only give an error in strict mode
-                // See https://github.com/MPEGGroup/MIAF/issues/5
-                // and https://github.com/MPEGGroup/FileFormat/issues/23
-                fail_if(
+                fail_with_error_if(
                     strictness == ParseStrictness::Strict,
-                    "The FileTypeBox should contain 'mif1' in the compatible_brands list \
-                     per MIAF (ISO 23000-22:2019) § 7.2.1.2",
+                    Status::MissingMif1Brand.into(),
                 )?;
             }
 
             if !has_avif_brand && !has_avis_brand {
                 fail_with_error_if(
                     strictness != ParseStrictness::Permissive,
-                    Status::MissingBrand.into(),
+                    Status::MissingAvifOrAvisBrand.into(),
                 )?;
             }
 
