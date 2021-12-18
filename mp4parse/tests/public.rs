@@ -53,6 +53,9 @@ static IMAGE_AVIF_NO_PITM: &str = "tests/corrupt/no-pitm.avif";
 static IMAGE_AVIF_NO_PIXI: &str = "tests/corrupt/no-pixi.avif";
 static IMAGE_AVIF_NO_AV1C: &str = "tests/corrupt/no-av1C.avif";
 static IMAGE_AVIF_NO_ISPE: &str = "tests/corrupt/no-ispe.avif";
+static IMAGE_AVIF_NO_ALPHA_ISPE: &str = "tests/corrupt/no-alpha-ispe.avif";
+static IMAGE_AVIF_TRANSFORM_ORDER: &str = "tests/corrupt/invalid-transformation-order.avif";
+static IMAGE_AVIF_TRANSFORM_BEFORE_ISPE: &str = "tests/corrupt/transformation-before-ispe.avif";
 static IMAGE_AVIF_NO_ALPHA_AV1C: &str = "tests/corrupt/no-alpha-av1C.avif";
 static IMAGE_AVIF_NO_ALPHA_PIXI: &str = "tests/corrupt/no-pixi-for-alpha.avif";
 static IMAGE_AVIF_AV1C_MISSING_ESSENTIAL: &str = "tests/av1C-missing-essential.avif";
@@ -121,9 +124,24 @@ static AVIF_UNSUPPORTED_IMAGES: &[&str] = &[
 ];
 /// See https://github.com/AOMediaCodec/av1-avif/issues/150
 ///     https://github.com/AOMediaCodec/av1-avif/issues/174
-/// and https://github.com/AOMediaCodec/av1-avif/issues/177
+///     https://github.com/AOMediaCodec/av1-avif/issues/177
+/// and https://github.com/AOMediaCodec/av1-avif/issues/178
 // TODO: make this into a map of expected errors?
 static AV1_AVIF_CORRUPT_IMAGES: &[&str] = &[
+    "av1-avif/testFiles/Link-U/kimono.crop.avif",
+    "av1-avif/testFiles/Link-U/kimono.mirror-horizontal.avif",
+    "av1-avif/testFiles/Link-U/kimono.mirror-vertical.avif",
+    "av1-avif/testFiles/Link-U/kimono.mirror-vertical.rotate270.avif",
+    "av1-avif/testFiles/Link-U/kimono.mirror-vertical.rotate270.crop.avif",
+    "av1-avif/testFiles/Link-U/kimono.rotate90.avif",
+    "av1-avif/testFiles/Link-U/kimono.rotate270.avif",
+    "link-u-avif-sample-images/kimono.crop.avif",
+    "link-u-avif-sample-images/kimono.mirror-horizontal.avif",
+    "link-u-avif-sample-images/kimono.mirror-vertical.avif",
+    "link-u-avif-sample-images/kimono.mirror-vertical.rotate270.avif",
+    "link-u-avif-sample-images/kimono.mirror-vertical.rotate270.crop.avif",
+    "link-u-avif-sample-images/kimono.rotate90.avif",
+    "link-u-avif-sample-images/kimono.rotate270.avif",
     "link-u-avif-sample-images/plum-blossom-large.profile0.10bpc.yuv420.alpha-full.avif",
     "link-u-avif-sample-images/plum-blossom-large.profile0.10bpc.yuv420.alpha-full.monochrome.avif",
     "link-u-avif-sample-images/plum-blossom-large.profile0.10bpc.yuv420.alpha-limited.avif",
@@ -1112,33 +1130,36 @@ fn public_avif_no_pitm() {
 
 #[test]
 fn public_avif_pixi_present_for_displayable_images() {
-    let expected_msg = "The pixel information property shall be associated with every image \
-                        that is displayable (not hidden) \
-                        per MIAF (ISO/IEC 23000-22:2019) specification § 7.3.6.6";
     let pixi_test = if cfg!(feature = "missing-pixi-permitted") {
-        assert_avif_should
+        assert_avif_should2
     } else {
-        assert_avif_shall
+        assert_avif_shall2
     };
 
-    pixi_test(IMAGE_AVIF_NO_PIXI, expected_msg);
-    pixi_test(IMAGE_AVIF_NO_ALPHA_PIXI, expected_msg);
+    pixi_test(IMAGE_AVIF_NO_PIXI, Status::NoPixi);
+    pixi_test(IMAGE_AVIF_NO_ALPHA_PIXI, Status::NoPixi);
 }
 
 #[test]
 fn public_avif_av1c_present_for_av01() {
-    let expected_msg = "One AV1 Item Configuration Property (av1C) \
-                        is mandatory for an image item of type 'av01' \
-                        per AVIF specification § 2.2.1";
-    assert_avif_shall(IMAGE_AVIF_NO_AV1C, expected_msg);
-    assert_avif_shall(IMAGE_AVIF_NO_ALPHA_AV1C, expected_msg);
+    assert_avif_shall2(IMAGE_AVIF_NO_AV1C, Status::NoAv1c);
+    assert_avif_shall2(IMAGE_AVIF_NO_ALPHA_AV1C, Status::NoAv1c);
 }
 
 #[test]
 fn public_avif_ispe_present() {
-    let expected_msg = "Missing 'ispe' property for primary item, required \
-                        per HEIF (ISO/IEC 23008-12:2017) § 6.5.3.1";
-    assert_avif_shall(IMAGE_AVIF_NO_ISPE, expected_msg);
+    assert_avif_shall2(IMAGE_AVIF_NO_ISPE, Status::NoIspe);
+    assert_avif_shall2(IMAGE_AVIF_NO_ALPHA_ISPE, Status::NoIspe);
+}
+
+#[test]
+fn public_avif_transform_before_ispe() {
+    assert_avif_shall2(IMAGE_AVIF_TRANSFORM_BEFORE_ISPE, Status::TxformBeforeIspe);
+}
+
+#[test]
+fn public_avif_transform_order() {
+    assert_avif_shall2(IMAGE_AVIF_TRANSFORM_ORDER, Status::TxformOrder);
 }
 
 fn assert_unsupported_nonfatal(result: &mp4::Result<mp4::AvifContext>, feature: mp4::Feature) {

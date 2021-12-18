@@ -183,12 +183,17 @@ pub enum Status {
     A1opNoEssential,
     A1lxEssential,
     TxformNoEssential,
+    TxformOrder,
+    TxformBeforeIspe,
     NoPrimaryItem,
     ImageItemType,
     ItemTypeMissing,
     ConstructionMethod,
     ItemLocNotFound,
     NoItemDataBox,
+    NoAv1c,
+    NoPixi,
+    NoIspe,
 }
 
 #[repr(C)]
@@ -346,12 +351,17 @@ impl From<Status> for Error {
             | Status::A1opNoEssential
             | Status::A1lxEssential
             | Status::TxformNoEssential
+            | Status::TxformOrder
+            | Status::TxformBeforeIspe
             | Status::NoPrimaryItem
             | Status::ImageItemType
             | Status::ItemTypeMissing
             | Status::ConstructionMethod
             | Status::ItemLocNotFound
-            | Status::NoItemDataBox => Self::InvalidDataDetail(parse_status),
+            | Status::NoItemDataBox
+            | Status::NoAv1c
+            | Status::NoPixi
+            | Status::NoIspe => Self::InvalidDataDetail(parse_status),
         }
     }
 }
@@ -410,6 +420,18 @@ impl From<Status> for &str {
                  document shall be marked as essential \
                  per MIAF (ISO 23000-22:2019) § 7.3.9"
             }
+            Status::TxformOrder => {
+                "These properties, if used, shall be indicated to be applied \
+                 in the following order: clean aperture first, then rotation, \
+                 then mirror. \
+                 per MIAF (ISO/IEC 23000-22:2019) § 7.3.6.7"
+            }
+            Status::TxformBeforeIspe => {
+                "Every image item shall be associated with one property of \
+                 type ImageSpatialExtentsProperty (ispe), prior to the \
+                 association of all transformative properties. \
+                 per HEIF (ISO/IEC 23008-12:2017) § 6.5.3.1"
+            }
             Status::NoPrimaryItem => {
                 "Missing required PrimaryItemBox (pitm), required \
                  per HEIF (ISO/IEC 23008-12:2017) § 10.2.1"
@@ -429,6 +451,20 @@ impl From<Status> for &str {
             Status::NoItemDataBox => {
                 "ItemLocationBox (iloc) construction_method indicates 1 (idat), \
                  but no idat box is present."
+            }
+            Status::NoAv1c => {
+                "One AV1 Item Configuration Property (av1C) is mandatory for an \
+                 image item of type 'av01' \
+                 per AVIF specification § 2.2.1"
+            }
+            Status::NoPixi => {
+                "The pixel information property shall be associated with every image \
+                 that is displayable (not hidden) \
+                 per MIAF (ISO/IEC 23000-22:2019) specification § 7.3.6.6"
+            }
+            Status::NoIspe => {
+                "Missing 'ispe' property for image item, required \
+                 per HEIF (ISO/IEC 23008-12:2017) § 6.5.3.1"
             }
         }
     }
@@ -2350,15 +2386,6 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         })
     };
 
-    // TODO: add ispe check for alpha https://github.com/mozilla/mp4parse-rust/issues/353
-    if missing_property_for(primary_item_id, BoxType::ImageSpatialExtentsProperty) {
-        fail_if(
-            strictness != ParseStrictness::Permissive,
-            "Missing 'ispe' property for primary item, required \
-             per HEIF (ISO/IEC 23008-12:2017) § 6.5.3.1",
-        )?;
-    }
-
     // Generalize the property checks so we can apply them to primary and alpha items
     let mut check_image_item = |item: &mut Option<AvifItem>| -> Result<()> {
         let item_id = item.as_ref().map(|item| item.id);
@@ -2372,11 +2399,9 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         match item_type.map(u32::to_be_bytes).as_ref() {
             Some(b"av01") => {
                 if missing_property_for(item_id, BoxType::AV1CodecConfigurationBox) {
-                    fail_if(
+                    fail_with_error_if(
                         strictness != ParseStrictness::Permissive,
-                        "One AV1 Item Configuration Property (av1C) is mandatory for an \
-                         image item of type 'av01' \
-                         per AVIF specification § 2.2.1",
+                        Status::NoAv1c.into(),
                     )?;
                 }
 
@@ -2385,15 +2410,20 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
                     // to allowing its omission to imply a default value. In anticipation
                     // of that, only give an error in strict mode
                     // See https://github.com/MPEGGroup/MIAF/issues/9
-                    fail_if(
+                    fail_with_error_if(
                         if cfg!(feature = "missing-pixi-permitted") {
                             strictness == ParseStrictness::Strict
                         } else {
                             strictness != ParseStrictness::Permissive
                         },
-                        "The pixel information property shall be associated with every image \
-                         that is displayable (not hidden) \
-                         per MIAF (ISO/IEC 23000-22:2019) specification § 7.3.6.6",
+                        Status::NoPixi.into(),
+                    )?;
+                }
+
+                if missing_property_for(item_id, BoxType::ImageSpatialExtentsProperty) {
+                    fail_with_error_if(
+                        strictness != ParseStrictness::Permissive,
+                        Status::NoIspe.into(),
                     )?;
                 }
             }
@@ -2780,12 +2810,8 @@ fn read_iprp<T: Read>(
                 ));
             }
 
-            const TRANSFORM_ORDER_ERROR: &str =
-                "These properties, if used, shall be indicated to be applied \
-                 in the following order: clean aperture first, then rotation, \
-                 then mirror. \
-                 per MIAF (ISO/IEC 23000-22:2019) § 7.3.6.7";
             const TRANSFORM_ORDER: &[BoxType] = &[
+                BoxType::ImageSpatialExtentsProperty,
                 BoxType::CleanApertureBox,
                 BoxType::ImageRotation,
                 BoxType::ImageMirror,
@@ -2935,10 +2961,20 @@ fn read_iprp<T: Read>(
                         if let Some(prev) = prev_transform_index {
                             if prev >= transform_index {
                                 error!(
-                                    "{:?} after {:?}",
+                                    "Invalid property order: {:?} after {:?}",
                                     TRANSFORM_ORDER[transform_index], TRANSFORM_ORDER[prev]
                                 );
-                                return Err(Error::InvalidData(TRANSFORM_ORDER_ERROR));
+                                fail_with_error_if(
+                                    strictness != ParseStrictness::Permissive,
+                                    if TRANSFORM_ORDER[transform_index]
+                                        == BoxType::ImageSpatialExtentsProperty
+                                    {
+                                        Status::TxformBeforeIspe
+                                    } else {
+                                        Status::TxformOrder
+                                    }
+                                    .into(),
+                                )?;
                             }
                         }
                         prev_transform_index = Some(transform_index);
