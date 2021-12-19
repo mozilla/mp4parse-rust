@@ -166,6 +166,7 @@ struct String;
 /// since the [`Error`] type's associated data is part of the FFI.
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Debug)]
+// TODO: alphabetize
 pub enum Status {
     Ok = 0,
     BadArg = 1,
@@ -177,6 +178,16 @@ pub enum Status {
     MissingAvifOrAvisBrand,
     MissingMif1Brand,
     FtypNotFirst,
+    FtypBadSize,
+    HdlrNotFirst,
+    HdlrUnsupportedVersion,
+    HdlrPredefinedNonzero,
+    HdlrReservedNonzero,
+    HdlrNameNoNul,
+    HdlrNameMultipleNul,
+    HdlrNameNotUtf8,
+    HdrlBadQuantity,
+    TypeNotPict,
     NoImage,
     MultipleMoov,
     NoMoov,
@@ -187,14 +198,81 @@ pub enum Status {
     TxformOrder,
     TxformBeforeIspe,
     NoPrimaryItem,
+    PitmBadQuantity,
     ImageItemType,
     ItemTypeMissing,
     ConstructionMethod,
     ItemLocNotFound,
+    IlocBadConstructionMethod,
+    IlocBadExtent,
+    IlocBadExtentCount,
+    IlocBadFieldSize,
+    IlocBadQuantity,
+    IlocBadSize,
+    IlocDuplicateItemId,
+    IlocMissing,
+    IlocOffsetOverflow,
     NoItemDataBox,
     NoAv1c,
     NoPixi,
+    PixiBadChannelCount,
     NoIspe,
+    InfeFlagsNonzero,
+    MultipleIpma,
+    IpmaFlagsNonzero,
+    IpmaDuplicateItemId,
+    IpmaBadIndex,
+    IpmaBadVersion,
+    IpmaTooSmall,
+    IpmaTooBig,
+    IpmaBadItemOrder,
+    PropZeroEssential,
+    AlacFlagsNonzero,
+    AlacBadMagicCookieSize,
+    MultipleColr,
+    ColrReservedNonzero,
+    ColrBadSize,
+    ColrBadType,
+    CttsBadSize,
+    CttsBadVersion,
+    DflaBadMetadataBlockSize,
+    DflaFlagsNonzero,
+    DflaMissingMetadata,
+    DflaStreamInfoBadSize,
+    DflaStreamInfoNotFirst,
+    DopsChannelMappingWriteErr,
+    DopsOpusHeadWriteErr,
+    EsdsBadAudioSampleEntry,
+    EsdsBadDescriptor,
+    ElstBadVersion,
+    EsdsDecSpecificIntoTagQuantity,
+    IrefRecursion,
+    IrefBadQuantity,
+    BitReaderError,
+    ReadBufErr,
+    CheckParserStateErr,
+    InvalidUtf8,
+    BoxBadSize,
+    BoxBadWideSize,
+    MetaBadQuantity,
+    MultipleAlpha,
+    IinfBadQuantity,
+    IinfBadChild,
+    IprpBadQuantity,
+    IprpBadChild,
+    IprpConflict,
+    IdatBadQuantity,
+    IpcoIndexOverflow,
+    PsshSizeOverflow,
+    MdhdBadTimescale,
+    MdhdBadVersion,
+    MehdBadVersion,
+    MvhdBadTimescale,
+    MvhdBadVersion,
+    SchiQuantity,
+    StsdBadAudioSampleEntry,
+    StsdBadVideoSampleEntry,
+    TkhdBadVersion,
 }
 
 #[repr(C)]
@@ -340,27 +418,7 @@ impl From<Status> for Error {
             | Status::Oom => {
                 panic!("Status -> Error is only for Status:InvalidDataDetail errors")
             }
-            Status::MissingAvifOrAvisBrand
-            | Status::MissingMif1Brand
-            | Status::FtypNotFirst
-            | Status::NoImage
-            | Status::MultipleMoov
-            | Status::NoMoov
-            | Status::LselNoEssential
-            | Status::A1opNoEssential
-            | Status::A1lxEssential
-            | Status::TxformNoEssential
-            | Status::TxformOrder
-            | Status::TxformBeforeIspe
-            | Status::NoPrimaryItem
-            | Status::ImageItemType
-            | Status::ItemTypeMissing
-            | Status::ConstructionMethod
-            | Status::ItemLocNotFound
-            | Status::NoItemDataBox
-            | Status::NoAv1c
-            | Status::NoPixi
-            | Status::NoIspe => Self::InvalidDataDetail(parse_status),
+            _ => Self::InvalidDataDetail(parse_status),
         }
     }
 }
@@ -389,6 +447,46 @@ impl From<Status> for &str {
             Status::FtypNotFirst => {
                 "The FileTypeBox shall be placed as early as possible in the file \
                  per ISOBMFF (ISO 14496-12:2020) § 4.3.1"
+            }
+            Status::FtypBadSize => {
+                "invalid ftyp size"
+            }
+            Status::HdlrNotFirst => {
+                "The HandlerBox shall be the first contained box within the MetaBox \
+                 per MIAF (ISO 23000-22:2019) § 7.2.1.5"
+            }
+            Status::HdlrUnsupportedVersion => {
+                "The HandlerBox version shall be 0 (zero) \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
+            }
+            Status::HdlrPredefinedNonzero => {
+                "The HandlerBox 'pre_defined' field shall be 0 \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
+            }
+            Status::HdlrReservedNonzero => {
+                "The HandlerBox 'reserved' fields shall be 0 \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
+            }
+            Status::HdlrNameNoNul => {
+                "The HandlerBox 'name' field shall be null-terminated \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
+            }
+            Status::HdlrNameMultipleNul => {
+                "The HandlerBox 'name' field shall have a NUL byte \
+                 only in the final position \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
+            }
+            Status::HdlrNameNotUtf8 => {
+                "The HandlerBox 'name' field shall be valid utf8 \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
+            }
+            Status::HdrlBadQuantity => {
+                "There shall be exactly one hdlr box \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.1"
+            }
+            Status::TypeNotPict => {
+                "The HandlerBox handler_type must be 'pict' \
+                 per MIAF (ISO 23000-22:2019) § 7.2.1.5"
             }
             Status::NoImage => "No primary image or image sequence found",
             Status::NoMoov => {
@@ -431,9 +529,14 @@ impl From<Status> for &str {
                  association of all transformative properties. \
                  per HEIF (ISO/IEC 23008-12:2017) § 6.5.3.1"
             }
+            // TODO: Rename PitmMissing or similar?
             Status::NoPrimaryItem => {
                 "Missing required PrimaryItemBox (pitm), required \
                  per HEIF (ISO/IEC 23008-12:2017) § 10.2.1"
+            }
+            Status::PitmBadQuantity => {
+                "There shall be zero or one pitm boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.4.1"
             }
             Status::ImageItemType => {
                 "Image item type is neither 'av01' nor 'grid'"
@@ -444,8 +547,40 @@ impl From<Status> for &str {
             Status::ConstructionMethod => {
                 "construction_method shall be 0 (file) or 1 (idat) per MIAF (ISO 23000-22:2019) § 7.2.1.7"
             }
+            // TODO: rename IlocNotFound
             Status::ItemLocNotFound => {
                 "ItemLocationBox (iloc) contains an extent not present in any mdat or idat box"
+            }
+            Status::IlocBadConstructionMethod => {
+                "construction_method is taken from the set 0, 1 or 2 \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.3.3"
+            }
+            Status::IlocBadExtent => {
+                "extent_count != 1 requires explicit offset and length \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.3.3"
+            }
+            Status::IlocBadExtentCount => {
+                "extent_count must have a value 1 or greater \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.3.3"
+            }
+            Status::IlocBadFieldSize => {
+                "value must be in the set {0, 4, 8}"
+            }
+            Status::IlocBadQuantity => {
+                "There shall be zero or one iloc boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.3.1"
+            }
+            Status::IlocBadSize => {
+                "invalid iloc size"
+            }
+            Status::IlocDuplicateItemId => {
+                "duplicate item_ID in iloc"
+            }
+            Status::IlocMissing => {
+                "iloc missing"
+            }
+            Status::IlocOffsetOverflow => {
+                "offset calculation overflow"
             }
             Status::NoItemDataBox => {
                 "ItemLocationBox (iloc) construction_method indicates 1 (idat), \
@@ -456,14 +591,207 @@ impl From<Status> for &str {
                  image item of type 'av01' \
                  per AVIF specification § 2.2.1"
             }
+            // TODO: Rename PixiMissing
             Status::NoPixi => {
                 "The pixel information property shall be associated with every image \
                  that is displayable (not hidden) \
                  per MIAF (ISO/IEC 23000-22:2019) specification § 7.3.6.6"
             }
+            Status::PixiBadChannelCount => {
+                "invalid num_channels"
+            }
             Status::NoIspe => {
                 "Missing 'ispe' property for image item, required \
                  per HEIF (ISO/IEC 23008-12:2017) § 6.5.3.1"
+            }
+            Status::InfeFlagsNonzero => {
+                "'infe' flags field shall be 0 \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.6.2"
+            }
+            Status::MultipleIpma => {
+                "There shall be at most one ItemPropertyAssociationbox with a given pair of \
+                 values of version and flags \
+                 per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1"
+            }
+            Status::IpmaFlagsNonzero => {
+                "Unless there are more than 127 properties in the ItemPropertyContainerBox, \
+                 flags should be equal to 0 \
+                 per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1"
+            }
+            Status::IpmaDuplicateItemId => {
+                "There shall be at most one occurrence of a given item_ID, \
+                 in the set of ItemPropertyAssociationBox boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.14.1"
+            }
+            Status::IpmaBadIndex => {
+                "Invalid property index in ipma"
+            }
+            Status::IpmaBadVersion => {
+                "The ipma version 0 should be used unless 32-bit item_ID values are needed \
+                 per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1"
+            }
+            Status::IpmaTooSmall => {
+                "ipma box below minimum size for entry_count"
+            }
+            Status::IpmaTooBig => {
+                "ipma box exceeds maximum size for entry_count"
+            }
+            Status::IpmaBadItemOrder => {
+                "Each ItemPropertyAssociation box shall be ordered by increasing item_ID"
+            }
+            Status::PropZeroEssential => {
+                "the essential indicator shall be 0 for property index 0 \
+                 per ISOBMFF (ISO 14496-12:2020 § 8.11.14.3"
+            }
+            Status::AlacBadMagicCookieSize => {
+                "ALACSpecificBox magic cookie is the wrong size"
+            }
+            Status::AlacFlagsNonzero => {
+                "no-zero alac (ALAC) flags"
+            }
+            // TODO: Rename ColrXXX
+            Status::MultipleColr => {
+                "Each item shall have at most one property association with a
+                 ColourInformationBox (colr) for a given value of colour_type \
+                 per HEIF (ISO/IEC DIS 23008-12) § 6.5.5.1"
+            }
+            Status::ColrReservedNonzero => {
+                "The 7 reserved bits at the end of the ColourInformationBox \
+                 for colour_type == 'nclx' must be 0 \
+                 per ISOBMFF (ISO 14496-12:2020) § 12.1.5.2"
+            }
+            Status::ColrBadSize => {
+                "Unexpected size for colr box"
+            }
+            Status::ColrBadType => {
+                "Unsupported colour_type for ColourInformationBox"
+            }
+            Status::CttsBadSize => {
+                "insufficient data in 'ctts' box"
+            }
+            Status::CttsBadVersion => {
+                "unsupported version in 'ctts' box"
+            }
+            Status::DflaBadMetadataBlockSize => {
+                "FLACMetadataBlock larger than parent box"
+            }
+            Status::DflaFlagsNonzero => {
+                "no-zero dfLa (FLAC) flags"
+            }
+            Status::DflaMissingMetadata => {
+                "FLACSpecificBox missing metadata"
+            }
+            Status::DflaStreamInfoBadSize => {
+                "FLACSpecificBox STREAMINFO block is the wrong size"
+            }
+            Status::DflaStreamInfoNotFirst => {
+                "FLACSpecificBox must have STREAMINFO metadata first"
+            }
+            Status::DopsChannelMappingWriteErr => {
+                "Couldn't write channel mapping table data."
+            }
+            Status::DopsOpusHeadWriteErr => {
+                "Couldn't write OpusHead tag."
+            }
+            Status::EsdsBadAudioSampleEntry => {
+                "malformed audio sample entry"
+            }
+            Status::EsdsBadDescriptor => {
+                "Invalid descriptor."
+            }
+            Status::ElstBadVersion => {
+                "unhandled elst version"
+            }
+            Status::EsdsDecSpecificIntoTagQuantity => {
+                "There can be only one DecSpecificInfoTag descriptor"
+            }
+            Status::IrefRecursion => {
+                "from_item_id and to_item_id must be different"
+            }
+            Status::IrefBadQuantity => {
+                "There shall be zero or one iref boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.12.1"
+            }
+            Status::BitReaderError => {
+                "Bitwise read failed"
+            }
+            Status::ReadBufErr => {
+                "failed buffer read"
+            }
+            Status::CheckParserStateErr => {
+                "unread box content or bad parser sync"
+            }
+            Status::InvalidUtf8 => {
+                "invalid utf8"
+            }
+            Status::BoxBadSize => {
+                "malformed size"
+            }
+            Status::BoxBadWideSize => {
+                "malformed wide size"
+            }
+            Status::MetaBadQuantity => {
+                "There should be zero or one meta boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.1.1"
+            }
+            Status::MultipleAlpha => {
+                "multiple alpha planes"
+            }
+            Status::IinfBadQuantity => {
+                "There shall be zero or one iinf boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.6.1"
+            }
+            Status::IinfBadChild => {
+                "iinf box shall contain only infe boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.6.2"
+            }
+            Status::IprpBadQuantity => {
+                "There shall be zero or one iprp boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.14.1"
+            }
+            Status::IprpBadChild => {
+                "unexpected iprp child"
+            }
+            Status::IprpConflict => {
+                "conflicting item property values"
+            }
+            Status::IdatBadQuantity => {
+                "There shall be zero or one idat boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.11"
+            }
+            Status::IpcoIndexOverflow => {
+                "ipco index overflow"
+            }
+            Status::PsshSizeOverflow => {
+                "overflow in read_pssh"
+            }
+            Status::MdhdBadTimescale => {
+                "zero timescale in mdhd"
+            }
+            Status::MdhdBadVersion => {
+                "unhandled mdhd version"
+            }
+            Status::MehdBadVersion => {
+                "unhandled mehd version"
+            }
+            Status::MvhdBadTimescale => {
+                // TODO: fix mdhd -> mvhd
+                "zero timescale in mdhd"
+            }
+            Status::MvhdBadVersion => {
+                "unhandled mvhd version"
+            }
+            Status::SchiQuantity => {
+                "tenc box should be only one at most in sinf box"
+            }
+            Status::StsdBadAudioSampleEntry => {
+                "malformed audio sample entry"
+            }
+            Status::StsdBadVideoSampleEntry => {
+                "malformed video sample entry"
+            }
+            Status::TkhdBadVersion => {
+                "unhandled tkhd version"
             }
         }
     }
@@ -472,7 +800,6 @@ impl From<Status> for &str {
 impl From<Error> for Status {
     fn from(error: Error) -> Self {
         match error {
-            Error::InvalidData(_) => Self::Invalid,
             Error::Unsupported(_) => Self::Unsupported,
             Error::InvalidDataDetail(parse_status) => parse_status,
             Error::UnexpectedEOF => Self::Eof,
@@ -526,10 +853,8 @@ impl From<std::io::Error> for Status {
 #[derive(Debug)]
 pub enum Error {
     /// Parse error caused by corrupt or malformed data.
-    InvalidData(&'static str),
-    /// Similar to [`Self::InvalidData`], but for errors that have a specific
-    /// [`Status`] variant for communicating the detail across FFI.
     /// See the helper [`From<Status> for Error`](enum.Error.html#impl-From<Status>)
+    // TODO: rename to InvalidData
     InvalidDataDetail(Status),
     /// Parse error caused by limited parser support rather than invalid data.
     Unsupported(&'static str),
@@ -553,7 +878,7 @@ impl std::error::Error for Error {}
 
 impl From<bitreader::BitReaderError> for Error {
     fn from(_: bitreader::BitReaderError) -> Error {
-        Error::InvalidData("invalid data")
+        Status::BitReaderError.into()
     }
 }
 
@@ -568,13 +893,13 @@ impl From<std::io::Error> for Error {
 
 impl From<std::string::FromUtf8Error> for Error {
     fn from(_: std::string::FromUtf8Error) -> Error {
-        Error::InvalidData("invalid utf8")
+        Status::InvalidUtf8.into()
     }
 }
 
 impl From<std::str::Utf8Error> for Error {
     fn from(_: std::str::Utf8Error) -> Error {
-        Error::InvalidData("invalid utf8")
+        Status::InvalidUtf8.into()
     }
 }
 
@@ -587,7 +912,6 @@ impl From<std::num::TryFromIntError> for Error {
 impl From<Error> for std::io::Error {
     fn from(err: Error) -> Self {
         let kind = match err {
-            Error::InvalidData(_) => std::io::ErrorKind::InvalidData,
             Error::UnexpectedEOF => std::io::ErrorKind::UnexpectedEof,
             Error::Io(io_err) => return io_err,
             _ => std::io::ErrorKind::Other,
@@ -1738,7 +2062,7 @@ impl TryFrom<u8> for IlocFieldSize {
             0 => Ok(Self::Zero),
             4 => Ok(Self::Four),
             8 => Ok(Self::Eight),
-            _ => Err(Error::InvalidData("value must be in the set {0, 4, 8}")),
+            _ => Status::IlocBadFieldSize.into(),
         }
     }
 }
@@ -1823,17 +2147,6 @@ pub enum ParseStrictness {
     Permissive, // Error only on ambiguous inputs
     Normal,     // Error on "shall" directives, log warnings for "should"
     Strict,     // Error on "should" directives
-}
-
-/// Prefer [`fail_with_status_if`] so all the explanatory strings can be collected
-/// in `From<Status> for &str`.
-fn fail_if(violation: bool, message: &'static str) -> Result<()> {
-    if violation {
-        Err(Error::InvalidData(message))
-    } else {
-        warn!("{}", message);
-        Ok(())
-    }
 }
 
 fn fail_with_status_if(violation: bool, status: Status) -> Result<()> {
@@ -2018,13 +2331,13 @@ fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
         1 => {
             let size64 = be_u64(src)?;
             if size64 < BoxHeader::MIN_LARGE_SIZE {
-                return Err(Error::InvalidData("malformed wide size"));
+                return Status::BoxBadWideSize.into();
             }
             size64
         }
         _ => {
             if u64::from(size32) < BoxHeader::MIN_SIZE {
-                return Err(Error::InvalidData("malformed size"));
+                return Status::BoxBadSize.into();
             }
             u64::from(size32)
         }
@@ -2203,9 +2516,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         match b.head.name {
             BoxType::MetadataBox => {
                 if meta.is_some() {
-                    return Err(Error::InvalidData(
-                        "There should be zero or one meta boxes per ISOBMFF (ISO 14496-12:2020) § 8.11.1.1",
-                    ));
+                    return Status::MetaBadQuantity.into();
                 }
                 meta = Some(read_avif_meta(
                     &mut b,
@@ -2237,7 +2548,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         item_infos,
         iloc_items,
         item_data_box,
-    } = meta.ok_or(Error::InvalidData("missing meta"))?;
+    } = meta.ok_or_else(|| Error::from(Status::MetaBadQuantity))?;
 
     let (alpha_item_id, premultiplied_alpha) = if let Some(primary_item_id) = primary_item_id {
         let mut alpha_item_ids = item_references
@@ -2253,7 +2564,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
             .filter(|&item_id| item_properties.is_alpha(item_id));
         let alpha_item_id = alpha_item_ids.next();
         if alpha_item_ids.next().is_some() {
-            return Err(Error::InvalidData("multiple alpha planes"));
+            return Status::MultipleAlpha.into();
         }
 
         let premultiplied_alpha = alpha_item_id.map_or(false, |alpha_item_id| {
@@ -2496,63 +2807,53 @@ fn read_avif_meta<T: Read + Offset>(
         trace!("read_avif_meta parsing {:?} box", b.head.name);
 
         if !read_handler_box && b.head.name != BoxType::HandlerBox {
-            fail_if(
+            fail_with_status_if(
                 strictness != ParseStrictness::Permissive,
-                "The HandlerBox shall be the first contained box within the MetaBox \
-                 per MIAF (ISO 23000-22:2019) § 7.2.1.5",
+                Status::HdlrNotFirst,
             )?;
         }
 
         match b.head.name {
             BoxType::HandlerBox => {
                 if read_handler_box {
-                    return Err(Error::InvalidData(
-                        "There shall be exactly one hdlr box per ISOBMFF (ISO 14496-12:2020) § 8.4.3.1",
-                    ));
+                    return Status::HdrlBadQuantity.into();
                 }
                 let HandlerBox { handler_type } = read_hdlr(&mut b, strictness)?;
                 if handler_type != b"pict" {
-                    fail_if(
+                    fail_with_status_if(
                         strictness != ParseStrictness::Permissive,
-                        "The HandlerBox handler_type must be 'pict' \
-                         per MIAF (ISO 23000-22:2019) § 7.2.1.5",
+                        Status::TypeNotPict,
                     )?;
                 }
                 read_handler_box = true;
             }
             BoxType::ItemInfoBox => {
                 if item_infos.is_some() {
-                    return Err(Error::InvalidData(
-                        "There shall be zero or one iinf boxes per ISOBMFF (ISO 14496-12:2020) § 8.11.6.1",
-                    ));
+                    return Status::IinfBadQuantity.into();
                 }
                 item_infos = Some(read_iinf(&mut b, strictness, unsupported_features)?);
             }
             BoxType::ItemLocationBox => {
                 if iloc_items.is_some() {
-                    return Err(Error::InvalidData(
-                        "There shall be zero or one iloc boxes per ISOBMFF (ISO 14496-12:2020) § 8.11.3.1",
-                    ));
+                    return Status::IlocBadQuantity.into();
                 }
                 iloc_items = Some(read_iloc(&mut b)?);
             }
             BoxType::PrimaryItemBox => {
                 if primary_item_id.is_some() {
-                    return Err(Error::InvalidData(
-                        "There shall be zero or one pitm boxes per ISOBMFF (ISO 14496-12:2020) § 8.11.4.1",
-                    ));
+                    return Status::PitmBadQuantity.into();
                 }
                 primary_item_id = Some(read_pitm(&mut b)?);
             }
             BoxType::ItemReferenceBox => {
                 if item_references.is_some() {
-                    return Err(Error::InvalidData("There shall be zero or one iref boxes per ISOBMFF (ISO 14496-12:2020) § 8.11.12.1"));
+                    return Status::IrefBadQuantity.into();
                 }
                 item_references = Some(read_iref(&mut b)?);
             }
             BoxType::ItemPropertiesBox => {
                 if item_properties.is_some() {
-                    return Err(Error::InvalidData("There shall be zero or one iprp boxes per ISOBMFF (ISO 14496-12:2020) § 8.11.14.1"));
+                    return Status::IprpBadQuantity.into();
                 }
                 item_properties = Some(read_iprp(
                     &mut b,
@@ -2563,9 +2864,7 @@ fn read_avif_meta<T: Read + Offset>(
             }
             BoxType::ItemDataBox => {
                 if item_data_box.is_some() {
-                    return Err(Error::InvalidData(
-                        "There shall be zero or one idat boxes per ISOBMFF (ISO 14496-12:2020) § 8.11.11",
-                    ));
+                    return Status::IdatBadQuantity.into();
                 }
                 let data = b.read_into_try_vec()?;
                 item_data_box = Some(DataBox::from_idat(data));
@@ -2581,7 +2880,7 @@ fn read_avif_meta<T: Read + Offset>(
         item_references: item_references.unwrap_or_default(),
         primary_item_id,
         item_infos: item_infos.unwrap_or_default(),
-        iloc_items: iloc_items.ok_or(Error::InvalidData("iloc missing"))?,
+        iloc_items: iloc_items.ok_or_else(|| Error::from(Status::IlocMissing))?,
         item_data_box,
     })
 }
@@ -2624,9 +2923,7 @@ fn read_iinf<T: Read>(
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         if b.head.name != BoxType::ItemInfoEntry {
-            return Err(Error::InvalidData(
-                "iinf box shall contain only infe boxes per ISOBMFF (ISO 14496-12:2020) § 8.11.6.2",
-            ));
+            return Status::IinfBadChild.into();
         }
 
         if let Some(infe) = read_infe(&mut b, strictness, unsupported_features)? {
@@ -2665,10 +2962,9 @@ fn read_infe<T: Read>(
     // least one sample AVIF image has a nonzero value.
     // See https://github.com/AOMediaCodec/av1-avif/issues/146
     if flags != 0 {
-        fail_if(
+        fail_with_status_if(
             strictness == ParseStrictness::Strict,
-            "'infe' flags field shall be 0 \
-             per ISOBMFF (ISO 14496-12:2020) § 8.11.6.2",
+            Status::InfeFlagsNonzero,
         )?;
     }
 
@@ -2713,9 +3009,7 @@ fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<SingleItemTypeRefer
         for _ in 0..reference_count {
             let to_item_id = ItemId::read(&mut b, version)?;
             if from_item_id == to_item_id {
-                return Err(Error::InvalidData(
-                    "from_item_id and to_item_id must be different",
-                ));
+                return Status::IrefRecursion.into();
             }
             item_references.push(SingleItemTypeReferenceBox {
                 item_type: b.head.name.into(),
@@ -2754,7 +3048,7 @@ fn read_iprp<T: Read>(
         Some(mut b) if b.head.name == BoxType::ItemPropertyContainerBox => {
             read_ipco(&mut b, strictness)
         }
-        Some(_) => Err(Error::InvalidData("unexpected iprp child")),
+        Some(_) => Status::IprpBadChild.into(),
         None => Err(Error::UnexpectedEOF),
     }?;
 
@@ -2764,24 +3058,20 @@ fn read_iprp<T: Read>(
 
     while let Some(mut b) = iter.next_box()? {
         if b.head.name != BoxType::ItemPropertyAssociationBox {
-            return Err(Error::InvalidData("unexpected iprp child"));
+            return Status::IprpBadChild.into();
         }
 
         let (version, flags) = read_fullbox_extra(&mut b)?;
         if ipma_version_and_flag_values_seen.contains(&(version, flags)) {
-            fail_if(
+            fail_with_status_if(
                 strictness != ParseStrictness::Permissive,
-                "There shall be at most one ItemPropertyAssociationbox with a given pair of \
-                 values of version and flags \
-                 per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1",
+                Status::MultipleIpma,
             )?;
         }
         if flags != 0 && properties.len() <= 127 {
-            fail_if(
+            fail_with_status_if(
                 strictness == ParseStrictness::Strict,
-                "Unless there are more than 127 properties in the ItemPropertyContainerBox, \
-                 flags should be equal to 0 \
-                 per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1",
+                Status::IpmaFlagsNonzero,
             )?;
         }
         ipma_version_and_flag_values_seen.push((version, flags))?;
@@ -2804,11 +3094,7 @@ fn read_iprp<T: Read>(
                 // It's technically possible to make sense of this situation by merging ipma
                 // boxes, but this is a "shall" requirement, so we'd only do it in
                 // ParseStrictness::Permissive mode, and this hasn't shown up in the wild
-                return Err(Error::InvalidData(
-                    "There shall be at most one occurrence of a given item_ID, \
-                     in the set of ItemPropertyAssociationBox boxes \
-                     per ISOBMFF (ISO 14496-12:2020) § 8.11.14.1",
-                ));
+                return Status::IpmaDuplicateItemId.into();
             }
 
             const TRANSFORM_ORDER: &[BoxType] = &[
@@ -2825,10 +3111,9 @@ fn read_iprp<T: Read>(
             for a in &association_entry.associations {
                 if a.property_index == PropertyIndex(0) {
                     if a.essential {
-                        fail_if(
+                        fail_with_status_if(
                             strictness != ParseStrictness::Permissive,
-                            "the essential indicator shall be 0 for property index 0 \
-                             per ISOBMFF (ISO 14496-12:2020 § 8.11.14.3",
+                            Status::PropZeroEssential,
                         )?;
                     }
                     continue;
@@ -2897,11 +3182,9 @@ fn read_iprp<T: Read>(
                                     a.property_index,
                                     prev_colr_index
                                 );
-                                fail_if(
+                                fail_with_status_if(
                                     strictness != ParseStrictness::Permissive,
-                                    "Each item shall have at most one property association with a
-                                     ColourInformationBox (colr) for a given value of colour_type \
-                                     per HEIF (ISO/IEC DIS 23008-12) § 6.5.5.1",
+                                    Status::MultipleColr,
                                 )?;
                             } else {
                                 colour_type_indexes.insert(colour_type, a.property_index)?;
@@ -2984,9 +3267,9 @@ fn read_iprp<T: Read>(
                         "Missing property at {:?} for {:?}",
                         a.property_index, association_entry.item_id
                     );
-                    fail_if(
+                    fail_with_status_if(
                         strictness != ParseStrictness::Permissive,
-                        "Invalid property index in ipma",
+                        Status::IpmaBadIndex,
                     )?;
                 }
             }
@@ -3114,7 +3397,7 @@ impl ItemPropertiesBox {
                     property_type, multiple_values
                 );
                 // TODO: add test
-                Err(Error::InvalidData("conflicting item property values"))
+                Status::IprpConflict.into()
             }
         }
     }
@@ -3273,9 +3556,7 @@ fn calculate_ipma_total_associations(
             // All the storage for the `essential` and `property_index` parts (assuming a valid ipma box size)
             difference
         } else {
-            return Err(Error::InvalidData(
-                "ipma box below minimum size for entry_count",
-            ));
+            return Status::IpmaTooSmall.into();
         };
 
     let max_association_bytes_per_entry: U16 = MAX_IPMA_ASSOCIATION_COUNT * num_association_bytes;
@@ -3283,9 +3564,7 @@ fn calculate_ipma_total_associations(
     let max_bytes_left: U64 = total_non_association_bytes + max_total_association_bytes;
 
     if bytes_left > max_bytes_left.get() {
-        return Err(Error::InvalidData(
-            "ipma box exceeds maximum size for entry_count",
-        ));
+        return Status::IpmaTooBig.into();
     }
 
     let total_associations: u64 = total_association_bytes / u64::from(num_association_bytes.get());
@@ -3327,11 +3606,9 @@ fn read_ipma<T: Read>(
         if let Some(previous_association) = entries.last() {
             #[allow(clippy::comparison_chain)]
             if previous_association.item_id > item_id {
-                return Err(Error::InvalidData(
-                    "Each ItemPropertyAssociation box shall be ordered by increasing item_ID",
-                ));
+                return Status::IpmaBadItemOrder.into();
             } else if previous_association.item_id == item_id {
-                return Err(Error::InvalidData("There shall be at most one association box for each item_ID, in any ItemPropertyAssociation box"));
+                return Status::IpmaDuplicateItemId.into();
             }
         }
 
@@ -3366,10 +3643,9 @@ fn read_ipma<T: Read>(
         }) = entries.last()
         {
             if *max_item_id <= ItemId(u16::MAX.into()) {
-                fail_if(
+                fail_with_status_if(
                     strictness == ParseStrictness::Strict,
-                    "The ipma version 0 should be used unless 32-bit item_ID values are needed \
-                     per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1",
+                    Status::IpmaBadVersion,
                 )?;
             }
         }
@@ -3428,7 +3704,7 @@ fn read_ipco<T: Read>(
             index
                 .0
                 .checked_add(1) // must include ignored properties to have correct indexes
-                .ok_or(Error::InvalidData("ipco index overflow"))?,
+                .ok_or_else(|| Error::from(Status::IpcoIndexOverflow))?,
         );
 
         check_parser_state!(b.content);
@@ -3500,7 +3776,7 @@ fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<PixelInformation> {
     let num_channels_read = src.try_read_to_end(&mut bits_per_channel)?;
 
     if u8::try_from(num_channels_read)? != num_channels {
-        return Err(Error::InvalidData("invalid num_channels"));
+        return Status::PixiBadChannelCount.into();
     }
 
     check_parser_state!(src.content);
@@ -3576,14 +3852,12 @@ fn read_colr<T: Read>(
                     NUM_RESERVED_BITS,
                     bit_reader.remaining()
                 );
-                return Err(Error::InvalidData("Unexpected size for colr box"));
+                return Status::ColrBadSize.into();
             }
             if bit_reader.read_u8(NUM_RESERVED_BITS)? != 0 {
-                fail_if(
+                fail_with_status_if(
                     strictness != ParseStrictness::Permissive,
-                    "The 7 reserved bits at the end of the ColourInformationBox \
-                     for colour_type == 'nclx' must be 0 \
-                     per ISOBMFF (ISO 14496-12:2020) § 12.1.5.2",
+                    Status::ColrReservedNonzero,
                 )?;
             }
 
@@ -3602,9 +3876,7 @@ fn read_colr<T: Read>(
         )),
         _ => {
             error!("read_colr colour_type: {:?}", colour_type);
-            Err(Error::InvalidData(
-                "Unsupported colour_type for ColourInformationBox",
-            ))
+            Status::ColrBadType.into()
         }
     }
 }
@@ -3771,7 +4043,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<ItemId, ItemLoc
                     0 => ConstructionMethod::File,
                     1 => ConstructionMethod::Idat,
                     2 => ConstructionMethod::Item,
-                    _ => return Err(Error::InvalidData("construction_method is taken from the set 0, 1 or 2 per ISOBMFF (ISO 14496-12:2020) § 8.11.3.3"))
+                    _ => return Status::IlocBadConstructionMethod.into(),
                 }
             }
         };
@@ -3786,9 +4058,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<ItemId, ItemLoc
         let extent_count = iloc.read_u16(16)?;
 
         if extent_count < 1 {
-            return Err(Error::InvalidData(
-                "extent_count must have a value 1 or greater per ISOBMFF (ISO 14496-12:2020) § 8.11.3.3",
-            ));
+            return Status::IlocBadExtentCount.into();
         }
 
         // "If only one extent is used (extent_count = 1) then either or both of the
@@ -3796,9 +4066,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<ItemId, ItemLoc
         if extent_count != 1
             && (offset_size == IlocFieldSize::Zero || length_size == IlocFieldSize::Zero)
         {
-            return Err(Error::InvalidData(
-                "extent_count != 1 requires explicit offset and length per ISOBMFF (ISO 14496-12:2020) § 8.11.3.3",
-            ));
+            return Status::IlocBadExtent.into();
         }
 
         let mut extents = TryVec::with_capacity(extent_count.to_usize())?;
@@ -3824,7 +4092,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<ItemId, ItemLoc
             //  the source is implied" (ibid)
             let offset = base_offset
                 .checked_add(extent_offset)
-                .ok_or(Error::InvalidData("offset calculation overflow"))?;
+                .ok_or_else(|| Error::from(Status::IlocOffsetOverflow))?;
             let extent = if extent_length == 0 {
                 Extent::ToEnd { offset }
             } else {
@@ -3843,14 +4111,14 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<ItemId, ItemLoc
         };
 
         if items.insert(item_id, loc)?.is_some() {
-            return Err(Error::InvalidData("duplicate item_ID in iloc"));
+            return Status::IlocDuplicateItemId.into();
         }
     }
 
     if iloc.remaining() == 0 {
         Ok(items)
     } else {
-        Err(Error::InvalidData("invalid iloc size"))
+        Status::IlocBadSize.into()
     }
 }
 
@@ -3919,7 +4187,7 @@ fn parse_mvhd<T: Read>(f: &mut BMFFBox<T>) -> Result<Option<MediaTimeScale>> {
     let mvhd = read_mvhd(f)?;
     debug!("{:?}", mvhd);
     if mvhd.timescale == 0 {
-        return Err(Error::InvalidData("zero timescale in mdhd"));
+        return Status::MvhdBadTimescale.into();
     }
     let timescale = Some(MediaTimeScale(u64::from(mvhd.timescale)));
     Ok(timescale)
@@ -4003,7 +4271,7 @@ fn read_pssh<T: Read>(src: &mut BMFFBox<T>) -> Result<ProtectionSystemSpecificHe
             kid.reserve(
                 count
                     .checked_mul(KID_ELEMENT_SIZE)
-                    .ok_or(Error::InvalidData("overflow in read_pssh"))?,
+                    .ok_or_else(|| Error::from(Status::PsshSizeOverflow))?,
             )?;
             for _ in 0..count {
                 let item = read_buf(pssh, KID_ELEMENT_SIZE.to_u64())?;
@@ -4052,7 +4320,7 @@ fn read_mehd<T: Read>(src: &mut BMFFBox<T>) -> Result<MediaScaledTime> {
     let fragment_duration = match version {
         1 => be_u64(src)?,
         0 => u64::from(be_u32(src)?),
-        _ => return Err(Error::InvalidData("unhandled mehd version")),
+        _ => return Status::MehdBadVersion.into(),
     };
     Ok(MediaScaledTime(fragment_duration))
 }
@@ -4134,7 +4402,7 @@ fn parse_mdhd<T: Read>(
         duration => Some(TrackScaledTime::<u64>(duration, track.id)),
     };
     if mdhd.timescale == 0 {
-        return Err(Error::InvalidData("zero timescale in mdhd"));
+        return Status::MdhdBadTimescale.into();
     }
     let timescale = Some(TrackTimeScale::<u64>(u64::from(mdhd.timescale), track.id));
     Ok((mdhd, duration, timescale))
@@ -4239,7 +4507,7 @@ fn read_ftyp<T: Read>(src: &mut BMFFBox<T>) -> Result<FileTypeBox> {
     let minor = be_u32(src)?;
     let bytes_left = src.bytes_left();
     if bytes_left % 4 != 0 {
-        return Err(Error::InvalidData("invalid ftyp size"));
+        return Status::FtypBadSize.into();
     }
     // Is a brand_count of zero valid?
     let brand_count = bytes_left / 4;
@@ -4266,7 +4534,7 @@ fn read_mvhd<T: Read>(src: &mut BMFFBox<T>) -> Result<MovieHeaderBox> {
         0 => {
             skip(src, 8)?;
         }
-        _ => return Err(Error::InvalidData("unhandled mvhd version")),
+        _ => return Status::MvhdBadVersion.into(),
     }
     let timescale = be_u32(src)?;
     let duration = match version {
@@ -4279,7 +4547,7 @@ fn read_mvhd<T: Read>(src: &mut BMFFBox<T>) -> Result<MovieHeaderBox> {
                 u64::from(d)
             }
         }
-        _ => return Err(Error::InvalidData("unhandled mvhd version")),
+        _ => unreachable!("Should have returned Status::MvhdBadVersion"),
     };
     // Skip remaining fields.
     skip(src, 80)?;
@@ -4302,14 +4570,14 @@ fn read_tkhd<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackHeaderBox> {
         0 => {
             skip(src, 8)?;
         }
-        _ => return Err(Error::InvalidData("unhandled tkhd version")),
+        _ => return Status::TkhdBadVersion.into(),
     }
     let track_id = be_u32(src)?;
     skip(src, 4)?;
     let duration = match version {
         1 => be_u64(src)?,
         0 => u64::from(be_u32(src)?),
-        _ => return Err(Error::InvalidData("unhandled tkhd version")),
+        _ => unreachable!("Should have returned Status::TkhdBadVersion"),
     };
     // Skip uninteresting fields.
     skip(src, 16)?;
@@ -4354,7 +4622,7 @@ fn read_elst<T: Read>(src: &mut BMFFBox<T>) -> Result<EditListBox> {
                 // 32 bit segment duration and media times.
                 (u64::from(be_u32(src)?), i64::from(be_i32(src)?))
             }
-            _ => return Err(Error::InvalidData("unhandled elst version")),
+            _ => return Status::ElstBadVersion.into(),
         };
         let media_rate_integer = be_i16(src)?;
         let media_rate_fraction = be_i16(src)?;
@@ -4402,7 +4670,7 @@ fn read_mdhd<T: Read>(src: &mut BMFFBox<T>) -> Result<MediaHeaderBox> {
             };
             (timescale, duration)
         }
-        _ => return Err(Error::InvalidData("unhandled mdhd version")),
+        _ => return Status::MdhdBadVersion.into(),
     };
 
     // Skip uninteresting fields.
@@ -4496,7 +4764,7 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
         .checked_mul(8)
         .map_or(true, |bytes| u64::from(bytes) > src.bytes_left())
     {
-        return Err(Error::InvalidData("insufficient data in 'ctts' box"));
+        return Status::CttsBadSize.into();
     }
 
     let mut offsets = TryVec::with_capacity(counts.to_usize())?;
@@ -4511,7 +4779,7 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
                 (count, offset)
             }
             _ => {
-                return Err(Error::InvalidData("unsupported version in 'ctts' box"));
+                return Status::CttsBadVersion.into();
             }
         };
         offsets.push(TimeOffset {
@@ -4695,9 +4963,7 @@ fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock
     let block_type = temp & 0x7f;
     let length = be_u24(src)?.into();
     if length > src.bytes_left() {
-        return Err(Error::InvalidData(
-            "FLACMetadataBlock larger than parent box",
-        ));
+        return Status::DflaBadMetadataBlockSize.into();
     }
     let data = read_buf(src, length)?;
     Ok(FLACMetadataBlock { block_type, data })
@@ -4737,7 +5003,7 @@ fn find_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
         }
 
         if end.to_usize() > remains.len() || u64::from(end) < des.position() {
-            return Err(Error::InvalidData("Invalid descriptor."));
+            return Status::EsdsBadDescriptor.into();
         }
 
         let descriptor = &remains[des.position().try_into()?..end.to_usize()];
@@ -4932,9 +5198,7 @@ fn read_ds_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
             esds.audio_sample_rate = Some(sample_frequency_value);
             esds.audio_channel_count = Some(channel_counts);
             if !esds.decoder_specific_data.is_empty() {
-                return Err(Error::InvalidData(
-                    "There can be only one DecSpecificInfoTag descriptor",
-                ));
+                return Status::EsdsDecSpecificIntoTagQuantity.into();
             }
             esds.decoder_specific_data.extend_from_slice(data)?;
 
@@ -5038,7 +5302,7 @@ fn read_dfla<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACSpecificBox> {
         return Err(Error::Unsupported("unknown dfLa (FLAC) version"));
     }
     if flags != 0 {
-        return Err(Error::InvalidData("no-zero dfLa (FLAC) flags"));
+        return Status::DflaFlagsNonzero.into();
     }
     let mut blocks = TryVec::new();
     while src.bytes_left() > 0 {
@@ -5048,15 +5312,11 @@ fn read_dfla<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACSpecificBox> {
     // The box must have at least one meta block, and the first block
     // must be the METADATA_BLOCK_STREAMINFO
     if blocks.is_empty() {
-        return Err(Error::InvalidData("FLACSpecificBox missing metadata"));
+        return Status::DflaMissingMetadata.into();
     } else if blocks[0].block_type != 0 {
-        return Err(Error::InvalidData(
-            "FLACSpecificBox must have STREAMINFO metadata first",
-        ));
+        return Status::DflaStreamInfoNotFirst.into();
     } else if blocks[0].data.len() != 34 {
-        return Err(Error::InvalidData(
-            "FLACSpecificBox STREAMINFO block is the wrong size",
-        ));
+        return Status::DflaStreamInfoBadSize.into();
     }
     Ok(FLACSpecificBox { version, blocks })
 }
@@ -5114,7 +5374,7 @@ pub fn serialize_opus_header<W: byteorder::WriteBytesExt + std::io::Write>(
         Err(e) => return Err(Error::from(e)),
         Ok(bytes) => {
             if bytes != 8 {
-                return Err(Error::InvalidData("Couldn't write OpusHead tag."));
+                return Status::DopsOpusHeadWriteErr.into();
             }
         }
     }
@@ -5137,9 +5397,7 @@ pub fn serialize_opus_header<W: byteorder::WriteBytesExt + std::io::Write>(
                 Err(e) => return Err(Error::from(e)),
                 Ok(bytes) => {
                     if bytes != table.channel_mapping.len() {
-                        return Err(Error::InvalidData(
-                            "Couldn't write channel mapping table data.",
-                        ));
+                        return Status::DopsChannelMappingWriteErr.into();
                     }
                 }
             }
@@ -5155,15 +5413,13 @@ fn read_alac<T: Read>(src: &mut BMFFBox<T>) -> Result<ALACSpecificBox> {
         return Err(Error::Unsupported("unknown alac (ALAC) version"));
     }
     if flags != 0 {
-        return Err(Error::InvalidData("no-zero alac (ALAC) flags"));
+        return Status::AlacFlagsNonzero.into();
     }
 
     let length = match src.bytes_left() {
         x @ 24 | x @ 48 => x,
         _ => {
-            return Err(Error::InvalidData(
-                "ALACSpecificBox magic cookie is the wrong size",
-            ))
+            return Status::AlacBadMagicCookieSize.into();
         }
     };
     let data = read_buf(src, length)?;
@@ -5176,15 +5432,14 @@ fn read_alac<T: Read>(src: &mut BMFFBox<T>) -> Result<ALACSpecificBox> {
 /// See [\[ISOBMFF\]: reserved (field = 0;) handling is ambiguous](https://github.com/MPEGGroup/FileFormat/issues/36)
 fn read_hdlr<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Result<HandlerBox> {
     if read_fullbox_version_no_flags(src)? != 0 {
-        return Err(Error::Unsupported("hdlr version"));
+        return Status::HdlrUnsupportedVersion.into();
     }
 
     let pre_defined = be_u32(src)?;
     if pre_defined != 0 {
-        fail_if(
+        fail_with_status_if(
             strictness == ParseStrictness::Strict,
-            "The HandlerBox 'pre_defined' field shall be 0 \
-             per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+            Status::HdlrPredefinedNonzero,
         )?;
     }
 
@@ -5193,10 +5448,9 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Resu
     for _ in 1..=3 {
         let reserved = be_u32(src)?;
         if reserved != 0 {
-            fail_if(
+            fail_with_status_if(
                 strictness == ParseStrictness::Strict,
-                "The HandlerBox 'reserved' fields shall be 0 \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+                Status::HdlrReservedNonzero,
             )?;
         }
     }
@@ -5204,29 +5458,25 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Resu
     match std::str::from_utf8(src.read_into_try_vec()?.as_slice()) {
         Ok(name) => {
             match name.bytes().filter(|&b| b == b'\0').count() {
-                0 => fail_if(
+                0 => fail_with_status_if(
                     strictness != ParseStrictness::Permissive,
-                    "The HandlerBox 'name' field shall be null-terminated \
-                     per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+                    Status::HdlrNameNoNul,
                 )?,
                 1 => (),
                 n =>
                 // See https://github.com/MPEGGroup/FileFormat/issues/35
                 {
                     error!("Found {} nul bytes in {:x?}", n, name);
-                    fail_if(
+                    fail_with_status_if(
                         strictness == ParseStrictness::Strict,
-                        "The HandlerBox 'name' field shall have a NUL byte \
-                         only in the final position \
-                         per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+                        Status::HdlrNameMultipleNul,
                     )?
                 }
             }
         }
-        Err(_) => fail_if(
+        Err(_) => fail_with_status_if(
             strictness != ParseStrictness::Permissive,
-            "The HandlerBox 'name' field shall be valid utf8 \
-             per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2",
+            Status::HdlrNameNotUtf8,
         )?,
     }
 
@@ -5276,7 +5526,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                     && name != BoxType::ProtectedVisualSampleEntry)
                     || codec_specific.is_some()
                 {
-                    return Err(Error::InvalidData("malformed video sample entry"));
+                    return Status::StsdBadVideoSampleEntry.into();
                 }
                 let avcc_size = b
                     .head
@@ -5290,7 +5540,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
             }
             BoxType::H263SpecificBox => {
                 if (name != BoxType::H263SampleEntry) || codec_specific.is_some() {
-                    return Err(Error::InvalidData("malformed video sample entry"));
+                    return Status::StsdBadVideoSampleEntry.into();
                 }
                 let h263_dec_spec_struc_size = b
                     .head
@@ -5309,21 +5559,21 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                     && name != BoxType::ProtectedVisualSampleEntry)
                     || codec_specific.is_some()
                 {
-                    return Err(Error::InvalidData("malformed video sample entry"));
+                    return Status::StsdBadVideoSampleEntry.into();
                 }
                 let vpcc = read_vpcc(&mut b)?;
                 codec_specific = Some(VideoCodecSpecific::VPxConfig(vpcc));
             }
             BoxType::AV1CodecConfigurationBox => {
                 if name != BoxType::AV1SampleEntry && name != BoxType::ProtectedVisualSampleEntry {
-                    return Err(Error::InvalidData("malformed video sample entry"));
+                    return Status::StsdBadVideoSampleEntry.into();
                 }
                 let av1c = read_av1c(&mut b)?;
                 codec_specific = Some(VideoCodecSpecific::AV1Config(av1c));
             }
             BoxType::ESDBox => {
                 if name != BoxType::MP4VideoSampleEntry || codec_specific.is_some() {
-                    return Err(Error::InvalidData("malformed video sample entry"));
+                    return Status::StsdBadVideoSampleEntry.into();
                 }
                 #[cfg(not(feature = "mp4v"))]
                 {
@@ -5349,7 +5599,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
             }
             BoxType::ProtectionSchemeInfoBox => {
                 if name != BoxType::ProtectedVisualSampleEntry {
-                    return Err(Error::InvalidData("malformed video sample entry"));
+                    return Status::StsdBadVideoSampleEntry.into();
                 }
                 let sinf = read_sinf(&mut b)?;
                 debug!("{:?} (sinf)", sinf);
@@ -5390,7 +5640,7 @@ fn read_qt_wave_atom<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
         }
     }
 
-    codec_specific.ok_or(Error::InvalidData("malformed audio sample entry"))
+    codec_specific.ok_or_else(|| Error::from(Status::EsdsBadAudioSampleEntry))
 }
 
 /// Parse an audio description inside an stsd box.
@@ -5467,7 +5717,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                     && name != BoxType::ProtectedAudioSampleEntry)
                     || codec_specific.is_some()
                 {
-                    return Err(Error::InvalidData("malformed audio sample entry"));
+                    return Status::StsdBadAudioSampleEntry.into();
                 }
                 let esds = read_esds(&mut b)?;
                 codec_type = esds.audio_codec;
@@ -5477,7 +5727,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 if (name != BoxType::FLACSampleEntry && name != BoxType::ProtectedAudioSampleEntry)
                     || codec_specific.is_some()
                 {
-                    return Err(Error::InvalidData("malformed audio sample entry"));
+                    return Status::StsdBadAudioSampleEntry.into();
                 }
                 let dfla = read_dfla(&mut b)?;
                 codec_type = CodecType::FLAC;
@@ -5487,7 +5737,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 if (name != BoxType::OpusSampleEntry && name != BoxType::ProtectedAudioSampleEntry)
                     || codec_specific.is_some()
                 {
-                    return Err(Error::InvalidData("malformed audio sample entry"));
+                    return Status::StsdBadAudioSampleEntry.into();
                 }
                 let dops = read_dops(&mut b)?;
                 codec_type = CodecType::Opus;
@@ -5495,7 +5745,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
             }
             BoxType::ALACSpecificBox => {
                 if name != BoxType::ALACSpecificBox || codec_specific.is_some() {
-                    return Err(Error::InvalidData("malformed audio sample entry"));
+                    return Status::StsdBadAudioSampleEntry.into();
                 }
                 let alac = read_alac(&mut b)?;
                 codec_type = CodecType::ALAC;
@@ -5508,7 +5758,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
             }
             BoxType::ProtectionSchemeInfoBox => {
                 if name != BoxType::ProtectedAudioSampleEntry {
-                    return Err(Error::InvalidData("malformed audio sample entry"));
+                    return Status::StsdBadAudioSampleEntry.into();
                 }
                 let sinf = read_sinf(&mut b)?;
                 debug!("{:?} (sinf)", sinf);
@@ -5518,7 +5768,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
             #[cfg(feature = "3gpp")]
             BoxType::AMRSpecificBox => {
                 if codec_type != CodecType::AMRNB && codec_type != CodecType::AMRWB {
-                    return Err(Error::InvalidData("malformed audio sample entry"));
+                    return Status::StsdBadAudioSampleEntry.into();
                 }
                 let amr_dec_spec_struc_size = b
                     .head
@@ -5633,9 +5883,7 @@ fn read_schi<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<TrackEncryptionBox>
         match b.head.name {
             BoxType::TrackEncryptionBox => {
                 if tenc.is_some() {
-                    return Err(Error::InvalidData(
-                        "tenc box should be only one at most in sinf box",
-                    ));
+                    return Status::SchiQuantity.into();
                 }
                 tenc = Some(read_tenc(&mut b)?);
             }
@@ -5910,7 +6158,7 @@ fn skip<T: Read>(src: &mut T, bytes: u64) -> Result<()> {
 fn read_buf<T: Read>(src: &mut T, size: u64) -> Result<TryVec<u8>> {
     let buf = src.take(size).read_into_try_vec()?;
     if buf.len().to_u64() != size {
-        return Err(Error::InvalidData("failed buffer read"));
+        return Status::ReadBufErr.into();
     }
 
     Ok(buf)
