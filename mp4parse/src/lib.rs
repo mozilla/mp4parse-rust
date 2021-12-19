@@ -1308,9 +1308,9 @@ impl AvifContext {
                 Some(ItemProperty::ImageSpatialExtents(ispe)) => Ok(ispe),
                 Some(other_property) => panic!("property key mismatch: {:?}", other_property),
                 None => {
-                    fail_if(
+                    fail_with_status_if(
                         self.strictness != ParseStrictness::Permissive,
-                        "ispe is a mandatory property",
+                        Status::NoIspe,
                     )?;
                     Ok(std::ptr::null())
                 }
