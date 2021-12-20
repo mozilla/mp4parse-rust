@@ -5513,10 +5513,17 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
 /// See ISOBMFF (ISO 14496-12:2020) § 8.5.2
 /// See MP4 (ISO 14496-14:2020) § 6.7.2
 fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleDescriptionBox> {
-    let (_, _) = read_fullbox_extra(src)?;
+    let (_, flags) = read_fullbox_extra(src)?;
 
-    let description_count = be_u32(src)?;
-    let mut descriptions = TryVec::new();
+    if flags != 0 {
+        warn!(
+            "Unexpected `flags` value for SampleDescriptionBox (stsd): {}",
+            flags
+        );
+    }
+
+    let description_count = be_u32(src)?.to_usize();
+    let mut descriptions = TryVec::with_capacity(description_count)?;
 
     {
         let mut iter = src.box_iter();
@@ -5541,7 +5548,7 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
             };
             descriptions.push(description)?;
             check_parser_state!(b.content);
-            if descriptions.len() == description_count.to_usize() {
+            if descriptions.len() == description_count {
                 break;
             }
         }
