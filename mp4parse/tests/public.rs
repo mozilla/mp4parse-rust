@@ -1102,9 +1102,7 @@ fn public_avif_hdlr_multiple_nul() {
 
 #[test]
 fn public_avif_no_mif1() {
-    let expected_msg = "The FileTypeBox should contain 'mif1' in the compatible_brands list \
-                        per MIAF (ISO 23000-22:2019) § 7.2.1.2";
-    assert_avif_should(IMAGE_AVIF_NO_MIF1, expected_msg);
+    assert_avif_should2(IMAGE_AVIF_NO_MIF1, Status::MissingMif1Brand);
 }
 
 #[test]
