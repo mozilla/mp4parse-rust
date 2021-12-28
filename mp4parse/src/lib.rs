@@ -1815,7 +1815,7 @@ pub enum ParseStrictness {
     Strict,     // Error on "should" directives
 }
 
-/// Prefer [`fail_with_error_if`] so all the explanatory strings can be collected
+/// Prefer [`fail_with_status_if`] so all the explanatory strings can be collected
 /// in `From<Status> for &str`.
 fn fail_if(violation: bool, message: &'static str) -> Result<()> {
     if violation {
@@ -1826,7 +1826,8 @@ fn fail_if(violation: bool, message: &'static str) -> Result<()> {
     }
 }
 
-fn fail_with_error_if(violation: bool, error: Error) -> Result<()> {
+fn fail_with_status_if(violation: bool, status: Status) -> Result<()> {
+    let error = Error::from(status);
     if violation {
         Err(error)
     } else {
@@ -2157,16 +2158,16 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
             debug!("expected_image_type: {:?}", expected_image_type);
 
             if primary_image_expected && !has_mif1_brand {
-                fail_with_error_if(
+                fail_with_status_if(
                     strictness == ParseStrictness::Strict,
-                    Status::MissingMif1Brand.into(),
+                    Status::MissingMif1Brand,
                 )?;
             }
 
             if !has_avif_brand && !has_avis_brand {
-                fail_with_error_if(
+                fail_with_status_if(
                     strictness != ParseStrictness::Permissive,
-                    Status::MissingAvifOrAvisBrand.into(),
+                    Status::MissingAvifOrAvisBrand,
                 )?;
             }
 
@@ -2348,9 +2349,9 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
                 }
             }
             ConstructionMethod::Item => {
-                fail_with_error_if(
+                fail_with_status_if(
                     strictness != ParseStrictness::Permissive,
-                    Status::ConstructionMethod.into(),
+                    Status::ConstructionMethod,
                 )?;
             }
         }
@@ -2362,19 +2363,16 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
     assert!(alpha_item.is_none() || alpha_item_id.is_some());
 
     if expected_image_type.has_primary() && primary_item_id.is_none() {
-        fail_with_error_if(
+        fail_with_status_if(
             strictness != ParseStrictness::Permissive,
-            Status::NoPrimaryItem.into(),
+            Status::NoPrimaryItem,
         )?;
     }
 
     // Lacking a brand that requires them, it's fine for moov boxes to exist in
     // BMFF files; they're simply ignored
     if expected_image_type.has_sequence() && image_sequence.is_none() {
-        fail_with_error_if(
-            strictness != ParseStrictness::Permissive,
-            Status::NoMoov.into(),
-        )?;
+        fail_with_status_if(strictness != ParseStrictness::Permissive, Status::NoMoov)?;
     }
 
     // Returns true iff `id` is `Some` and there is no corresponding property for it
@@ -2399,10 +2397,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         match item_type.map(u32::to_be_bytes).as_ref() {
             Some(b"av01") => {
                 if missing_property_for(item_id, BoxType::AV1CodecConfigurationBox) {
-                    fail_with_error_if(
-                        strictness != ParseStrictness::Permissive,
-                        Status::NoAv1c.into(),
-                    )?;
+                    fail_with_status_if(strictness != ParseStrictness::Permissive, Status::NoAv1c)?;
                 }
 
                 if missing_property_for(item_id, BoxType::PixelInformationBox) {
@@ -2410,21 +2405,18 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
                     // to allowing its omission to imply a default value. In anticipation
                     // of that, only give an error in strict mode
                     // See https://github.com/MPEGGroup/MIAF/issues/9
-                    fail_with_error_if(
+                    fail_with_status_if(
                         if cfg!(feature = "missing-pixi-permitted") {
                             strictness == ParseStrictness::Strict
                         } else {
                             strictness != ParseStrictness::Permissive
                         },
-                        Status::NoPixi.into(),
+                        Status::NoPixi,
                     )?;
                 }
 
                 if missing_property_for(item_id, BoxType::ImageSpatialExtentsProperty) {
-                    fail_with_error_if(
-                        strictness != ParseStrictness::Permissive,
-                        Status::NoIspe.into(),
-                    )?;
+                    fail_with_status_if(strictness != ParseStrictness::Permissive, Status::NoIspe)?;
                 }
             }
             Some(b"grid") => {
@@ -2877,9 +2869,9 @@ fn read_iprp<T: Read>(
                                 // This is a "shall", but it is likely to change, so only
                                 // fail if using strict parsing.
                                 // See https://github.com/mozilla/mp4parse-rust/issues/284
-                                fail_with_error_if(
+                                fail_with_status_if(
                                     strictness == ParseStrictness::Strict,
-                                    Status::TxformNoEssential.into(),
+                                    Status::TxformNoEssential,
                                 )?;
                             }
                         }
@@ -2912,9 +2904,9 @@ fn read_iprp<T: Read>(
                         ItemProperty::LayeredImageIndexing => {
                             assert!(feature.is_ok() && unsupported_features.contains(feature?));
                             if a.essential {
-                                fail_with_error_if(
+                                fail_with_status_if(
                                     strictness != ParseStrictness::Permissive,
-                                    Status::A1lxEssential.into(),
+                                    Status::A1lxEssential,
                                 )?;
                             }
                         }
@@ -2927,9 +2919,9 @@ fn read_iprp<T: Read>(
                                         || strictness == ParseStrictness::Permissive
                                 );
                             } else {
-                                fail_with_error_if(
+                                fail_with_status_if(
                                     strictness != ParseStrictness::Permissive,
-                                    Status::LselNoEssential.into(),
+                                    Status::LselNoEssential,
                                 )?;
                             }
                         }
@@ -2942,9 +2934,9 @@ fn read_iprp<T: Read>(
                                         || strictness == ParseStrictness::Permissive
                                 );
                             } else {
-                                fail_with_error_if(
+                                fail_with_status_if(
                                     strictness != ParseStrictness::Permissive,
-                                    Status::A1opNoEssential.into(),
+                                    Status::A1opNoEssential,
                                 )?;
                             }
                         }
@@ -2964,7 +2956,7 @@ fn read_iprp<T: Read>(
                                     "Invalid property order: {:?} after {:?}",
                                     TRANSFORM_ORDER[transform_index], TRANSFORM_ORDER[prev]
                                 );
-                                fail_with_error_if(
+                                fail_with_status_if(
                                     strictness != ParseStrictness::Permissive,
                                     if TRANSFORM_ORDER[transform_index]
                                         == BoxType::ImageSpatialExtentsProperty
@@ -2972,8 +2964,7 @@ fn read_iprp<T: Read>(
                                         Status::TxformBeforeIspe
                                     } else {
                                         Status::TxformOrder
-                                    }
-                                    .into(),
+                                    },
                                 )?;
                             }
                         }
