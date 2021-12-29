@@ -137,6 +137,7 @@ impl<'a, T> Offset for OffsetReader<'a, T> {
 impl<'a, T: Read> Read for OffsetReader<'a, T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let bytes_read = self.reader.read(buf)?;
+        trace!("Read {} bytes at offset {}", bytes_read, self.offset);
         self.offset = self
             .offset
             .checked_add(bytes_read.to_u64())
@@ -2019,6 +2020,7 @@ fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
             u64::from(size32)
         }
     };
+    trace!("read_box_header: name: {:?}, size: {}", name, size);
     let mut offset = match size32 {
         1 => BoxHeader::MIN_LARGE_SIZE,
         _ => BoxHeader::MIN_SIZE,
@@ -5559,9 +5561,9 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
     let description_count = be_u32(src)?.to_usize();
     let mut descriptions = TryVec::with_capacity(description_count)?;
 
-    {
-        let mut iter = src.box_iter();
-        while let Some(mut b) = iter.next_box()? {
+    let mut iter = src.box_iter();
+    while descriptions.len() < description_count {
+        if let Some(mut b) = iter.next_box()? {
             let description = match track.track_type {
                 TrackType::Video => read_video_sample_entry(&mut b),
                 TrackType::Audio => read_audio_sample_entry(&mut b),
@@ -5582,9 +5584,8 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
             };
             descriptions.push(description)?;
             check_parser_state!(b.content);
-            if descriptions.len() == description_count {
-                break;
-            }
+        } else {
+            break;
         }
     }
 
