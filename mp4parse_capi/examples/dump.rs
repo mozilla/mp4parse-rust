@@ -1,11 +1,4 @@
-extern crate mp4parse;
-extern crate mp4parse_capi;
-
-#[macro_use]
-extern crate log;
-
-extern crate env_logger;
-
+use log::info;
 use mp4parse::ParseStrictness;
 use mp4parse_capi::*;
 use std::env;

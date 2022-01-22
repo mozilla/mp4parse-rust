@@ -307,14 +307,12 @@ impl UnsupportedFeatures {
 impl<T> From<Status> for Result<T> {
     /// A convenience method to enable shortcuts like
     /// ```
-    /// # extern crate mp4parse;
     /// # use mp4parse::{Result,Status};
     /// # let _: Result<()> =
     /// Status::MissingAvifOrAvisBrand.into();
     /// ```
     /// instead of
     /// ```
-    /// # extern crate mp4parse;
     /// # use mp4parse::{Error,Result,Status};
     /// # let _: Result<()> =
     /// Err(Error::from(Status::MissingAvifOrAvisBrand));
