@@ -12,7 +12,7 @@ authors = [
 description = "Parser for ISO base media file format (mp4)"
 documentation = "https://docs.rs/mp4parse_capi/"
 license = "MPL-2.0"
-
+edition = "2018"
 repository = "https://github.com/mozilla/mp4parse-rust"
 
 # Avoid complaints about trying to package test files.

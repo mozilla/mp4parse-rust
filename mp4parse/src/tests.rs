@@ -16,7 +16,7 @@ use std::io::Read as _;
 extern crate test_assembler;
 use self::test_assembler::*;
 
-use boxes::BoxType;
+use crate::boxes::BoxType;
 
 enum BoxSize {
     Short(u32),

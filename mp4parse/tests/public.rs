@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 extern crate mp4parse as mp4;
 
-use mp4::{Error, ParseStrictness, Status};
+use crate::mp4::{Error, ParseStrictness, Status};
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek, SeekFrom};

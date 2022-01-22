@@ -35,7 +35,7 @@ use std::io::{Read, Take};
 mod macros;
 
 mod boxes;
-use boxes::{BoxType, FourCC};
+use crate::boxes::{BoxType, FourCC};
 
 // Unit tests.
 #[cfg(test)]
@@ -3188,7 +3188,7 @@ macro_rules! impl_bounded_product {
 }
 
 mod bounded_uints {
-    use UpperBounded;
+    use crate::UpperBounded;
 
     impl_bounded!(U8, u8);
     impl_bounded!(U16, u16);
@@ -3203,7 +3203,7 @@ mod bounded_uints {
     }
 }
 
-use bounded_uints::*;
+use crate::bounded_uints::*;
 
 /// Implement the multiplication operator for $lhs * $rhs giving $output, which
 /// is internally represented as $inner. The operation is statically checked
