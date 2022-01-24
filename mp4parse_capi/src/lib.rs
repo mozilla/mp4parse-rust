@@ -5,7 +5,6 @@
 //! # Examples
 //!
 //! ```rust
-//! extern crate mp4parse_capi;
 //! use std::io::Read;
 //!
 //! extern fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
@@ -34,11 +33,6 @@
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
-
-extern crate byteorder;
-extern crate log;
-extern crate mp4parse;
-extern crate num_traits;
 
 use byteorder::WriteBytesExt;
 use std::convert::TryFrom;

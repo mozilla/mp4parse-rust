@@ -13,8 +13,7 @@ use fallible_collections::TryRead as _;
 use std::convert::TryInto as _;
 use std::io::Cursor;
 use std::io::Read as _;
-extern crate test_assembler;
-use self::test_assembler::*;
+use test_assembler::*;
 
 use crate::boxes::BoxType;
 
