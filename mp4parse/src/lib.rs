@@ -1187,10 +1187,10 @@ pub struct MediaContext {
 
 /// An ISOBMFF item as described by an iloc box. For the sake of avoiding copies,
 /// this can either be represented by the `Location` variant, which indicates
-/// where the data exists within a `MediaDataBox` stored separately, or the
-/// `Data` variant which owns the data. Unfortunately, it's not simple to
-/// represent this as a [`std::borrow::Cow`], or other reference-based type, because
-/// multiple instances may references different parts of the same [`MediaDataBox`]
+/// where the data exists within a `DataBox` stored separately, or the `Data`
+/// variant which owns the data. Unfortunately, it's not simple to represent
+/// this as a [`std::borrow::Cow`], or other reference-based type, because
+/// multiple instances may references different parts of the same [`DataBox`]
 /// and we want to avoid the copy that splitting the storage would entail.
 enum IsobmffItem {
     MdatLocation(Extent),
@@ -1237,8 +1237,13 @@ impl AvifItem {
 pub struct AvifContext {
     /// Level of deviation from the specification before failing the parse
     strictness: ParseStrictness,
-    /// Referred to by the `IsobmffItem::*Location` variants of the `AvifItem`s in this struct
-    media_storage: TryVec<MediaDataBox>,
+    /// Storage elements which can be located anywhere within the "file" identified by
+    /// [`BoxType::ItemLocationBox`]es using [`ConstructionMethod::File`].
+    /// Referred to by the [`IsobmffItem`]`::*Location` variants of the `AvifItem`s in this struct
+    media_storage: TryVec<DataBox>,
+    /// Similar to `media_storage`, but for a single optional chunk of storage within the
+    /// MetaBox itentified by [`BoxType::ItemLocationBox`]es using [`ConstructionMethod::Idat`].
+    item_data_box: Option<DataBox>,
     /// The item indicated by the `pitm` box, See ISOBMFF (ISO 14496-12:2020) § 8.11.4
     /// May be `None` in the pure image sequence case.
     primary_item: Option<AvifItem>,
@@ -1417,10 +1422,15 @@ impl AvifContext {
                     }
                 }
                 unreachable!(
-                    "IsobmffItem::Location requires the location exists in AvifContext::media_storage"
+                    "IsobmffItem::MdatLocation requires the location exists in AvifContext::media_storage"
                 );
             }
-            IsobmffItem::IdatLocation(_) => unimplemented!(),
+            IsobmffItem::IdatLocation(extent) => {
+                self.item_data_box
+                    .as_ref()
+                    .and_then(|idat| idat.get(extent))
+                    .unwrap_or_else(|| unreachable!("IsobmffItem::IdatLocation equires the location exists in AvifContext::item_data_box"))
+            }
             IsobmffItem::Data(data) => data.as_slice(),
         }
     }
@@ -1434,29 +1444,31 @@ struct AvifMeta {
     primary_item_id: Option<ItemId>,
     item_infos: TryVec<ItemInfoEntry>,
     iloc_items: TryHashMap<ItemId, ItemLocationBoxItem>,
-    item_data_box: Option<ItemDataBox>,
+    item_data_box: Option<DataBox>,
 }
 
-/// An Item Data Box
-/// See ISOBMFF (ISO 14496-12:2020) § 8.11.11
-struct ItemDataBox {
+#[derive(Debug)]
+enum DataBoxMetadata {
+    Idat,
+    Mdat {
+        /// Offset of `data` from the beginning of the "file". See ConstructionMethod::File.
+        /// Note: the file may not be an actual file, read_avif supports any `&mut impl Read`
+        /// source for input. However we try to match the terminology used in the spec.
+        file_offset: u64,
+    },
+}
+
+/// Represents either an Item Data Box (ISOBMFF (ISO 14496-12:2020) § 8.11.11)
+/// Or a Media Data Box (ISOBMFF (ISO 14496-12:2020) § 8.1.1)
+struct DataBox {
+    metadata: DataBoxMetadata,
     data: TryVec<u8>,
 }
 
-/// A Media Data Box
-/// See ISOBMFF (ISO 14496-12:2020) § 8.1.1
-struct MediaDataBox {
-    /// Offset of `data` from the beginning of the "file". See ConstructionMethod::File.
-    /// Note: the file may not be an actual file, read_avif supports any `&mut impl Read`
-    /// source for input. However we try to match the terminology used in the spec.
-    file_offset: u64,
-    data: TryVec<u8>,
-}
-
-impl fmt::Debug for MediaDataBox {
+impl fmt::Debug for DataBox {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("MediaDataBox")
-            .field("file_offset", &self.file_offset)
+        f.debug_struct("DataBox")
+            .field("metadata", &self.metadata)
             .field("data", &format_args!("{} bytes", self.data.len()))
             .finish()
     }
@@ -1472,18 +1484,49 @@ fn u64_to_usize_logged(x: u64) -> Option<usize> {
     }
 }
 
-/// Generalizes the different data boxes a [`ItemLocationBoxItem`] can refer to
-trait DataBox {
-    fn data(&self) -> &[u8];
+impl DataBox {
+    fn from_mdat(file_offset: u64, data: TryVec<u8>) -> Self {
+        Self {
+            metadata: DataBoxMetadata::Mdat { file_offset },
+            data,
+        }
+    }
+
+    fn from_idat(data: TryVec<u8>) -> Self {
+        Self {
+            metadata: DataBoxMetadata::Idat,
+            data,
+        }
+    }
+
+    fn data(&self) -> &[u8] {
+        &self.data
+    }
 
     /// Convert an absolute offset to an offset relative to the beginning of the
     /// slice [`DataBox::data`] returns. Returns None if the offset would be
     /// negative or if the offset would overflow a `usize`.
-    fn start(&self, offset: u64) -> Option<usize>;
+    fn start(&self, offset: u64) -> Option<usize> {
+        match self.metadata {
+            DataBoxMetadata::Idat => u64_to_usize_logged(offset),
+            DataBoxMetadata::Mdat { file_offset } => {
+                let start = offset.checked_sub(file_offset);
+                if start.is_none() {
+                    error!("Overflow subtracting {} + {}", offset, file_offset);
+                }
+                u64_to_usize_logged(start?)
+            }
+        }
+    }
 
     /// Returns an appropriate variant of [`IsobmffItem`] to describe the extent
     /// referencing data within this type of box.
-    fn location(&self, extent: &Extent) -> IsobmffItem;
+    fn location(&self, extent: &Extent) -> IsobmffItem {
+        match self.metadata {
+            DataBoxMetadata::Idat => IsobmffItem::IdatLocation(extent.clone()),
+            DataBoxMetadata::Mdat { .. } => IsobmffItem::MdatLocation(extent.clone()),
+        }
+    }
 
     /// Return a slice from the DataBox specified by the provided `extent`.
     /// Returns `None` if the extent isn't fully contained by the DataBox or if
@@ -1507,46 +1550,14 @@ trait DataBox {
     }
 }
 
-impl DataBox for ItemDataBox {
-    fn data(&self) -> &[u8] {
-        &self.data
-    }
-
-    fn start(&self, offset: u64) -> Option<usize> {
-        u64_to_usize_logged(offset)
-    }
-
-    fn location(&self, extent: &Extent) -> IsobmffItem {
-        IsobmffItem::IdatLocation(extent.clone())
-    }
-}
-
-impl DataBox for MediaDataBox {
-    fn data(&self) -> &[u8] {
-        &self.data
-    }
-
-    fn start(&self, offset: u64) -> Option<usize> {
-        let start = offset.checked_sub(self.file_offset);
-        if start.is_none() {
-            error!("Overflow subtracting {} + {}", offset, self.file_offset);
-        }
-        u64_to_usize_logged(start?)
-    }
-
-    fn location(&self, extent: &Extent) -> IsobmffItem {
-        IsobmffItem::MdatLocation(extent.clone())
-    }
-}
-
 #[cfg(test)]
 mod media_data_box_tests {
     use super::*;
 
-    impl MediaDataBox {
+    impl DataBox {
         fn at_offset(file_offset: u64, data: std::vec::Vec<u8>) -> Self {
-            MediaDataBox {
-                file_offset,
+            DataBox {
+                metadata: DataBoxMetadata::Mdat { file_offset },
                 data: data.into(),
             }
         }
@@ -1554,7 +1565,7 @@ mod media_data_box_tests {
 
     #[test]
     fn extent_with_length_before_mdat_returns_none() {
-        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let mdat = DataBox::at_offset(100, vec![1; 5]);
         let extent = Extent::WithLength { offset: 0, len: 2 };
 
         assert!(mdat.get(&extent).is_none());
@@ -1562,7 +1573,7 @@ mod media_data_box_tests {
 
     #[test]
     fn extent_to_end_before_mdat_returns_none() {
-        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let mdat = DataBox::at_offset(100, vec![1; 5]);
         let extent = Extent::ToEnd { offset: 0 };
 
         assert!(mdat.get(&extent).is_none());
@@ -1570,7 +1581,7 @@ mod media_data_box_tests {
 
     #[test]
     fn extent_with_length_crossing_front_mdat_boundary_returns_none() {
-        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let mdat = DataBox::at_offset(100, vec![1; 5]);
         let extent = Extent::WithLength { offset: 99, len: 3 };
 
         assert!(mdat.get(&extent).is_none());
@@ -1578,7 +1589,7 @@ mod media_data_box_tests {
 
     #[test]
     fn extent_with_length_which_is_subset_of_mdat() {
-        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let mdat = DataBox::at_offset(100, vec![1; 5]);
         let extent = Extent::WithLength {
             offset: 101,
             len: 2,
@@ -1589,7 +1600,7 @@ mod media_data_box_tests {
 
     #[test]
     fn extent_to_end_which_is_subset_of_mdat() {
-        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let mdat = DataBox::at_offset(100, vec![1; 5]);
         let extent = Extent::ToEnd { offset: 101 };
 
         assert_eq!(mdat.get(&extent), Some(&[1, 1, 1, 1][..]));
@@ -1597,7 +1608,7 @@ mod media_data_box_tests {
 
     #[test]
     fn extent_with_length_which_is_all_of_mdat() {
-        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let mdat = DataBox::at_offset(100, vec![1; 5]);
         let extent = Extent::WithLength {
             offset: 100,
             len: 5,
@@ -1608,7 +1619,7 @@ mod media_data_box_tests {
 
     #[test]
     fn extent_to_end_which_is_all_of_mdat() {
-        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let mdat = DataBox::at_offset(100, vec![1; 5]);
         let extent = Extent::ToEnd { offset: 100 };
 
         assert_eq!(mdat.get(&extent), Some(mdat.data.as_slice()));
@@ -1616,7 +1627,7 @@ mod media_data_box_tests {
 
     #[test]
     fn extent_with_length_crossing_back_mdat_boundary_returns_none() {
-        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let mdat = DataBox::at_offset(100, vec![1; 5]);
         let extent = Extent::WithLength {
             offset: 103,
             len: 3,
@@ -1627,7 +1638,7 @@ mod media_data_box_tests {
 
     #[test]
     fn extent_with_length_after_mdat_returns_none() {
-        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let mdat = DataBox::at_offset(100, vec![1; 5]);
         let extent = Extent::WithLength {
             offset: 200,
             len: 2,
@@ -1638,7 +1649,7 @@ mod media_data_box_tests {
 
     #[test]
     fn extent_to_end_after_mdat_returns_none() {
-        let mdat = MediaDataBox::at_offset(100, vec![1; 5]);
+        let mdat = DataBox::at_offset(100, vec![1; 5]);
         let extent = Extent::ToEnd { offset: 200 };
 
         assert!(mdat.get(&extent).is_none());
@@ -1646,7 +1657,7 @@ mod media_data_box_tests {
 
     #[test]
     fn extent_with_length_which_overflows_usize() {
-        let mdat = MediaDataBox::at_offset(std::u64::MAX - 1, vec![1; 5]);
+        let mdat = DataBox::at_offset(std::u64::MAX - 1, vec![1; 5]);
         let extent = Extent::WithLength {
             offset: std::u64::MAX,
             len: std::usize::MAX,
@@ -1659,7 +1670,7 @@ mod media_data_box_tests {
     // because the range end is unbounded, we don't calculate it.
     #[test]
     fn extent_to_end_which_overflows_usize() {
-        let mdat = MediaDataBox::at_offset(std::u64::MAX - 1, vec![1; 5]);
+        let mdat = DataBox::at_offset(std::u64::MAX - 1, vec![1; 5]);
         let extent = Extent::ToEnd {
             offset: std::u64::MAX,
         };
@@ -1778,7 +1789,7 @@ enum ConstructionMethod {
 
 /// Describes a region where a item specified by an `ItemLocationBoxItem` is stored.
 /// The offset is `u64` since that's the maximum possible size and since the relative
-/// nature of `MediaDataBox` means this can still possibly succeed even in the case
+/// nature of `DataBox` means this can still possibly succeed even in the case
 /// that the raw value exceeds std::usize::MAX on platforms where that type is smaller
 /// than u64. However, `len` is stored as a `usize` since no value larger than
 /// `std::usize::MAX` can be used in a successful indexing operation in rust.
@@ -2209,11 +2220,9 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
                 image_sequence = Some(read_moov(&mut b, None)?);
             }
             BoxType::MediaDataBox => {
-                if b.bytes_left() > 0 {
-                    let file_offset = b.offset();
-                    let data = b.read_into_try_vec()?;
-                    media_storage.push(MediaDataBox { file_offset, data })?;
-                }
+                let file_offset = b.offset();
+                let data = b.read_into_try_vec()?;
+                media_storage.push(DataBox::from_mdat(file_offset, data))?;
             }
             _ => skip_box_content(&mut b)?,
         }
@@ -2292,7 +2301,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
 
         // Generalize the process of connecting items to their data; returns
         // true if the extent is successfully added to the AvifItem
-        let mut find_and_add_to_item = |extent: &Extent, dat: &dyn DataBox| -> Result<bool> {
+        let mut find_and_add_to_item = |extent: &Extent, dat: &DataBox| -> Result<bool> {
             if let Some(extent_slice) = dat.get(extent) {
                 match item {
                     None => {
@@ -2448,6 +2457,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
     Ok(AvifContext {
         strictness,
         media_storage,
+        item_data_box,
         primary_item,
         alpha_item,
         premultiplied_alpha,
@@ -2557,9 +2567,8 @@ fn read_avif_meta<T: Read + Offset>(
                         "There shall be zero or one idat boxes per ISOBMFF (ISO 14496-12:2020) § 8.11.11",
                     ));
                 }
-                item_data_box = Some(ItemDataBox {
-                    data: b.read_into_try_vec()?,
-                });
+                let data = b.read_into_try_vec()?;
+                item_data_box = Some(DataBox::from_idat(data));
             }
             _ => skip_box_content(&mut b)?,
         }
