@@ -3713,7 +3713,7 @@ fn read_auxc<T: Read>(src: &mut BMFFBox<T>) -> Result<AuxiliaryTypeProperty> {
     if let Some(nul_byte_pos) = aux.iter().position(|&b| b == b'\0') {
         let (a, b) = aux.as_slice().split_at(nul_byte_pos);
         aux_type = a.try_into()?;
-        aux_subtype = (&b[1..]).try_into()?;
+        aux_subtype = (b[1..]).try_into()?;
     } else {
         aux_type = aux;
         aux_subtype = TryVec::new();
