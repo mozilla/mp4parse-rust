@@ -639,11 +639,11 @@ impl From<Status> for &str {
             Status::IpmaBadQuantity => {
                 "There shall be at most one ItemPropertyAssociationbox with a given pair of \
                  values of version and flags \
-                 per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1"
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.14.1"
             }
             Status::IpmaBadVersion => {
                 "The ipma version 0 should be used unless 32-bit item_ID values are needed \
-                 per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1"
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.14.1"
             }
             Status::IpmaDuplicateItemId => {
                 "There shall be at most one occurrence of a given item_ID, \
@@ -653,11 +653,11 @@ impl From<Status> for &str {
             Status::IpmaFlagsNonzero => {
                 "Unless there are more than 127 properties in the ItemPropertyContainerBox, \
                  flags should be equal to 0 \
-                 per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1"
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.14.1"
             }
             Status::IpmaIndexZeroNoEssential => {
                 "the essential indicator shall be 0 for property index 0 \
-                 per ISOBMFF (ISO 14496-12:2020 § 8.11.14.3"
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.14.3"
             }
             Status::IpmaTooBig => {
                 "ipma box exceeds maximum size for entry_count"
@@ -3020,7 +3020,7 @@ fn read_iref<T: Read>(src: &mut BMFFBox<T>) -> Result<TryVec<SingleItemTypeRefer
 
 /// Parse an Item Properties Box
 ///
-/// See ISOBMFF (ISO 14496-12:2020 § 8.11.14)
+/// See ISOBMFF (ISO 14496-12:2020) § 8.11.14)
 ///
 /// Note: HEIF (ISO 23008-12:2017) § 9.3.1 also defines the `iprp` box and
 /// related types, but lacks additional requirements specified in 14496-12:2020.
@@ -3281,7 +3281,7 @@ fn read_iprp<T: Read>(
     Ok(iprp)
 }
 
-/// See ISOBMFF (ISO 14496-12:2020 § 8.11.14.1
+/// See ISOBMFF (ISO 14496-12:2020) § 8.11.14.1
 /// Variants with no associated data are recognized but not necessarily supported.
 /// See [`Feature`] to determine support.
 #[derive(Debug)]
@@ -3329,14 +3329,14 @@ struct ItemPropertyAssociationEntry {
 }
 
 /// For storing ItemPropertyAssociation data
-/// See ISOBMFF (ISO 14496-12:2020 § 8.11.14.1
+/// See ISOBMFF (ISO 14496-12:2020) § 8.11.14.1
 #[derive(Debug)]
 struct Association {
     essential: bool,
     property_index: PropertyIndex,
 }
 
-/// See ISOBMFF (ISO 14496-12:2020 § 8.11.14.1
+/// See ISOBMFF (ISO 14496-12:2020) § 8.11.14.1
 ///
 /// The properties themselves are stored in `properties`, but the items they're
 /// associated with are stored in `association_entries`. It's necessary to
@@ -3532,7 +3532,7 @@ const MAX_IPMA_ASSOCIATION_COUNT: U8 = U8::new(u8::MAX);
 /// types implementing the UpperBounded trait. Types are declared explicitly to
 /// show there isn't any accidental inference to primitive types.
 ///
-/// See ISOBMFF (ISO 14496-12:2020 § 8.11.14.1
+/// See ISOBMFF (ISO 14496-12:2020) § 8.11.14.1
 fn calculate_ipma_total_associations(
     version: u8,
     bytes_left: u64,
@@ -3567,7 +3567,7 @@ fn calculate_ipma_total_associations(
 
 /// Parse an ItemPropertyAssociation box
 ///
-/// See ISOBMFF (ISO 14496-12:2020 § 8.11.14.1
+/// See ISOBMFF (ISO 14496-12:2020) § 8.11.14.1
 fn read_ipma<T: Read>(
     src: &mut BMFFBox<T>,
     strictness: ParseStrictness,
@@ -3651,7 +3651,7 @@ fn read_ipma<T: Read>(
 
 /// Parse an ItemPropertyContainerBox
 ///
-/// See ISOBMFF (ISO 14496-12:2020 § 8.11.14.1
+/// See ISOBMFF (ISO 14496-12:2020) § 8.11.14.1
 fn read_ipco<T: Read>(
     src: &mut BMFFBox<T>,
     strictness: ParseStrictness,
@@ -5584,7 +5584,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 #[cfg(feature = "mp4v")]
                 {
                     // Read ES_Descriptor inside an esds box.
-                    // See ISOBMFF (ISO 14496-1:2010 §7.2.6.5)
+                    // See ISOBMFF (ISO 14496-1:2010) § 7.2.6.5
                     let esds = read_esds(&mut b)?;
                     codec_specific =
                         Some(VideoCodecSpecific::ESDSConfig(esds.decoder_specific_data));
