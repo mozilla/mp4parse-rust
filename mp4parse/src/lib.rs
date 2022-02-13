@@ -166,7 +166,6 @@ struct String;
 /// since the [`Error`] type's associated data is part of the FFI.
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Debug)]
-// TODO: alphabetize
 pub enum Status {
     Ok = 0,
     BadArg = 1,
@@ -175,64 +174,20 @@ pub enum Status {
     Eof = 4,
     Io = 5,
     Oom = 6,
-    MissingAvifOrAvisBrand,
-    MissingMif1Brand,
-    FtypNotFirst,
-    FtypBadSize,
-    HdlrNotFirst,
-    HdlrUnsupportedVersion,
-    HdlrPredefinedNonzero,
-    HdlrReservedNonzero,
-    HdlrNameNoNul,
-    HdlrNameMultipleNul,
-    HdlrNameNotUtf8,
-    HdrlBadQuantity,
-    HdlrTypeNotPict,
-    NoImage,
-    MoovBadQuantity,
-    MoovMissing,
-    LselNoEssential,
-    A1opNoEssential,
     A1lxEssential,
-    TxformNoEssential,
-    TxformOrder,
-    TxformBeforeIspe,
-    PitmMissing,
-    PitmBadQuantity,
-    ImageItemType,
-    ItemTypeMissing,
-    ConstructionMethod,
-    IlocNotFound,
-    IlocBadConstructionMethod,
-    IlocBadExtent,
-    IlocBadExtentCount,
-    IlocBadFieldSize,
-    IlocBadQuantity,
-    IlocBadSize,
-    IlocDuplicateItemId,
-    IlocMissing,
-    IlocOffsetOverflow,
-    IdatMissing,
-    Av1cMissing,
-    PixiMissing,
-    PixiBadChannelCount,
-    IspeMissing,
-    InfeFlagsNonzero,
-    IpmaBadQuantity,
-    IpmaFlagsNonzero,
-    IpmaDuplicateItemId,
-    IpmaBadIndex,
-    IpmaBadVersion,
-    IpmaTooSmall,
-    IpmaTooBig,
-    IpmaBadItemOrder,
-    IpmaIndexZeroNoEssential,
-    AlacFlagsNonzero,
+    A1opNoEssential,
     AlacBadMagicCookieSize,
+    AlacFlagsNonzero,
+    Av1cMissing,
+    BitReaderError,
+    BoxBadSize,
+    BoxBadWideSize,
+    CheckParserStateErr,
     ColrBadQuantity,
-    ColrReservedNonzero,
     ColrBadSize,
     ColrBadType,
+    ColrReservedNonzero,
+    ConstructionMethod,
     CttsBadSize,
     CttsBadVersion,
     DflaBadMetadataBlockSize,
@@ -242,37 +197,81 @@ pub enum Status {
     DflaStreamInfoNotFirst,
     DopsChannelMappingWriteErr,
     DopsOpusHeadWriteErr,
+    ElstBadVersion,
     EsdsBadAudioSampleEntry,
     EsdsBadDescriptor,
-    ElstBadVersion,
     EsdsDecSpecificIntoTagQuantity,
-    IrefRecursion,
-    IrefBadQuantity,
-    BitReaderError,
-    ReadBufErr,
-    CheckParserStateErr,
-    InvalidUtf8,
-    BoxBadSize,
-    BoxBadWideSize,
-    MetaBadQuantity,
-    MultipleAlpha,
-    IinfBadQuantity,
-    IinfBadChild,
-    IprpBadQuantity,
-    IprpBadChild,
-    IprpConflict,
+    FtypBadSize,
+    FtypNotFirst,
+    HdlrNameMultipleNul,
+    HdlrNameNoNul,
+    HdlrNameNotUtf8,
+    HdlrNotFirst,
+    HdlrPredefinedNonzero,
+    HdlrReservedNonzero,
+    HdlrTypeNotPict,
+    HdlrUnsupportedVersion,
+    HdrlBadQuantity,
     IdatBadQuantity,
+    IdatMissing,
+    IinfBadChild,
+    IinfBadQuantity,
+    IlocBadConstructionMethod,
+    IlocBadExtent,
+    IlocBadExtentCount,
+    IlocBadFieldSize,
+    IlocBadQuantity,
+    IlocBadSize,
+    IlocDuplicateItemId,
+    IlocMissing,
+    IlocNotFound,
+    IlocOffsetOverflow,
+    ImageItemType,
+    InfeFlagsNonzero,
+    InvalidUtf8,
     IpcoIndexOverflow,
-    PsshSizeOverflow,
+    IpmaBadIndex,
+    IpmaBadItemOrder,
+    IpmaBadQuantity,
+    IpmaBadVersion,
+    IpmaDuplicateItemId,
+    IpmaFlagsNonzero,
+    IpmaIndexZeroNoEssential,
+    IpmaTooBig,
+    IpmaTooSmall,
+    IprpBadChild,
+    IprpBadQuantity,
+    IprpConflict,
+    IrefBadQuantity,
+    IrefRecursion,
+    IspeMissing,
+    ItemTypeMissing,
+    LselNoEssential,
     MdhdBadTimescale,
     MdhdBadVersion,
     MehdBadVersion,
+    MetaBadQuantity,
+    MissingAvifOrAvisBrand,
+    MissingMif1Brand,
+    MoovBadQuantity,
+    MoovMissing,
+    MultipleAlpha,
     MvhdBadTimescale,
     MvhdBadVersion,
+    NoImage,
+    PitmBadQuantity,
+    PitmMissing,
+    PixiBadChannelCount,
+    PixiMissing,
+    PsshSizeOverflow,
+    ReadBufErr,
     SchiQuantity,
     StsdBadAudioSampleEntry,
     StsdBadVideoSampleEntry,
     TkhdBadVersion,
+    TxformBeforeIspe,
+    TxformNoEssential,
+    TxformOrder,
 }
 
 #[repr(C)]
@@ -435,29 +434,118 @@ impl From<Status> for &str {
             | Status::Oom => {
                 panic!("Status -> Error is only for specific parsing errors")
             }
-            Status::MissingAvifOrAvisBrand => {
-                "The file shall list 'avif' or 'avis' in the compatible_brands field
-                 of the FileTypeBox \
-                 per https://aomediacodec.github.io/av1-avif/#file-constraints"
+            Status::A1lxEssential => {
+                "AV1LayeredImageIndexingProperty (a1lx) shall not be marked as essential \
+                 per https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-description"
             }
-            Status::MissingMif1Brand => {
-                "The FileTypeBox should contain 'mif1' in the compatible_brands list \
-                 per MIAF (ISO 23000-22:2019/Amd. 2:2021) § 7.2.1.2"
+            Status::A1opNoEssential => {
+                "OperatingPointSelectorProperty (a1op) shall be marked as essential \
+                 per https://aomediacodec.github.io/av1-avif/#operating-point-selector-property-description"
+            }
+            Status::AlacBadMagicCookieSize => {
+                "ALACSpecificBox magic cookie is the wrong size"
+            }
+            Status::AlacFlagsNonzero => {
+                "no-zero alac (ALAC) flags"
+            }
+            Status::Av1cMissing => {
+                "One AV1 Item Configuration Property (av1C) is mandatory for an \
+                 image item of type 'av01' \
+                 per AVIF specification § 2.2.1"
+            }
+            Status::BitReaderError => {
+                "Bitwise read failed"
+            }
+            Status::BoxBadSize => {
+                "malformed size"
+            }
+            Status::BoxBadWideSize => {
+                "malformed wide size"
+            }
+            Status::CheckParserStateErr => {
+                "unread box content or bad parser sync"
+            }
+            Status::ColrBadQuantity => {
+                "Each item shall have at most one property association with a
+                 ColourInformationBox (colr) for a given value of colour_type \
+                 per HEIF (ISO/IEC DIS 23008-12) § 6.5.5.1"
+            }
+            Status::ColrBadSize => {
+                "Unexpected size for colr box"
+            }
+            Status::ColrBadType => {
+                "Unsupported colour_type for ColourInformationBox"
+            }
+            Status::ColrReservedNonzero => {
+                "The 7 reserved bits at the end of the ColourInformationBox \
+                 for colour_type == 'nclx' must be 0 \
+                 per ISOBMFF (ISO 14496-12:2020) § 12.1.5.2"
+            }
+            Status::ConstructionMethod => {
+                "construction_method shall be 0 (file) or 1 (idat) per MIAF (ISO 23000-22:2019) § 7.2.1.7"
+            }
+            Status::CttsBadSize => {
+                "insufficient data in 'ctts' box"
+            }
+            Status::CttsBadVersion => {
+                "unsupported version in 'ctts' box"
+            }
+            Status::DflaBadMetadataBlockSize => {
+                "FLACMetadataBlock larger than parent box"
+            }
+            Status::DflaFlagsNonzero => {
+                "no-zero dfLa (FLAC) flags"
+            }
+            Status::DflaMissingMetadata => {
+                "FLACSpecificBox missing metadata"
+            }
+            Status::DflaStreamInfoBadSize => {
+                "FLACSpecificBox STREAMINFO block is the wrong size"
+            }
+            Status::DflaStreamInfoNotFirst => {
+                "FLACSpecificBox must have STREAMINFO metadata first"
+            }
+            Status::DopsChannelMappingWriteErr => {
+                "Couldn't write channel mapping table data."
+            }
+            Status::DopsOpusHeadWriteErr => {
+                "Couldn't write OpusHead tag."
+            }
+            Status::ElstBadVersion => {
+                "unhandled elst version"
+            }
+            Status::EsdsBadAudioSampleEntry => {
+                "malformed audio sample entry"
+            }
+            Status::EsdsBadDescriptor => {
+                "Invalid descriptor."
+            }
+            Status::EsdsDecSpecificIntoTagQuantity => {
+                "There can be only one DecSpecificInfoTag descriptor"
+            }
+            Status::FtypBadSize => {
+                "invalid ftyp size"
             }
             Status::FtypNotFirst => {
                 "The FileTypeBox shall be placed as early as possible in the file \
                  per ISOBMFF (ISO 14496-12:2020) § 4.3.1"
             }
-            Status::FtypBadSize => {
-                "invalid ftyp size"
+            Status::HdlrNameMultipleNul => {
+                "The HandlerBox 'name' field shall have a NUL byte \
+                 only in the final position \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
+            }
+            Status::HdlrNameNoNul => {
+                "The HandlerBox 'name' field shall be null-terminated \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
+            }
+            Status::HdlrNameNotUtf8 => {
+                "The HandlerBox 'name' field shall be valid utf8 \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
             }
             Status::HdlrNotFirst => {
                 "The HandlerBox shall be the first contained box within the MetaBox \
                  per MIAF (ISO 23000-22:2019) § 7.2.1.5"
-            }
-            Status::HdlrUnsupportedVersion => {
-                "The HandlerBox version shall be 0 (zero) \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
             }
             Status::HdlrPredefinedNonzero => {
                 "The HandlerBox 'pre_defined' field shall be 0 \
@@ -467,87 +555,33 @@ impl From<Status> for &str {
                 "The HandlerBox 'reserved' fields shall be 0 \
                  per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
             }
-            Status::HdlrNameNoNul => {
-                "The HandlerBox 'name' field shall be null-terminated \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
+            Status::HdlrTypeNotPict => {
+                "The HandlerBox handler_type must be 'pict' \
+                 per MIAF (ISO 23000-22:2019) § 7.2.1.5"
             }
-            Status::HdlrNameMultipleNul => {
-                "The HandlerBox 'name' field shall have a NUL byte \
-                 only in the final position \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
-            }
-            Status::HdlrNameNotUtf8 => {
-                "The HandlerBox 'name' field shall be valid utf8 \
+            Status::HdlrUnsupportedVersion => {
+                "The HandlerBox version shall be 0 (zero) \
                  per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
             }
             Status::HdrlBadQuantity => {
                 "There shall be exactly one hdlr box \
                  per ISOBMFF (ISO 14496-12:2020) § 8.4.3.1"
             }
-            Status::HdlrTypeNotPict => {
-                "The HandlerBox handler_type must be 'pict' \
-                 per MIAF (ISO 23000-22:2019) § 7.2.1.5"
+            Status::IdatBadQuantity => {
+                "There shall be zero or one idat boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.11"
             }
-            Status::NoImage => "No primary image or image sequence found",
-            Status::MoovMissing => {
-                "No moov box found; \
-                 files with avis or msf1 brands shall contain exactly one moov box \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.2.1.1"
+            Status::IdatMissing => {
+                "ItemLocationBox (iloc) construction_method indicates 1 (idat), \
+                 but no idat box is present."
             }
-            Status::MoovBadQuantity => {
-                "Multiple moov boxes found; \
-                 files with avis or msf1 brands shall contain exactly one moov box \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.2.1.1"
+            Status::IinfBadChild => {
+                "iinf box shall contain only infe boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.6.2"
             }
-            Status::LselNoEssential => {
-                "LayerSelectorProperty (lsel) shall be marked as essential \
-                 per HEIF (ISO/IEC 23008-12:2017) § 6.5.11.1"
-            }
-            Status::A1opNoEssential => {
-                "OperatingPointSelectorProperty (a1op) shall be marked as essential \
-                 per https://aomediacodec.github.io/av1-avif/#operating-point-selector-property-description"
-            }
-            Status::A1lxEssential => {
-                "AV1LayeredImageIndexingProperty (a1lx) shall not be marked as essential \
-                 per https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-description"
-            }
-            Status::TxformNoEssential => {
-                "All transformative properties associated with coded and \
-                 derived images required or conditionally required by this \
-                 document shall be marked as essential \
-                 per MIAF (ISO 23000-22:2019) § 7.3.9"
-            }
-            Status::TxformOrder => {
-                "These properties, if used, shall be indicated to be applied \
-                 in the following order: clean aperture first, then rotation, \
-                 then mirror. \
-                 per MIAF (ISO/IEC 23000-22:2019) § 7.3.6.7"
-            }
-            Status::TxformBeforeIspe => {
-                "Every image item shall be associated with one property of \
-                 type ImageSpatialExtentsProperty (ispe), prior to the \
-                 association of all transformative properties. \
-                 per HEIF (ISO/IEC 23008-12:2017) § 6.5.3.1"
-            }
-            Status::PitmMissing => {
-                "Missing required PrimaryItemBox (pitm), required \
-                 per HEIF (ISO/IEC 23008-12:2017) § 10.2.1"
-            }
-            Status::PitmBadQuantity => {
-                "There shall be zero or one pitm boxes \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.11.4.1"
-            }
-            Status::ImageItemType => {
-                "Image item type is neither 'av01' nor 'grid'"
-            }
-            Status::ItemTypeMissing => {
-                "No ItemInfoEntry for item_ID"
-            }
-            Status::ConstructionMethod => {
-                "construction_method shall be 0 (file) or 1 (idat) per MIAF (ISO 23000-22:2019) § 7.2.1.7"
-            }
-            Status::IlocNotFound => {
-                "ItemLocationBox (iloc) contains an extent not present in any mdat or idat box"
+            Status::IinfBadQuantity => {
+                "There shall be zero or one iinf boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.6.1"
             }
             Status::IlocBadConstructionMethod => {
                 "construction_method is taken from the set 0, 1 or 2 \
@@ -577,42 +611,38 @@ impl From<Status> for &str {
             Status::IlocMissing => {
                 "iloc missing"
             }
+            Status::IlocNotFound => {
+                "ItemLocationBox (iloc) contains an extent not present in any mdat or idat box"
+            }
             Status::IlocOffsetOverflow => {
                 "offset calculation overflow"
             }
-            Status::IdatMissing => {
-                "ItemLocationBox (iloc) construction_method indicates 1 (idat), \
-                 but no idat box is present."
-            }
-            Status::Av1cMissing => {
-                "One AV1 Item Configuration Property (av1C) is mandatory for an \
-                 image item of type 'av01' \
-                 per AVIF specification § 2.2.1"
-            }
-            Status::PixiMissing => {
-                "The pixel information property shall be associated with every image \
-                 that is displayable (not hidden) \
-                 per MIAF (ISO/IEC 23000-22:2019) specification § 7.3.6.6"
-            }
-            Status::PixiBadChannelCount => {
-                "invalid num_channels"
-            }
-            Status::IspeMissing => {
-                "Missing 'ispe' property for image item, required \
-                 per HEIF (ISO/IEC 23008-12:2017) § 6.5.3.1"
+            Status::ImageItemType => {
+                "Image item type is neither 'av01' nor 'grid'"
             }
             Status::InfeFlagsNonzero => {
                 "'infe' flags field shall be 0 \
                  per ISOBMFF (ISO 14496-12:2020) § 8.11.6.2"
+            }
+            Status::InvalidUtf8 => {
+                "invalid utf8"
+            }
+            Status::IpcoIndexOverflow => {
+                "ipco index overflow"
+            }
+            Status::IpmaBadIndex => {
+                "Invalid property index in ipma"
+            }
+            Status::IpmaBadItemOrder => {
+                "Each ItemPropertyAssociation box shall be ordered by increasing item_ID"
             }
             Status::IpmaBadQuantity => {
                 "There shall be at most one ItemPropertyAssociationbox with a given pair of \
                  values of version and flags \
                  per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1"
             }
-            Status::IpmaFlagsNonzero => {
-                "Unless there are more than 127 properties in the ItemPropertyContainerBox, \
-                 flags should be equal to 0 \
+            Status::IpmaBadVersion => {
+                "The ipma version 0 should be used unless 32-bit item_ID values are needed \
                  per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1"
             }
             Status::IpmaDuplicateItemId => {
@@ -620,146 +650,48 @@ impl From<Status> for &str {
                  in the set of ItemPropertyAssociationBox boxes \
                  per ISOBMFF (ISO 14496-12:2020) § 8.11.14.1"
             }
-            Status::IpmaBadIndex => {
-                "Invalid property index in ipma"
-            }
-            Status::IpmaBadVersion => {
-                "The ipma version 0 should be used unless 32-bit item_ID values are needed \
+            Status::IpmaFlagsNonzero => {
+                "Unless there are more than 127 properties in the ItemPropertyContainerBox, \
+                 flags should be equal to 0 \
                  per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1"
-            }
-            Status::IpmaTooSmall => {
-                "ipma box below minimum size for entry_count"
-            }
-            Status::IpmaTooBig => {
-                "ipma box exceeds maximum size for entry_count"
-            }
-            Status::IpmaBadItemOrder => {
-                "Each ItemPropertyAssociation box shall be ordered by increasing item_ID"
             }
             Status::IpmaIndexZeroNoEssential => {
                 "the essential indicator shall be 0 for property index 0 \
                  per ISOBMFF (ISO 14496-12:2020 § 8.11.14.3"
             }
-            Status::AlacBadMagicCookieSize => {
-                "ALACSpecificBox magic cookie is the wrong size"
+            Status::IpmaTooBig => {
+                "ipma box exceeds maximum size for entry_count"
             }
-            Status::AlacFlagsNonzero => {
-                "no-zero alac (ALAC) flags"
+            Status::IpmaTooSmall => {
+                "ipma box below minimum size for entry_count"
             }
-            Status::ColrBadQuantity => {
-                "Each item shall have at most one property association with a
-                 ColourInformationBox (colr) for a given value of colour_type \
-                 per HEIF (ISO/IEC DIS 23008-12) § 6.5.5.1"
-            }
-            Status::ColrReservedNonzero => {
-                "The 7 reserved bits at the end of the ColourInformationBox \
-                 for colour_type == 'nclx' must be 0 \
-                 per ISOBMFF (ISO 14496-12:2020) § 12.1.5.2"
-            }
-            Status::ColrBadSize => {
-                "Unexpected size for colr box"
-            }
-            Status::ColrBadType => {
-                "Unsupported colour_type for ColourInformationBox"
-            }
-            Status::CttsBadSize => {
-                "insufficient data in 'ctts' box"
-            }
-            Status::CttsBadVersion => {
-                "unsupported version in 'ctts' box"
-            }
-            Status::DflaBadMetadataBlockSize => {
-                "FLACMetadataBlock larger than parent box"
-            }
-            Status::DflaFlagsNonzero => {
-                "no-zero dfLa (FLAC) flags"
-            }
-            Status::DflaMissingMetadata => {
-                "FLACSpecificBox missing metadata"
-            }
-            Status::DflaStreamInfoBadSize => {
-                "FLACSpecificBox STREAMINFO block is the wrong size"
-            }
-            Status::DflaStreamInfoNotFirst => {
-                "FLACSpecificBox must have STREAMINFO metadata first"
-            }
-            Status::DopsChannelMappingWriteErr => {
-                "Couldn't write channel mapping table data."
-            }
-            Status::DopsOpusHeadWriteErr => {
-                "Couldn't write OpusHead tag."
-            }
-            Status::EsdsBadAudioSampleEntry => {
-                "malformed audio sample entry"
-            }
-            Status::EsdsBadDescriptor => {
-                "Invalid descriptor."
-            }
-            Status::ElstBadVersion => {
-                "unhandled elst version"
-            }
-            Status::EsdsDecSpecificIntoTagQuantity => {
-                "There can be only one DecSpecificInfoTag descriptor"
-            }
-            Status::IrefRecursion => {
-                "from_item_id and to_item_id must be different"
-            }
-            Status::IrefBadQuantity => {
-                "There shall be zero or one iref boxes \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.11.12.1"
-            }
-            Status::BitReaderError => {
-                "Bitwise read failed"
-            }
-            Status::ReadBufErr => {
-                "failed buffer read"
-            }
-            Status::CheckParserStateErr => {
-                "unread box content or bad parser sync"
-            }
-            Status::InvalidUtf8 => {
-                "invalid utf8"
-            }
-            Status::BoxBadSize => {
-                "malformed size"
-            }
-            Status::BoxBadWideSize => {
-                "malformed wide size"
-            }
-            Status::MetaBadQuantity => {
-                "There should be zero or one meta boxes \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.11.1.1"
-            }
-            Status::MultipleAlpha => {
-                "multiple alpha planes"
-            }
-            Status::IinfBadQuantity => {
-                "There shall be zero or one iinf boxes \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.11.6.1"
-            }
-            Status::IinfBadChild => {
-                "iinf box shall contain only infe boxes \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.11.6.2"
+            Status::IprpBadChild => {
+                "unexpected iprp child"
             }
             Status::IprpBadQuantity => {
                 "There shall be zero or one iprp boxes \
                  per ISOBMFF (ISO 14496-12:2020) § 8.11.14.1"
             }
-            Status::IprpBadChild => {
-                "unexpected iprp child"
-            }
             Status::IprpConflict => {
                 "conflicting item property values"
             }
-            Status::IdatBadQuantity => {
-                "There shall be zero or one idat boxes \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.11.11"
+            Status::IrefBadQuantity => {
+                "There shall be zero or one iref boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.12.1"
             }
-            Status::IpcoIndexOverflow => {
-                "ipco index overflow"
+            Status::IrefRecursion => {
+                "from_item_id and to_item_id must be different"
             }
-            Status::PsshSizeOverflow => {
-                "overflow in read_pssh"
+            Status::IspeMissing => {
+                "Missing 'ispe' property for image item, required \
+                 per HEIF (ISO/IEC 23008-12:2017) § 6.5.3.1"
+            }
+            Status::ItemTypeMissing => {
+                "No ItemInfoEntry for item_ID"
+            }
+            Status::LselNoEssential => {
+                "LayerSelectorProperty (lsel) shall be marked as essential \
+                 per HEIF (ISO/IEC 23008-12:2017) § 6.5.11.1"
             }
             Status::MdhdBadTimescale => {
                 "zero timescale in mdhd"
@@ -770,11 +702,60 @@ impl From<Status> for &str {
             Status::MehdBadVersion => {
                 "unhandled mehd version"
             }
+            Status::MetaBadQuantity => {
+                "There should be zero or one meta boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.1.1"
+            }
+            Status::MissingAvifOrAvisBrand => {
+                "The file shall list 'avif' or 'avis' in the compatible_brands field
+                 of the FileTypeBox \
+                 per https://aomediacodec.github.io/av1-avif/#file-constraints"
+            }
+            Status::MissingMif1Brand => {
+                "The FileTypeBox should contain 'mif1' in the compatible_brands list \
+                 per MIAF (ISO 23000-22:2019/Amd. 2:2021) § 7.2.1.2"
+            }
+            Status::MoovBadQuantity => {
+                "Multiple moov boxes found; \
+                 files with avis or msf1 brands shall contain exactly one moov box \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.2.1.1"
+            }
+            Status::MoovMissing => {
+                "No moov box found; \
+                 files with avis or msf1 brands shall contain exactly one moov box \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.2.1.1"
+            }
+            Status::MultipleAlpha => {
+                "multiple alpha planes"
+            }
             Status::MvhdBadTimescale => {
                 "zero timescale in mvhd"
             }
             Status::MvhdBadVersion => {
                 "unhandled mvhd version"
+            }
+            Status::NoImage => "No primary image or image sequence found",
+            Status::PitmBadQuantity => {
+                "There shall be zero or one pitm boxes \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.4.1"
+            }
+            Status::PitmMissing => {
+                "Missing required PrimaryItemBox (pitm), required \
+                 per HEIF (ISO/IEC 23008-12:2017) § 10.2.1"
+            }
+            Status::PixiBadChannelCount => {
+                "invalid num_channels"
+            }
+            Status::PixiMissing => {
+                "The pixel information property shall be associated with every image \
+                 that is displayable (not hidden) \
+                 per MIAF (ISO/IEC 23000-22:2019) specification § 7.3.6.6"
+            }
+            Status::PsshSizeOverflow => {
+                "overflow in read_pssh"
+            }
+            Status::ReadBufErr => {
+                "failed buffer read"
             }
             Status::SchiQuantity => {
                 "tenc box should be only one at most in sinf box"
@@ -787,6 +768,24 @@ impl From<Status> for &str {
             }
             Status::TkhdBadVersion => {
                 "unhandled tkhd version"
+            }
+            Status::TxformBeforeIspe => {
+                "Every image item shall be associated with one property of \
+                 type ImageSpatialExtentsProperty (ispe), prior to the \
+                 association of all transformative properties. \
+                 per HEIF (ISO/IEC 23008-12:2017) § 6.5.3.1"
+            }
+            Status::TxformNoEssential => {
+                "All transformative properties associated with coded and \
+                 derived images required or conditionally required by this \
+                 document shall be marked as essential \
+                 per MIAF (ISO 23000-22:2019) § 7.3.9"
+            }
+            Status::TxformOrder => {
+                "These properties, if used, shall be indicated to be applied \
+                 in the following order: clean aperture first, then rotation, \
+                 then mirror. \
+                 per MIAF (ISO/IEC 23000-22:2019) § 7.3.6.7"
             }
         }
     }
