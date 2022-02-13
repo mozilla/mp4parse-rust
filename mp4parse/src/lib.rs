@@ -2685,7 +2685,10 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
     // Lacking a brand that requires them, it's fine for moov boxes to exist in
     // BMFF files; they're simply ignored
     if expected_image_type.has_sequence() && image_sequence.is_none() {
-        fail_with_status_if(strictness != ParseStrictness::Permissive, Status::MoovMissing)?;
+        fail_with_status_if(
+            strictness != ParseStrictness::Permissive,
+            Status::MoovMissing,
+        )?;
     }
 
     // Returns true iff `id` is `Some` and there is no corresponding property for it
@@ -2710,7 +2713,10 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         match item_type.map(u32::to_be_bytes).as_ref() {
             Some(b"av01") => {
                 if missing_property_for(item_id, BoxType::AV1CodecConfigurationBox) {
-                    fail_with_status_if(strictness != ParseStrictness::Permissive, Status::Av1cMissing)?;
+                    fail_with_status_if(
+                        strictness != ParseStrictness::Permissive,
+                        Status::Av1cMissing,
+                    )?;
                 }
 
                 if missing_property_for(item_id, BoxType::PixelInformationBox) {
@@ -2729,7 +2735,10 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
                 }
 
                 if missing_property_for(item_id, BoxType::ImageSpatialExtentsProperty) {
-                    fail_with_status_if(strictness != ParseStrictness::Permissive, Status::IspeMissing)?;
+                    fail_with_status_if(
+                        strictness != ParseStrictness::Permissive,
+                        Status::IspeMissing,
+                    )?;
                 }
             }
             Some(b"grid") => {
