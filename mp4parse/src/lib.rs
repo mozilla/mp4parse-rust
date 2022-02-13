@@ -187,22 +187,22 @@ pub enum Status {
     HdlrNameMultipleNul,
     HdlrNameNotUtf8,
     HdrlBadQuantity,
-    TypeNotPict,
+    HdlrTypeNotPict,
     NoImage,
-    MultipleMoov,
-    NoMoov,
+    MoovBadQuantity,
+    MoovMissing,
     LselNoEssential,
     A1opNoEssential,
     A1lxEssential,
     TxformNoEssential,
     TxformOrder,
     TxformBeforeIspe,
-    NoPrimaryItem,
+    PitmMissing,
     PitmBadQuantity,
     ImageItemType,
     ItemTypeMissing,
     ConstructionMethod,
-    ItemLocNotFound,
+    IlocNotFound,
     IlocBadConstructionMethod,
     IlocBadExtent,
     IlocBadExtentCount,
@@ -212,13 +212,13 @@ pub enum Status {
     IlocDuplicateItemId,
     IlocMissing,
     IlocOffsetOverflow,
-    NoItemDataBox,
-    NoAv1c,
-    NoPixi,
+    IdatMissing,
+    Av1cMissing,
+    PixiMissing,
     PixiBadChannelCount,
-    NoIspe,
+    IspeMissing,
     InfeFlagsNonzero,
-    MultipleIpma,
+    IpmaBadQuantity,
     IpmaFlagsNonzero,
     IpmaDuplicateItemId,
     IpmaBadIndex,
@@ -226,10 +226,10 @@ pub enum Status {
     IpmaTooSmall,
     IpmaTooBig,
     IpmaBadItemOrder,
-    PropZeroEssential,
+    IpmaIndexZeroNoEssential,
     AlacFlagsNonzero,
     AlacBadMagicCookieSize,
-    MultipleColr,
+    ColrBadQuantity,
     ColrReservedNonzero,
     ColrBadSize,
     ColrBadType,
@@ -416,9 +416,9 @@ impl From<Status> for Error {
             | Status::Eof
             | Status::Io
             | Status::Oom => {
-                panic!("Status -> Error is only for Status:InvalidDataDetail errors")
+                panic!("Status -> Error is only for Status:InvalidData errors")
             }
-            _ => Self::InvalidDataDetail(parse_status),
+            _ => Self::InvalidData(parse_status),
         }
     }
 }
@@ -484,17 +484,17 @@ impl From<Status> for &str {
                 "There shall be exactly one hdlr box \
                  per ISOBMFF (ISO 14496-12:2020) § 8.4.3.1"
             }
-            Status::TypeNotPict => {
+            Status::HdlrTypeNotPict => {
                 "The HandlerBox handler_type must be 'pict' \
                  per MIAF (ISO 23000-22:2019) § 7.2.1.5"
             }
             Status::NoImage => "No primary image or image sequence found",
-            Status::NoMoov => {
+            Status::MoovMissing => {
                 "No moov box found; \
                  files with avis or msf1 brands shall contain exactly one moov box \
                  per ISOBMFF (ISO 14496-12:2020) § 8.2.1.1"
             }
-            Status::MultipleMoov => {
+            Status::MoovBadQuantity => {
                 "Multiple moov boxes found; \
                  files with avis or msf1 brands shall contain exactly one moov box \
                  per ISOBMFF (ISO 14496-12:2020) § 8.2.1.1"
@@ -529,8 +529,7 @@ impl From<Status> for &str {
                  association of all transformative properties. \
                  per HEIF (ISO/IEC 23008-12:2017) § 6.5.3.1"
             }
-            // TODO: Rename PitmMissing or similar?
-            Status::NoPrimaryItem => {
+            Status::PitmMissing => {
                 "Missing required PrimaryItemBox (pitm), required \
                  per HEIF (ISO/IEC 23008-12:2017) § 10.2.1"
             }
@@ -547,8 +546,7 @@ impl From<Status> for &str {
             Status::ConstructionMethod => {
                 "construction_method shall be 0 (file) or 1 (idat) per MIAF (ISO 23000-22:2019) § 7.2.1.7"
             }
-            // TODO: rename IlocNotFound
-            Status::ItemLocNotFound => {
+            Status::IlocNotFound => {
                 "ItemLocationBox (iloc) contains an extent not present in any mdat or idat box"
             }
             Status::IlocBadConstructionMethod => {
@@ -582,17 +580,16 @@ impl From<Status> for &str {
             Status::IlocOffsetOverflow => {
                 "offset calculation overflow"
             }
-            Status::NoItemDataBox => {
+            Status::IdatMissing => {
                 "ItemLocationBox (iloc) construction_method indicates 1 (idat), \
                  but no idat box is present."
             }
-            Status::NoAv1c => {
+            Status::Av1cMissing => {
                 "One AV1 Item Configuration Property (av1C) is mandatory for an \
                  image item of type 'av01' \
                  per AVIF specification § 2.2.1"
             }
-            // TODO: Rename PixiMissing
-            Status::NoPixi => {
+            Status::PixiMissing => {
                 "The pixel information property shall be associated with every image \
                  that is displayable (not hidden) \
                  per MIAF (ISO/IEC 23000-22:2019) specification § 7.3.6.6"
@@ -600,7 +597,7 @@ impl From<Status> for &str {
             Status::PixiBadChannelCount => {
                 "invalid num_channels"
             }
-            Status::NoIspe => {
+            Status::IspeMissing => {
                 "Missing 'ispe' property for image item, required \
                  per HEIF (ISO/IEC 23008-12:2017) § 6.5.3.1"
             }
@@ -608,7 +605,7 @@ impl From<Status> for &str {
                 "'infe' flags field shall be 0 \
                  per ISOBMFF (ISO 14496-12:2020) § 8.11.6.2"
             }
-            Status::MultipleIpma => {
+            Status::IpmaBadQuantity => {
                 "There shall be at most one ItemPropertyAssociationbox with a given pair of \
                  values of version and flags \
                  per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1"
@@ -639,7 +636,7 @@ impl From<Status> for &str {
             Status::IpmaBadItemOrder => {
                 "Each ItemPropertyAssociation box shall be ordered by increasing item_ID"
             }
-            Status::PropZeroEssential => {
+            Status::IpmaIndexZeroNoEssential => {
                 "the essential indicator shall be 0 for property index 0 \
                  per ISOBMFF (ISO 14496-12:2020 § 8.11.14.3"
             }
@@ -649,8 +646,7 @@ impl From<Status> for &str {
             Status::AlacFlagsNonzero => {
                 "no-zero alac (ALAC) flags"
             }
-            // TODO: Rename ColrXXX
-            Status::MultipleColr => {
+            Status::ColrBadQuantity => {
                 "Each item shall have at most one property association with a
                  ColourInformationBox (colr) for a given value of colour_type \
                  per HEIF (ISO/IEC DIS 23008-12) § 6.5.5.1"
@@ -775,8 +771,7 @@ impl From<Status> for &str {
                 "unhandled mehd version"
             }
             Status::MvhdBadTimescale => {
-                // TODO: fix mdhd -> mvhd
-                "zero timescale in mdhd"
+                "zero timescale in mvhd"
             }
             Status::MvhdBadVersion => {
                 "unhandled mvhd version"
@@ -801,7 +796,7 @@ impl From<Error> for Status {
     fn from(error: Error) -> Self {
         match error {
             Error::Unsupported(_) => Self::Unsupported,
-            Error::InvalidDataDetail(parse_status) => parse_status,
+            Error::InvalidData(parse_status) => parse_status,
             Error::UnexpectedEOF => Self::Eof,
             Error::Io(_) => {
                 // Getting std::io::ErrorKind::UnexpectedEof is normal
@@ -809,7 +804,7 @@ impl From<Error> for Status {
                 // those to our Error::UnexpectedEOF variant.
                 Self::Io
             }
-            Error::NoMoov => Self::NoMoov,
+            Error::MoovMissing => Self::MoovMissing,
             Error::OutOfMemory => Self::Oom,
         }
     }
@@ -854,8 +849,7 @@ impl From<std::io::Error> for Status {
 pub enum Error {
     /// Parse error caused by corrupt or malformed data.
     /// See the helper [`From<Status> for Error`](enum.Error.html#impl-From<Status>)
-    // TODO: rename to InvalidData
-    InvalidDataDetail(Status),
+    InvalidData(Status),
     /// Parse error caused by limited parser support rather than invalid data.
     Unsupported(&'static str),
     /// Reflect `std::io::ErrorKind::UnexpectedEof` for short data.
@@ -863,7 +857,7 @@ pub enum Error {
     /// Propagate underlying errors from `std::io`.
     Io(std::io::Error),
     /// read_mp4 terminated without detecting a moov box.
-    NoMoov,
+    MoovMissing,
     /// Out of memory
     OutOfMemory,
 }
@@ -1634,7 +1628,7 @@ impl AvifContext {
                 None => {
                     fail_with_status_if(
                         self.strictness != ParseStrictness::Permissive,
-                        Status::NoIspe,
+                        Status::IspeMissing,
                     )?;
                     Ok(std::ptr::null())
                 }
@@ -2526,7 +2520,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
             }
             BoxType::MovieBox if expected_image_type.has_sequence() => {
                 if image_sequence.is_some() {
-                    return Status::MultipleMoov.into();
+                    return Status::MoovBadQuantity.into();
                 }
                 image_sequence = Some(read_moov(&mut b, None)?);
             }
@@ -2652,7 +2646,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
                     }
 
                     if !found {
-                        return Status::ItemLocNotFound.into();
+                        return Status::IlocNotFound.into();
                     }
                 }
             }
@@ -2661,11 +2655,11 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
                     for extent in loc.extents {
                         let found = find_and_add_to_item(&extent, idat)?;
                         if !found {
-                            return Status::ItemLocNotFound.into();
+                            return Status::IlocNotFound.into();
                         }
                     }
                 } else {
-                    return Status::NoItemDataBox.into();
+                    return Status::IdatMissing.into();
                 }
             }
             ConstructionMethod::Item => {
@@ -2685,14 +2679,14 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
     if expected_image_type.has_primary() && primary_item_id.is_none() {
         fail_with_status_if(
             strictness != ParseStrictness::Permissive,
-            Status::NoPrimaryItem,
+            Status::PitmMissing,
         )?;
     }
 
     // Lacking a brand that requires them, it's fine for moov boxes to exist in
     // BMFF files; they're simply ignored
     if expected_image_type.has_sequence() && image_sequence.is_none() {
-        fail_with_status_if(strictness != ParseStrictness::Permissive, Status::NoMoov)?;
+        fail_with_status_if(strictness != ParseStrictness::Permissive, Status::MoovMissing)?;
     }
 
     // Returns true iff `id` is `Some` and there is no corresponding property for it
@@ -2717,7 +2711,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         match item_type.map(u32::to_be_bytes).as_ref() {
             Some(b"av01") => {
                 if missing_property_for(item_id, BoxType::AV1CodecConfigurationBox) {
-                    fail_with_status_if(strictness != ParseStrictness::Permissive, Status::NoAv1c)?;
+                    fail_with_status_if(strictness != ParseStrictness::Permissive, Status::Av1cMissing)?;
                 }
 
                 if missing_property_for(item_id, BoxType::PixelInformationBox) {
@@ -2731,12 +2725,12 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
                         } else {
                             strictness != ParseStrictness::Permissive
                         },
-                        Status::NoPixi,
+                        Status::PixiMissing,
                     )?;
                 }
 
                 if missing_property_for(item_id, BoxType::ImageSpatialExtentsProperty) {
-                    fail_with_status_if(strictness != ParseStrictness::Permissive, Status::NoIspe)?;
+                    fail_with_status_if(strictness != ParseStrictness::Permissive, Status::IspeMissing)?;
                 }
             }
             Some(b"grid") => {
@@ -2822,7 +2816,7 @@ fn read_avif_meta<T: Read + Offset>(
                 if handler_type != b"pict" {
                     fail_with_status_if(
                         strictness != ParseStrictness::Permissive,
-                        Status::TypeNotPict,
+                        Status::HdlrTypeNotPict,
                     )?;
                 }
                 read_handler_box = true;
@@ -3065,7 +3059,7 @@ fn read_iprp<T: Read>(
         if ipma_version_and_flag_values_seen.contains(&(version, flags)) {
             fail_with_status_if(
                 strictness != ParseStrictness::Permissive,
-                Status::MultipleIpma,
+                Status::IpmaBadQuantity,
             )?;
         }
         if flags != 0 && properties.len() <= 127 {
@@ -3113,7 +3107,7 @@ fn read_iprp<T: Read>(
                     if a.essential {
                         fail_with_status_if(
                             strictness != ParseStrictness::Permissive,
-                            Status::PropZeroEssential,
+                            Status::IpmaIndexZeroNoEssential,
                         )?;
                     }
                     continue;
@@ -3184,7 +3178,7 @@ fn read_iprp<T: Read>(
                                 );
                                 fail_with_status_if(
                                     strictness != ParseStrictness::Permissive,
-                                    Status::MultipleColr,
+                                    Status::ColrBadQuantity,
                                 )?;
                             } else {
                                 colour_type_indexes.insert(colour_type, a.property_index)?;
@@ -4178,7 +4172,7 @@ pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
     // XXX(kinetik): This isn't perfect, as a "moov" with no contents is
     // treated as okay but we haven't found anything useful.  Needs more
     // thought for clearer behaviour here.
-    context.ok_or(Error::NoMoov)
+    context.ok_or(Error::MoovMissing)
 }
 
 /// Parse a Movie Header Box

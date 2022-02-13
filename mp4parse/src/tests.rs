@@ -121,7 +121,7 @@ fn read_box_header_short_unknown_size() {
 fn read_box_header_short_invalid_size() {
     let mut stream = make_box(BoxSize::UncheckedShort(2), b"test", |s| s);
     match super::read_box_header(&mut stream) {
-        Err(Error::InvalidDataDetail(s)) => assert_eq!(s, Status::BoxBadSize),
+        Err(Error::InvalidData(s)) => assert_eq!(s, Status::BoxBadSize),
         _ => panic!("unexpected result reading box with invalid size"),
     };
 }
@@ -130,7 +130,7 @@ fn read_box_header_short_invalid_size() {
 fn read_box_header_long_invalid_size() {
     let mut stream = make_box(BoxSize::UncheckedLong(2), b"test", |s| s);
     match super::read_box_header(&mut stream) {
-        Err(Error::InvalidDataDetail(s)) => assert_eq!(s, Status::BoxBadWideSize),
+        Err(Error::InvalidData(s)) => assert_eq!(s, Status::BoxBadWideSize),
         _ => panic!("unexpected result reading box with invalid size"),
     };
 }
@@ -1256,7 +1256,7 @@ fn read_esds_invalid_descriptor() {
     let mut stream = iter.next_box().unwrap().unwrap();
 
     match super::read_esds(&mut stream) {
-        Err(Error::InvalidDataDetail(s)) => assert_eq!(s, Status::EsdsBadDescriptor),
+        Err(Error::InvalidData(s)) => assert_eq!(s, Status::EsdsBadDescriptor),
         _ => panic!("unexpected result with invalid descriptor"),
     }
 }

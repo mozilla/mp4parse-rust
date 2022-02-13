@@ -1011,7 +1011,7 @@ fn public_avif_ipma_bad_flags() {
 fn public_avif_ipma_duplicate_version_and_flags() {
     assert_avif_shall(
         IMAGE_AVIF_IPMA_DUPLICATE_VERSION_AND_FLAGS,
-        Status::MultipleIpma,
+        Status::IpmaBadQuantity,
     );
 }
 
@@ -1041,7 +1041,7 @@ fn public_avif_hdlr_first_in_meta() {
 
 #[test]
 fn public_avif_hdlr_is_pict() {
-    assert_avif_shall(IMAGE_AVIF_HDLR_NOT_PICT, Status::TypeNotPict);
+    assert_avif_shall(IMAGE_AVIF_HDLR_NOT_PICT, Status::HdlrTypeNotPict);
 }
 
 #[test]
@@ -1070,7 +1070,7 @@ fn public_avif_no_mif1() {
 
 #[test]
 fn public_avif_no_pitm() {
-    assert_avif_shall(IMAGE_AVIF_NO_PITM, Status::NoPrimaryItem);
+    assert_avif_shall(IMAGE_AVIF_NO_PITM, Status::PitmMissing);
 }
 
 #[test]
@@ -1081,20 +1081,20 @@ fn public_avif_pixi_present_for_displayable_images() {
         assert_avif_shall
     };
 
-    pixi_test(IMAGE_AVIF_NO_PIXI, Status::NoPixi);
-    pixi_test(IMAGE_AVIF_NO_ALPHA_PIXI, Status::NoPixi);
+    pixi_test(IMAGE_AVIF_NO_PIXI, Status::PixiMissing);
+    pixi_test(IMAGE_AVIF_NO_ALPHA_PIXI, Status::PixiMissing);
 }
 
 #[test]
 fn public_avif_av1c_present_for_av01() {
-    assert_avif_shall(IMAGE_AVIF_NO_AV1C, Status::NoAv1c);
-    assert_avif_shall(IMAGE_AVIF_NO_ALPHA_AV1C, Status::NoAv1c);
+    assert_avif_shall(IMAGE_AVIF_NO_AV1C, Status::Av1cMissing);
+    assert_avif_shall(IMAGE_AVIF_NO_ALPHA_AV1C, Status::Av1cMissing);
 }
 
 #[test]
 fn public_avif_ispe_present() {
-    assert_avif_shall(IMAGE_AVIF_NO_ISPE, Status::NoIspe);
-    assert_avif_shall(IMAGE_AVIF_NO_ALPHA_ISPE, Status::NoIspe);
+    assert_avif_shall(IMAGE_AVIF_NO_ISPE, Status::IspeMissing);
+    assert_avif_shall(IMAGE_AVIF_NO_ALPHA_ISPE, Status::IspeMissing);
 }
 
 #[test]
@@ -1224,7 +1224,7 @@ fn public_avis_major_with_pitm_and_alpha() {
 
 #[test]
 fn public_avif_avis_major_no_moov() {
-    assert_avif_shall(AVIF_AVIS_MAJOR_NO_MOOV, Status::NoMoov);
+    assert_avif_shall(AVIF_AVIS_MAJOR_NO_MOOV, Status::MoovMissing);
 }
 
 #[test]
