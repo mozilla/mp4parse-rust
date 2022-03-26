@@ -4,7 +4,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 use mp4parse as mp4;
 
-use crate::mp4::{Error, ParseStrictness, Status};
+use crate::mp4::{ParseStrictness, Status};
 use std::convert::TryInto;
 use std::fs::File;
 use std::io::{Cursor, Read, Seek, SeekFrom};
@@ -867,7 +867,7 @@ fn public_mp4_bug_1185230() {
 fn public_mp4_ctts_overflow() {
     let input = &mut File::open("tests/clusterfuzz-testcase-minimized-mp4-6093954524250112")
         .expect("Unknown file");
-    assert_invalid_data(mp4::read_mp4(input), "insufficient data in 'ctts' box");
+    assert_eq!(Status::from(mp4::read_mp4(input)), Status::CttsBadSize);
 }
 
 #[test]
@@ -929,22 +929,6 @@ fn public_avif_bug_1661347() {
     assert!(mp4::read_avif(input, ParseStrictness::Normal).is_err());
 }
 
-fn assert_invalid_data<T: std::fmt::Debug>(result: mp4::Result<T>, expected_msg: &str) {
-    match result {
-        Err(Error::InvalidData(msg)) if msg == expected_msg => {}
-        Err(Error::InvalidData(msg)) if msg != expected_msg => {
-            panic!(
-                "Error message mismatch\nExpected: {}\nFound:    {}",
-                expected_msg, msg
-            );
-        }
-        r => panic!(
-            "Expected Err(Error::InvalidData({:?}), found {:?}",
-            expected_msg, r
-        ),
-    }
-}
-
 fn for_strictness_result(
     path: &str,
     check: impl Fn(ParseStrictness, mp4::Result<mp4::AvifContext>),
@@ -962,18 +946,7 @@ fn for_strictness_result(
 }
 
 /// Check that input generates the expected error only in strict parsing mode
-fn assert_avif_should(path: &str, expected_msg: &str) {
-    let input = &mut File::open(path).expect("Unknown file");
-    assert_invalid_data(mp4::read_avif(input, ParseStrictness::Strict), expected_msg);
-    input.seek(SeekFrom::Start(0)).expect("rewind failed");
-    mp4::read_avif(input, ParseStrictness::Normal).expect("ParseStrictness::Normal failed");
-    input.seek(SeekFrom::Start(0)).expect("rewind failed");
-    mp4::read_avif(input, ParseStrictness::Permissive).expect("ParseStrictness::Permissive failed");
-}
-
-/// Check that input generates the expected error only in strict parsing mode
-// TODO: replace assert_avif_should
-fn assert_avif_should2(path: &str, expected: Status) {
+fn assert_avif_should(path: &str, expected: Status) {
     for_strictness_result(path, |strictness, result| {
         if strictness == ParseStrictness::Strict {
             assert_eq!(expected, Status::from(result));
@@ -984,17 +957,7 @@ fn assert_avif_should2(path: &str, expected: Status) {
 }
 
 /// Check that input generates the expected error unless in permissive parsing mode
-fn assert_avif_shall(path: &str, expected_msg: &str) {
-    let input = &mut File::open(path).expect("Unknown file");
-    assert_invalid_data(mp4::read_avif(input, ParseStrictness::Strict), expected_msg);
-    input.seek(SeekFrom::Start(0)).expect("rewind failed");
-    assert_invalid_data(mp4::read_avif(input, ParseStrictness::Normal), expected_msg);
-    input.seek(SeekFrom::Start(0)).expect("rewind failed");
-    mp4::read_avif(input, ParseStrictness::Permissive).expect("ParseStrictness::Permissive failed");
-}
-
-// TODO: replace assert_avif_shall
-fn assert_avif_shall2(path: &str, expected: Status) {
+fn assert_avif_shall(path: &str, expected: Status) {
     for_strictness_result(path, |strictness, result| {
         if strictness == ParseStrictness::Permissive {
             assert!(result.is_ok());
@@ -1010,7 +973,7 @@ fn assert_avif_shall2(path: &str, expected: Status) {
 
 #[test]
 fn public_avif_av1c_missing_essential() {
-    assert_avif_should2(IMAGE_AVIF_AV1C_MISSING_ESSENTIAL, Status::TxformNoEssential);
+    assert_avif_should(IMAGE_AVIF_AV1C_MISSING_ESSENTIAL, Status::TxformNoEssential);
 }
 
 #[test]
@@ -1026,36 +989,30 @@ fn public_avif_clap_missing_essential() {
 
 #[test]
 fn public_avif_imir_missing_essential() {
-    assert_avif_should2(IMAGE_AVIF_IMIR_MISSING_ESSENTIAL, Status::TxformNoEssential);
+    assert_avif_should(IMAGE_AVIF_IMIR_MISSING_ESSENTIAL, Status::TxformNoEssential);
 }
 
 #[test]
 fn public_avif_irot_missing_essential() {
-    assert_avif_should2(IMAGE_AVIF_IROT_MISSING_ESSENTIAL, Status::TxformNoEssential);
+    assert_avif_should(IMAGE_AVIF_IROT_MISSING_ESSENTIAL, Status::TxformNoEssential);
 }
 
 #[test]
 fn public_avif_ipma_bad_version() {
-    let expected_msg = "The ipma version 0 should be used unless 32-bit \
-                        item_ID values are needed \
-                        per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1";
-    assert_avif_should(IMAGE_AVIF_IPMA_BAD_VERSION, expected_msg);
+    assert_avif_should(IMAGE_AVIF_IPMA_BAD_VERSION, Status::IpmaBadVersion);
 }
 
 #[test]
 fn public_avif_ipma_bad_flags() {
-    let expected_msg = "Unless there are more than 127 properties in the \
-                        ItemPropertyContainerBox, flags should be equal to 0 \
-                        per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1";
-    assert_avif_should(IMAGE_AVIF_IPMA_BAD_FLAGS, expected_msg);
+    assert_avif_should(IMAGE_AVIF_IPMA_BAD_FLAGS, Status::IpmaFlagsNonzero);
 }
 
 #[test]
 fn public_avif_ipma_duplicate_version_and_flags() {
-    let expected_msg = "There shall be at most one ItemPropertyAssociationbox \
-                        with a given pair of values of version and flags \
-                        per ISOBMFF (ISO 14496-12:2020 § 8.11.14.1";
-    assert_avif_shall(IMAGE_AVIF_IPMA_DUPLICATE_VERSION_AND_FLAGS, expected_msg);
+    assert_avif_shall(
+        IMAGE_AVIF_IPMA_DUPLICATE_VERSION_AND_FLAGS,
+        Status::IpmaBadQuantity,
+    );
 }
 
 #[test]
@@ -1064,102 +1021,90 @@ fn public_avif_ipma_duplicate_version_and_flags() {
 // which is kind of annoying to make pass the "should" requirements on flags and version
 // as well as the "shall" requirement on duplicate version and flags
 fn public_avif_ipma_duplicate_item_id() {
-    let expected_msg = "There shall be at most one occurrence of a given item_ID, \
-                        in the set of ItemPropertyAssociationBox boxes \
-                        per ISOBMFF (ISO 14496-12:2020) § 8.11.14.1";
     let input = &mut File::open(IMAGE_AVIF_IPMA_DUPLICATE_ITEM_ID).expect("Unknown file");
-    assert_invalid_data(
-        mp4::read_avif(input, ParseStrictness::Permissive),
-        expected_msg,
+    assert_eq!(
+        Status::from(mp4::read_avif(input, ParseStrictness::Permissive)),
+        Status::IpmaDuplicateItemId
     )
 }
 
 #[test]
 fn public_avif_ipma_invalid_property_index() {
-    let expected_msg = "Invalid property index in ipma";
-    assert_avif_shall(IMAGE_AVIF_IPMA_INVALID_PROPERTY_INDEX, expected_msg);
+    assert_avif_shall(IMAGE_AVIF_IPMA_INVALID_PROPERTY_INDEX, Status::IpmaBadIndex);
 }
 
 #[test]
 fn public_avif_hdlr_first_in_meta() {
-    let expected_msg = "The HandlerBox shall be the first contained box within \
-                        the MetaBox \
-                        per MIAF (ISO 23000-22:2019) § 7.2.1.5";
-    assert_avif_shall(IMAGE_AVIF_NO_HDLR, expected_msg);
-    assert_avif_shall(IMAGE_AVIF_HDLR_NOT_FIRST, expected_msg);
+    assert_avif_shall(IMAGE_AVIF_NO_HDLR, Status::HdlrNotFirst);
+    assert_avif_shall(IMAGE_AVIF_HDLR_NOT_FIRST, Status::HdlrNotFirst);
 }
 
 #[test]
 fn public_avif_hdlr_is_pict() {
-    let expected_msg = "The HandlerBox handler_type must be 'pict' \
-                        per MIAF (ISO 23000-22:2019) § 7.2.1.5";
-    assert_avif_shall(IMAGE_AVIF_HDLR_NOT_PICT, expected_msg);
+    assert_avif_shall(IMAGE_AVIF_HDLR_NOT_PICT, Status::HdlrTypeNotPict);
 }
 
 #[test]
 fn public_avif_hdlr_nonzero_reserved() {
-    let expected_msg = "The HandlerBox 'reserved' fields shall be 0 \
-                        per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2";
     // This is a "should" despite the spec indicating a (somewhat ambiguous)
     // requirement that this field is set to zero.
     // See comments in read_hdlr
-    assert_avif_should(IMAGE_AVIF_HDLR_NONZERO_RESERVED, expected_msg);
+    assert_avif_should(
+        IMAGE_AVIF_HDLR_NONZERO_RESERVED,
+        Status::HdlrReservedNonzero,
+    );
 }
 
 #[test]
 fn public_avif_hdlr_multiple_nul() {
-    let expected_msg = "The HandlerBox 'name' field shall have a NUL byte \
-                        only in the final position \
-                        per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2";
-
     // This is a "should" despite the spec indicating a (somewhat ambiguous)
     // requirement about extra data in boxes
     // See comments in read_hdlr
-    assert_avif_should(IMAGE_AVIF_HDLR_MULTIPLE_NUL, expected_msg);
+    assert_avif_should(IMAGE_AVIF_HDLR_MULTIPLE_NUL, Status::HdlrNameMultipleNul);
 }
 
 #[test]
 fn public_avif_no_mif1() {
-    assert_avif_should2(IMAGE_AVIF_NO_MIF1, Status::MissingMif1Brand);
+    assert_avif_should(IMAGE_AVIF_NO_MIF1, Status::MissingMif1Brand);
 }
 
 #[test]
 fn public_avif_no_pitm() {
-    assert_avif_shall2(IMAGE_AVIF_NO_PITM, Status::NoPrimaryItem);
+    assert_avif_shall(IMAGE_AVIF_NO_PITM, Status::PitmMissing);
 }
 
 #[test]
 fn public_avif_pixi_present_for_displayable_images() {
     let pixi_test = if cfg!(feature = "missing-pixi-permitted") {
-        assert_avif_should2
+        assert_avif_should
     } else {
-        assert_avif_shall2
+        assert_avif_shall
     };
 
-    pixi_test(IMAGE_AVIF_NO_PIXI, Status::NoPixi);
-    pixi_test(IMAGE_AVIF_NO_ALPHA_PIXI, Status::NoPixi);
+    pixi_test(IMAGE_AVIF_NO_PIXI, Status::PixiMissing);
+    pixi_test(IMAGE_AVIF_NO_ALPHA_PIXI, Status::PixiMissing);
 }
 
 #[test]
 fn public_avif_av1c_present_for_av01() {
-    assert_avif_shall2(IMAGE_AVIF_NO_AV1C, Status::NoAv1c);
-    assert_avif_shall2(IMAGE_AVIF_NO_ALPHA_AV1C, Status::NoAv1c);
+    assert_avif_shall(IMAGE_AVIF_NO_AV1C, Status::Av1cMissing);
+    assert_avif_shall(IMAGE_AVIF_NO_ALPHA_AV1C, Status::Av1cMissing);
 }
 
 #[test]
 fn public_avif_ispe_present() {
-    assert_avif_shall2(IMAGE_AVIF_NO_ISPE, Status::NoIspe);
-    assert_avif_shall2(IMAGE_AVIF_NO_ALPHA_ISPE, Status::NoIspe);
+    assert_avif_shall(IMAGE_AVIF_NO_ISPE, Status::IspeMissing);
+    assert_avif_shall(IMAGE_AVIF_NO_ALPHA_ISPE, Status::IspeMissing);
 }
 
 #[test]
 fn public_avif_transform_before_ispe() {
-    assert_avif_shall2(IMAGE_AVIF_TRANSFORM_BEFORE_ISPE, Status::TxformBeforeIspe);
+    assert_avif_shall(IMAGE_AVIF_TRANSFORM_BEFORE_ISPE, Status::TxformBeforeIspe);
 }
 
 #[test]
 fn public_avif_transform_order() {
-    assert_avif_shall2(IMAGE_AVIF_TRANSFORM_ORDER, Status::TxformOrder);
+    assert_avif_shall(IMAGE_AVIF_TRANSFORM_ORDER, Status::TxformOrder);
 }
 
 fn assert_unsupported_nonfatal(result: &mp4::Result<mp4::AvifContext>, feature: mp4::Feature) {
@@ -1211,7 +1156,7 @@ fn public_avif_a1lx() {
 
 #[test]
 fn public_avif_a1lx_marked_essential() {
-    assert_avif_shall2(IMAGE_AVIF_A1LX_MARKED_ESSENTIAL, Status::A1lxEssential);
+    assert_avif_shall(IMAGE_AVIF_A1LX_MARKED_ESSENTIAL, Status::A1lxEssential);
 }
 
 #[test]
@@ -1221,7 +1166,7 @@ fn public_avif_a1op() {
 
 #[test]
 fn public_avif_a1op_missing_essential() {
-    assert_avif_shall2(IMAGE_AVIF_A1OP_MISSING_ESSENTIAL, Status::A1opNoEssential);
+    assert_avif_shall(IMAGE_AVIF_A1OP_MISSING_ESSENTIAL, Status::A1opNoEssential);
 }
 
 #[test]
@@ -1231,7 +1176,7 @@ fn public_avif_lsel() {
 
 #[test]
 fn public_avif_lsel_missing_essential() {
-    assert_avif_shall2(IMAGE_AVIF_LSEL_MISSING_ESSENTIAL, Status::LselNoEssential);
+    assert_avif_shall(IMAGE_AVIF_LSEL_MISSING_ESSENTIAL, Status::LselNoEssential);
 }
 
 #[test]
@@ -1279,7 +1224,7 @@ fn public_avis_major_with_pitm_and_alpha() {
 
 #[test]
 fn public_avif_avis_major_no_moov() {
-    assert_avif_shall2(AVIF_AVIS_MAJOR_NO_MOOV, Status::NoMoov);
+    assert_avif_shall(AVIF_AVIS_MAJOR_NO_MOOV, Status::MoovMissing);
 }
 
 #[test]
