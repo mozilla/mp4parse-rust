@@ -71,10 +71,14 @@ static AVIF_TEST_DIRS: &[&str] = &["tests", "av1-avif/testFiles", "link-u-avif-s
 //   av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_a1op.avif
 //   av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_a1lx.avif
 //   av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_lsel.avif
-// respectively, but with https://github.com/AOMediaCodec/av1-avif/issues/174 fixed
+// respectively, before https://github.com/AOMediaCodec/av1-avif/pull/191
+// and with https://github.com/AOMediaCodec/av1-avif/issues/174 fixed
 static AVIF_A1OP: &str = "tests/a1op.avif";
 static AVIF_A1LX: &str = "tests/a1lx.avif";
 static AVIF_LSEL: &str = "tests/lsel.avif";
+
+static AVIF_A1LX_NEW_LSEL: &str = "tests/a1lx-new-lsel.avif";
+static AVIF_LSEL_BAD_LAYER_ID: &str = "tests/corrupt/lsel-bad-layer-id.avif";
 
 static AVIF_CLAP: &str = "tests/clap-basic-1_3x3-to-1x1.avif";
 static AVIF_GRID: &str = "av1-avif/testFiles/Microsoft/Summer_in_Tomsk_720p_5x4_grid.avif";
@@ -89,18 +93,17 @@ static AVIF_AVIS_MAJOR_NO_MOOV: &str = "tests/corrupt/alpha_video_moov_is_moop.a
 static AVIF_NO_PIXI_IMAGES: &[&str] = &[IMAGE_AVIF_NO_PIXI, IMAGE_AVIF_NO_ALPHA_PIXI];
 static AVIF_UNSUPPORTED_IMAGES: &[&str] = &[
     AVIF_A1LX,
+    AVIF_A1LX_NEW_LSEL,
     AVIF_A1OP,
     AVIF_CLAP,
     IMAGE_AVIF_CLAP_MISSING_ESSENTIAL,
     AVIF_GRID,
     AVIF_GRID_A1LX,
-    AVIF_LSEL,
     AVIF_AVIS_MAJOR_NO_PITM,
     AVIF_AVIS_MAJOR_WITH_PITM_AND_ALPHA,
     "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_a1lx.avif",
     "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_a1op.avif",
     "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_a1op_lsel.avif",
-    "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_lsel.avif",
     "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_grid_lsel.avif",
     "av1-avif/testFiles/Link-U/kimono.crop.avif",
     "av1-avif/testFiles/Link-U/kimono.mirror-vertical.rotate270.crop.avif",
@@ -1171,7 +1174,29 @@ fn public_avif_a1op_missing_essential() {
 
 #[test]
 fn public_avif_lsel() {
-    assert_unsupported_essential(AVIF_LSEL, mp4::Feature::Lsel);
+    let input = &mut File::open(AVIF_LSEL).expect("Unknown file");
+    let context = mp4::read_avif(input, ParseStrictness::Normal).expect("read_avif failed");
+    let ptr = context.layer_selector_ptr().unwrap();
+    assert_ne!(ptr, std::ptr::null());
+    unsafe {
+        assert_eq!(1, ptr.read().layer_id);
+    }
+}
+
+#[test]
+fn public_avif_a1lx_new_lsel() {
+    let input = &mut File::open(AVIF_A1LX_NEW_LSEL).expect("Unknown file");
+    let context = mp4::read_avif(input, ParseStrictness::Normal).expect("read_avif failed");
+    let ptr = context.layer_selector_ptr().unwrap();
+    assert_ne!(ptr, std::ptr::null());
+    unsafe {
+        assert_eq!(0xffff, ptr.read().layer_id);
+    }
+}
+
+#[test]
+fn public_avif_lsel_bad_layer_id() {
+    assert_avif_shall(AVIF_LSEL_BAD_LAYER_ID, Status::LselBadLayerId);
 }
 
 #[test]
