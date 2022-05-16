@@ -307,12 +307,7 @@ impl Feature {
             | Self::Pasp
             | Self::Pixi
             | Self::Lsel => true,
-            Self::A1lx
-            | Self::A1op
-            | Self::Clap
-            | Self::Grid
-            | Self::Ipro
-            | Self::Avis => false,
+            Self::A1lx | Self::A1op | Self::Clap | Self::Grid | Self::Ipro | Self::Avis => false,
         }
     }
 }
@@ -3227,7 +3222,7 @@ fn read_iprp<T: Read>(
                                 _ => fail_with_status_if(
                                     strictness != ParseStrictness::Permissive,
                                     Status::LselBadLayerId,
-                                )?
+                                )?,
                             }
                         }
 
@@ -3811,7 +3806,7 @@ fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<PixelInformation> {
 #[repr(C)]
 #[derive(Debug)]
 pub struct LayerSelector {
-    pub layer_id: u16
+    pub layer_id: u16,
 }
 
 /// Parse layer selection
@@ -3819,9 +3814,7 @@ pub struct LayerSelector {
 fn read_lsel<T: Read>(src: &mut BMFFBox<T>) -> Result<LayerSelector> {
     let layer_id = be_u16(src)?;
 
-    Ok(LayerSelector {
-        layer_id
-    })
+    Ok(LayerSelector { layer_id })
 }
 
 /// Despite [Rec. ITU-T H.273] (12/2016) defining the CICP fields as having a
