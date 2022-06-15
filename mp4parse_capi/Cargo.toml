@@ -31,7 +31,7 @@ mp4parse = { version = "0.15.0", path = "../mp4parse", features = ["unstable-api
 num-traits = "0.2.14"
 
 [dev-dependencies]
-env_logger = "0.8"
+env_logger = "0.9"
 
 [features]
 missing-pixi-permitted = ["mp4parse/missing-pixi-permitted"]
