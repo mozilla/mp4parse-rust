@@ -165,7 +165,7 @@ struct String;
 /// Any detail that needs to be communicated to the caller must be encoded here
 /// since the [`Error`] type's associated data is part of the FFI.
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Status {
     Ok = 0,
     BadArg = 1,
@@ -275,7 +275,7 @@ pub enum Status {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Feature {
     A1lx,
     A1op,
@@ -2030,7 +2030,7 @@ struct SingleItemTypeReferenceBox {
 
 /// Potential sizes (in bytes) of variable-sized fields of the 'iloc' box
 /// See ISOBMFF (ISO 14496-12:2020) § 8.11.3
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum IlocFieldSize {
     Zero,
     Four,
@@ -2060,7 +2060,7 @@ impl TryFrom<u8> for IlocFieldSize {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 enum IlocVersion {
     Zero,
     One,
@@ -2097,7 +2097,7 @@ struct ItemLocationBoxItem {
 /// > MIAF image items are constrained as follows:<br />
 /// > — `construction_method` shall be equal to 0 for MIAF image items that are coded image items.<br />
 /// > — `construction_method` shall be equal to 0 or 1 for MIAF image items that are derived image items.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ConstructionMethod {
     File = 0,
     Idat = 1,
@@ -2118,7 +2118,7 @@ enum Extent {
     ToEnd { offset: u64 },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum TrackType {
     Audio,
     Video,
@@ -2135,7 +2135,7 @@ impl Default for TrackType {
 // This type is used by mp4parse_capi since it needs to be passed from FFI consumers
 // The C-visible struct is renamed via mp4parse_capi/cbindgen.toml to match naming conventions
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ParseStrictness {
     Permissive, // Error only on ambiguous inputs
     Normal,     // Error on "shall" directives, log warnings for "should"
@@ -2152,7 +2152,7 @@ fn fail_with_status_if(violation: bool, status: Status) -> Result<()> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CodecType {
     Unknown,
     MP3,
@@ -2182,11 +2182,11 @@ impl Default for CodecType {
 }
 
 /// The media's global (mvhd) timescale in units per second.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct MediaTimeScale(pub u64);
 
 /// A time to be scaled by the media's global (mvhd) timescale.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct MediaScaledTime(pub u64);
 
 /// The track's local (mdhd) timescale.
@@ -3721,7 +3721,7 @@ fn read_ipco<T: Read>(
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ImageSpatialExtentsProperty {
     image_width: u32,
     image_height: u32,
@@ -6081,7 +6081,7 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
             BoxType::CompilationEntry => meta.compilation = read_ilst_bool_data(&mut b)?,
             BoxType::AdvisoryEntry => {
                 meta.advisory = read_ilst_u8_data(&mut b)?.and_then(|rtng| {
-                    Some(match rtng.get(0)? {
+                    Some(match rtng.first()? {
                         2 => AdvisoryRating::Clean,
                         0 => AdvisoryRating::Inoffensive,
                         r => AdvisoryRating::Explicit(*r),
@@ -6090,7 +6090,7 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
             }
             BoxType::MediaTypeEntry => {
                 meta.media_type = read_ilst_u8_data(&mut b)?.and_then(|stik| {
-                    Some(match stik.get(0)? {
+                    Some(match stik.first()? {
                         0 => MediaType::Movie,
                         1 => MediaType::Normal,
                         2 => MediaType::AudioBook,
@@ -6121,7 +6121,7 @@ fn read_ilst<T: Read>(src: &mut BMFFBox<T>, meta: &mut MetadataBox) -> Result<()
 }
 
 fn read_ilst_bool_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<bool>> {
-    Ok(read_ilst_u8_data(src)?.and_then(|d| Some(d.get(0)? == &1)))
+    Ok(read_ilst_u8_data(src)?.and_then(|d| Some(d.first()? == &1)))
 }
 
 fn read_ilst_string_data<T: Read>(src: &mut BMFFBox<T>) -> Result<Option<TryString>> {
