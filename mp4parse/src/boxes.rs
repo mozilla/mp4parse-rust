@@ -15,7 +15,7 @@ struct String;
 
 macro_rules! box_database {
     ($($(#[$attr:meta])* $boxenum:ident $boxtype:expr),*,) => {
-        #[derive(Clone, Copy, PartialEq)]
+        #[derive(Clone, Copy, PartialEq, Eq)]
         pub enum BoxType {
             $($(#[$attr])* $boxenum),*,
             UnknownBox(u32),

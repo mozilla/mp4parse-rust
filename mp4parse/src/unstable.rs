@@ -106,7 +106,7 @@ impl<T: std::cmp::PartialEq> PartialEq<T> for CheckedInteger<T> {
 /// sample data offset (start and end), composition time in microseconds
 /// (start and end) and whether it is a sync sample
 #[repr(C)]
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Eq)]
 pub struct Indice {
     /// The byte offset in the file where the indexed sample begins.
     pub start_offset: CheckedInteger<u64>,

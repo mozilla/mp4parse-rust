@@ -70,7 +70,7 @@ struct HashMap;
 struct String;
 
 #[repr(C)]
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Mp4parseTrackType {
     Video = 0,
     Audio = 1,
@@ -85,7 +85,7 @@ impl Default for Mp4parseTrackType {
 
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[repr(C)]
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Mp4parseCodec {
     Unknown,
     Aac,
@@ -114,7 +114,7 @@ impl Default for Mp4parseCodec {
 }
 
 #[repr(C)]
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum Mp4ParseEncryptionSchemeType {
     None,
     Cenc,
@@ -196,7 +196,7 @@ pub struct Mp4parsePsshInfo {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum OptionalFourCc {
     None,
     Some([u8; 4]),
