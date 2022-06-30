@@ -489,7 +489,7 @@ where
     })
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Microseconds<T>(pub T);
 
 /// Convert `time` in media's global (mvhd) timescale to microseconds,

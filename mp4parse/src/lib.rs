@@ -2191,12 +2191,12 @@ pub struct MediaScaledTime(pub u64);
 
 /// The track's local (mdhd) timescale.
 /// Members are timescale units per second and the track id.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct TrackTimeScale<T: Num>(pub T, pub usize);
 
 /// A time to be scaled by the track's local (mdhd) timescale.
 /// Members are time in scale units and the track id.
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct TrackScaledTime<T>(pub T, pub usize);
 
 impl<T> std::ops::Add for TrackScaledTime<T>
