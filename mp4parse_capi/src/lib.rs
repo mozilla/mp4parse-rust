@@ -326,6 +326,7 @@ pub struct Mp4parseAvifImage {
     pub image_rotation: mp4parse::ImageRotation,
     pub image_mirror: *const mp4parse::ImageMirror,
     pub pixel_aspect_ratio: *const mp4parse::PixelAspectRatio,
+    pub layer_selector: *const mp4parse::LayerSelector,
     /// If no alpha item exists, members' `.length` will be 0 and `.data` will be null
     pub alpha_image: Mp4parseAvifImageItem,
     pub premultiplied_alpha: bool,
@@ -1079,6 +1080,7 @@ pub fn mp4parse_avif_get_image_safe(
         image_rotation: context.image_rotation()?,
         image_mirror: context.image_mirror_ptr()?,
         pixel_aspect_ratio: context.pixel_aspect_ratio_ptr()?,
+        layer_selector: context.layer_selector_ptr()?,
         alpha_image,
         premultiplied_alpha: context.premultiplied_alpha,
         major_brand: context.major_brand.value,

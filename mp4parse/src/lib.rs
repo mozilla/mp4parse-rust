@@ -246,6 +246,7 @@ pub enum Status {
     IrefRecursion,
     IspeMissing,
     ItemTypeMissing,
+    LselBadLayerId,
     LselNoEssential,
     MdhdBadTimescale,
     MdhdBadVersion,
@@ -304,14 +305,9 @@ impl Feature {
             | Self::Irot
             | Self::Ispe
             | Self::Pasp
-            | Self::Pixi => true,
-            Self::A1lx
-            | Self::A1op
-            | Self::Clap
-            | Self::Grid
-            | Self::Ipro
-            | Self::Lsel
-            | Self::Avis => false,
+            | Self::Pixi
+            | Self::Lsel => true,
+            Self::A1lx | Self::A1op | Self::Clap | Self::Grid | Self::Ipro | Self::Avis => false,
         }
     }
 }
@@ -328,7 +324,7 @@ impl TryFrom<&ItemProperty> for Feature {
             ItemProperty::Colour(_) => Self::Colr,
             ItemProperty::ImageSpatialExtents(_) => Self::Ispe,
             ItemProperty::LayeredImageIndexing => Self::A1lx,
-            ItemProperty::LayerSelection => Self::Lsel,
+            ItemProperty::LayerSelection(_) => Self::Lsel,
             ItemProperty::Mirroring(_) => Self::Imir,
             ItemProperty::OperatingPointSelector => Self::A1op,
             ItemProperty::PixelAspectRatio(_) => Self::Pasp,
@@ -692,6 +688,11 @@ impl From<Status> for &str {
             Status::LselNoEssential => {
                 "LayerSelectorProperty (lsel) shall be marked as essential \
                  per HEIF (ISO/IEC 23008-12:2017) § 6.5.11.1"
+            }
+            Status::LselBadLayerId => {
+                "LayerSelectorProperty (lsel) shall be between 0 and 3, \
+                 or the special value 0xFFFF \
+                 per https://aomediacodec.github.io/av1-avif/#layer-selector-property"
             }
             Status::MdhdBadTimescale => {
                 "zero timescale in mdhd"
@@ -1720,6 +1721,21 @@ impl AvifContext {
                 .get(primary_item.id, BoxType::PixelAspectRatioBox)?
             {
                 Some(ItemProperty::PixelAspectRatio(pasp)) => Ok(pasp),
+                Some(other_property) => panic!("property key mismatch: {:?}", other_property),
+                None => Ok(std::ptr::null()),
+            }
+        } else {
+            Ok(std::ptr::null())
+        }
+    }
+
+    pub fn layer_selector_ptr(&self) -> Result<*const LayerSelector> {
+        if let Some(primary_item) = &self.primary_item {
+            match self
+                .item_properties
+                .get(primary_item.id, BoxType::LayerSelectorProperty)?
+            {
+                Some(ItemProperty::LayerSelection(lsel)) => Ok(lsel),
                 Some(other_property) => panic!("property key mismatch: {:?}", other_property),
                 None => Ok(std::ptr::null()),
             }
@@ -3193,6 +3209,23 @@ fn read_iprp<T: Read>(
                             }
                         }
 
+                        ItemProperty::LayerSelection(lsel) => {
+                            if !a.essential {
+                                fail_with_status_if(
+                                    strictness != ParseStrictness::Permissive,
+                                    Status::LselNoEssential,
+                                )?;
+                            }
+
+                            match lsel.layer_id {
+                                0..=3 | 0xffff => (),
+                                _ => fail_with_status_if(
+                                    strictness != ParseStrictness::Permissive,
+                                    Status::LselBadLayerId,
+                                )?,
+                            }
+                        }
+
                         // The following properties are unsupported, but we still enforce that
                         // they've been correctly marked as essential or not.
                         ItemProperty::LayeredImageIndexing => {
@@ -3201,21 +3234,6 @@ fn read_iprp<T: Read>(
                                 fail_with_status_if(
                                     strictness != ParseStrictness::Permissive,
                                     Status::A1lxEssential,
-                                )?;
-                            }
-                        }
-
-                        ItemProperty::LayerSelection => {
-                            assert!(feature.is_ok() && unsupported_features.contains(feature?));
-                            if a.essential {
-                                assert!(
-                                    forbidden_items.contains(&association_entry.item_id)
-                                        || strictness == ParseStrictness::Permissive
-                                );
-                            } else {
-                                fail_with_status_if(
-                                    strictness != ParseStrictness::Permissive,
-                                    Status::LselNoEssential,
                                 )?;
                             }
                         }
@@ -3302,7 +3320,7 @@ pub enum ItemProperty {
     Colour(ColourInformation),
     ImageSpatialExtents(ImageSpatialExtentsProperty),
     LayeredImageIndexing,
-    LayerSelection,
+    LayerSelection(LayerSelector),
     Mirroring(ImageMirror),
     OperatingPointSelector,
     PixelAspectRatio(PixelAspectRatio),
@@ -3319,7 +3337,7 @@ impl From<&ItemProperty> for BoxType {
             ItemProperty::CleanAperture => BoxType::CleanApertureBox,
             ItemProperty::Colour(_) => BoxType::ColourInformationBox,
             ItemProperty::LayeredImageIndexing => BoxType::AV1LayeredImageIndexingProperty,
-            ItemProperty::LayerSelection => BoxType::LayerSelectorProperty,
+            ItemProperty::LayerSelection(_) => BoxType::LayerSelectorProperty,
             ItemProperty::Mirroring(_) => BoxType::ImageMirror,
             ItemProperty::OperatingPointSelector => BoxType::OperatingPointSelectorProperty,
             ItemProperty::PixelAspectRatio(_) => BoxType::PixelAspectRatioBox,
@@ -3686,6 +3704,7 @@ fn read_ipco<T: Read>(
             }
             BoxType::PixelAspectRatioBox => ItemProperty::PixelAspectRatio(read_pasp(&mut b)?),
             BoxType::PixelInformationBox => ItemProperty::Channels(read_pixi(&mut b)?),
+            BoxType::LayerSelectorProperty => ItemProperty::LayerSelection(read_lsel(&mut b)?),
 
             other_box_type => {
                 // Even if we didn't do anything with other property types, we still store
@@ -3694,7 +3713,6 @@ fn read_ipco<T: Read>(
                 let item_property = match other_box_type {
                     BoxType::AV1LayeredImageIndexingProperty => ItemProperty::LayeredImageIndexing,
                     BoxType::CleanApertureBox => ItemProperty::CleanAperture,
-                    BoxType::LayerSelectorProperty => ItemProperty::LayerSelection,
                     BoxType::OperatingPointSelectorProperty => ItemProperty::OperatingPointSelector,
                     _ => {
                         warn!("No ItemProperty variant for {:?}", other_box_type);
@@ -3788,6 +3806,20 @@ fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<PixelInformation> {
 
     check_parser_state!(src.content);
     Ok(PixelInformation { bits_per_channel })
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct LayerSelector {
+    pub layer_id: u16,
+}
+
+/// Parse layer selection
+/// See HEIF (ISO 23008-12:2017) § 6.5.11
+fn read_lsel<T: Read>(src: &mut BMFFBox<T>) -> Result<LayerSelector> {
+    let layer_id = be_u16(src)?;
+
+    Ok(LayerSelector { layer_id })
 }
 
 /// Despite [Rec. ITU-T H.273] (12/2016) defining the CICP fields as having a
