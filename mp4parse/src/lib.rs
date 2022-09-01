@@ -299,19 +299,14 @@ impl Feature {
         match self {
             Self::Auxc
             | Self::Av1c
+            | Self::Avis
             | Self::Colr
             | Self::Imir
             | Self::Irot
             | Self::Ispe
             | Self::Pasp
             | Self::Pixi => true,
-            Self::A1lx
-            | Self::A1op
-            | Self::Clap
-            | Self::Grid
-            | Self::Ipro
-            | Self::Lsel
-            | Self::Avis => false,
+            Self::A1lx | Self::A1op | Self::Clap | Self::Grid | Self::Ipro | Self::Lsel => false,
         }
     }
 }
@@ -1100,6 +1095,29 @@ pub enum SampleEntry {
     Unknown,
 }
 
+#[derive(Debug)]
+pub struct TrackReferenceBox {
+    pub references: TryVec<TrackReferenceEntry>,
+}
+
+impl TrackReferenceBox {
+    pub fn has_auxl_reference(&self, track_id: u32) -> bool {
+        self.references.iter().any(|entry| match entry {
+            TrackReferenceEntry::Auxiliary(aux_entry) => aux_entry.track_ids.contains(&track_id),
+        })
+    }
+}
+
+#[derive(Debug)]
+pub enum TrackReferenceEntry {
+    Auxiliary(TrackReference),
+}
+
+#[derive(Debug)]
+pub struct TrackReference {
+    pub track_ids: TryVec<u32>,
+}
+
 /// An Elementary Stream Descriptor
 /// See MPEG-4 Systems (ISO 14496-1:2010) § 7.2.6.5
 #[allow(non_camel_case_types)]
@@ -1550,7 +1568,7 @@ impl AvifItem {
     }
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct AvifContext {
     /// Level of deviation from the specification before failing the parse
     strictness: ParseStrictness,
@@ -1574,13 +1592,17 @@ pub struct AvifContext {
     /// Should probably only ever be [`AVIF_BRAND`] or [`AVIS_BRAND`], but other values
     /// are legal as long as one of the two is the `compatible_brand` list.
     pub major_brand: FourCC,
-    /// True if a `moov` box is present
-    pub has_sequence: bool,
+    /// Information on the sequence contained in the image, or None if not present
+    pub sequence: Option<MediaContext>,
     /// A collection of unsupported features encountered during the parse
     pub unsupported_features: UnsupportedFeatures,
 }
 
 impl AvifContext {
+    pub fn primary_item_is_present(&self) -> bool {
+        self.primary_item.is_some()
+    }
+
     pub fn primary_item_coded_data(&self) -> Option<&[u8]> {
         self.primary_item
             .as_ref()
@@ -1591,6 +1613,10 @@ impl AvifContext {
         self.primary_item
             .as_ref()
             .map(|item| self.image_bits_per_channel(item.id))
+    }
+
+    pub fn alpha_item_is_present(&self) -> bool {
+        self.alpha_item.is_some()
     }
 
     pub fn alpha_item_coded_data(&self) -> Option<&[u8]> {
@@ -2122,6 +2148,8 @@ enum Extent {
 pub enum TrackType {
     Audio,
     Video,
+    Picture,
+    AuxiliaryVideo,
     Metadata,
     Unknown,
 }
@@ -2140,6 +2168,12 @@ pub enum ParseStrictness {
     Permissive, // Error only on ambiguous inputs
     Normal,     // Error on "shall" directives, log warnings for "should"
     Strict,     // Error on "should" directives
+}
+
+impl Default for ParseStrictness {
+    fn default() -> Self {
+        ParseStrictness::Normal
+    }
 }
 
 fn fail_with_status_if(violation: bool, status: Status) -> Result<()> {
@@ -2227,6 +2261,7 @@ pub struct Track {
     pub stco: Option<ChunkOffsetBox>, // It is for stco or co64.
     pub stss: Option<SyncSampleBox>,
     pub ctts: Option<CompositionOffsetBox>,
+    pub tref: Option<TrackReferenceBox>,
 }
 
 impl Track {
@@ -2495,10 +2530,6 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
     } else {
         return Status::FtypNotFirst.into();
     };
-
-    if major_brand == AVIS_BRAND {
-        unsupported_features.insert(Feature::Avis);
-    }
 
     let mut meta = None;
     let mut image_sequence = None;
@@ -2776,7 +2807,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         premultiplied_alpha,
         item_properties,
         major_brand,
-        has_sequence: image_sequence.is_some(),
+        sequence: image_sequence,
         unsupported_features,
     })
 }
@@ -4346,6 +4377,7 @@ fn read_trak<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
             }
             BoxType::EditBox => read_edts(&mut b, track)?,
             BoxType::MediaBox => read_mdia(&mut b, track)?,
+            BoxType::TrackReferenceBox => track.tref = Some(read_tref(&mut b)?),
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
@@ -4430,6 +4462,8 @@ fn read_mdia<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
 
                 match hdlr.handler_type.value.as_ref() {
                     b"vide" => track.track_type = TrackType::Video,
+                    b"pict" => track.track_type = TrackType::Picture,
+                    b"auxv" => track.track_type = TrackType::AuxiliaryVideo,
                     b"soun" => track.track_type = TrackType::Audio,
                     b"meta" => track.track_type = TrackType::Metadata,
                     _ => (),
@@ -4442,6 +4476,32 @@ fn read_mdia<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
         check_parser_state!(b.content);
     }
     Ok(())
+}
+
+fn read_tref<T: Read>(f: &mut BMFFBox<T>) -> Result<TrackReferenceBox> {
+    // Will likely only see trefs with one auxl
+    let mut references = TryVec::with_capacity(1)?;
+    let mut iter = f.box_iter();
+    while let Some(mut b) = iter.next_box()? {
+        match b.head.name {
+            BoxType::AuxiliaryBox => {
+                references.push(TrackReferenceEntry::Auxiliary(read_tref_auxl(&mut b)?))?
+            }
+            _ => skip_box_content(&mut b)?,
+        };
+        check_parser_state!(b.content);
+    }
+    Ok(TrackReferenceBox { references })
+}
+
+fn read_tref_auxl<T: Read>(f: &mut BMFFBox<T>) -> Result<TrackReference> {
+    let num_track_ids = (f.bytes_left() / std::mem::size_of::<u32>().to_u64()).try_into()?;
+    let mut track_ids = TryVec::with_capacity(num_track_ids)?;
+    for _ in 0..num_track_ids {
+        track_ids.push(be_u32(f)?)?;
+    }
+
+    Ok(TrackReference { track_ids })
 }
 
 fn read_minf<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
@@ -5830,6 +5890,8 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleD
         if let Some(mut b) = iter.next_box()? {
             let description = match track.track_type {
                 TrackType::Video => read_video_sample_entry(&mut b),
+                TrackType::Picture => read_video_sample_entry(&mut b),
+                TrackType::AuxiliaryVideo => read_video_sample_entry(&mut b),
                 TrackType::Audio => read_audio_sample_entry(&mut b),
                 TrackType::Metadata => Err(Error::Unsupported("metadata track")),
                 TrackType::Unknown => Err(Error::Unsupported("unknown track type")),

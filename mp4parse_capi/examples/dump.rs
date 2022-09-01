@@ -112,7 +112,9 @@ fn dump_file(filename: &str, strictness: ParseStrictness) {
                         }
                     }
                 }
-                Mp4parseTrackType::Video => {
+                Mp4parseTrackType::Video
+                | Mp4parseTrackType::Picture
+                | Mp4parseTrackType::AuxiliaryVideo => {
                     let mut video_info = Mp4parseTrackVideoInfo::default();
                     match mp4parse_get_track_video_info(parser, i, &mut video_info) {
                         Mp4parseStatus::Ok => {

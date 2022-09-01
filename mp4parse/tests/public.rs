@@ -346,7 +346,7 @@ fn public_api() {
                 assert!(a.samplesize > 0);
                 assert!(a.samplerate > 0.0);
             }
-            mp4::TrackType::Metadata | mp4::TrackType::Unknown => {}
+            _ => {}
         }
     }
 }
