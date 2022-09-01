@@ -110,6 +110,8 @@ box_database!(
     MovieHeaderBox                    0x6d76_6864, // "mvhd"
     TrackBox                          0x7472_616b, // "trak"
     TrackHeaderBox                    0x746b_6864, // "tkhd"
+    TrackReferenceBox                 0x7472_6566, // "tref"
+    AuxiliaryBox                      0x6175_786C, // "auxl"
     EditBox                           0x6564_7473, // "edts"
     MediaBox                          0x6d64_6961, // "mdia"
     EditListBox                       0x656c_7374, // "elst"
