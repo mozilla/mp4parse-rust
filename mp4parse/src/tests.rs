@@ -643,7 +643,7 @@ fn make_dfla(
 ) -> Cursor<Vec<u8>> {
     assert!(data.len() < 1 << 24);
     make_fullbox(BoxSize::Auto, b"dfLa", 0, |s| {
-        let flag = if last { 1 } else { 0 };
+        let flag = u32::from(last);
         let size = match data_length {
             FlacBlockLength::Correct => (data.len() as u32) & 0x00ff_ffff,
             FlacBlockLength::Incorrect(size) => {
