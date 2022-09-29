@@ -1325,6 +1325,6 @@ fn read_to_end_() {
 
 #[test]
 fn read_to_end_oom() {
-    let mut src = b"1234567890".take(std::usize::MAX.try_into().expect("usize < u64"));
+    let mut src = b"1234567890".take(std::isize::MAX.try_into().expect("isize < u64"));
     assert!(src.read_into_try_vec().is_err());
 }
