@@ -491,7 +491,7 @@ fn read_hdlr_multiple_nul_in_name() {
     assert_eq!(stream.head.size, 45);
     assert_eq!(
         super::Status::from(super::read_hdlr(&mut stream, ParseStrictness::Strict)),
-        super::Status::HdlrNameMultipleNul,
+        super::Status::Ok,
     );
 }
 

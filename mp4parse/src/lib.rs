@@ -203,7 +203,6 @@ pub enum Status {
     EsdsDecSpecificIntoTagQuantity,
     FtypBadSize,
     FtypNotFirst,
-    HdlrNameMultipleNul,
     HdlrNameNoNul,
     HdlrNameNotUtf8,
     HdlrNotFirst,
@@ -529,11 +528,6 @@ impl From<Status> for &str {
             Status::FtypNotFirst => {
                 "The FileTypeBox shall be placed as early as possible in the file \
                  per ISOBMFF (ISO 14496-12:2020) § 4.3.1"
-            }
-            Status::HdlrNameMultipleNul => {
-                "The HandlerBox 'name' field shall have a NUL byte \
-                 only in the final position \
-                 per ISOBMFF (ISO 14496-12:2020) § 8.4.3.2"
             }
             Status::HdlrNameNoNul => {
                 "The HandlerBox 'name' field shall be null-terminated \
@@ -5464,21 +5458,14 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Resu
 
     match std::str::from_utf8(src.read_into_try_vec()?.as_slice()) {
         Ok(name) => {
-            match name.bytes().filter(|&b| b == b'\0').count() {
-                0 => fail_with_status_if(
+            match name.bytes().position(|b| b == b'\0') {
+                None => fail_with_status_if(
                     strictness != ParseStrictness::Permissive,
                     Status::HdlrNameNoNul,
                 )?,
-                1 => (),
-                n =>
+                // `name` must be nul-terminated and any trailing bytes after the first nul ignored.
                 // See https://github.com/MPEGGroup/FileFormat/issues/35
-                {
-                    error!("Found {} nul bytes in {:x?}", n, name);
-                    fail_with_status_if(
-                        strictness == ParseStrictness::Strict,
-                        Status::HdlrNameMultipleNul,
-                    )?
-                }
+                Some(_) => (),
             }
         }
         Err(_) => fail_with_status_if(
