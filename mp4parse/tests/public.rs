@@ -1051,7 +1051,7 @@ fn public_avif_hdlr_multiple_nul() {
     // This is a "should" despite the spec indicating a (somewhat ambiguous)
     // requirement about extra data in boxes
     // See comments in read_hdlr
-    assert_avif_should(IMAGE_AVIF_HDLR_MULTIPLE_NUL, Status::HdlrNameMultipleNul);
+    assert_avif_should(IMAGE_AVIF_HDLR_MULTIPLE_NUL, Status::Ok);
 }
 
 #[test]
