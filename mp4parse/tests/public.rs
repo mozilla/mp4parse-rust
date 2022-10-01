@@ -95,8 +95,6 @@ static AVIF_UNSUPPORTED_IMAGES: &[&str] = &[
     AVIF_GRID,
     AVIF_GRID_A1LX,
     AVIF_LSEL,
-    AVIF_AVIS_MAJOR_NO_PITM,
-    AVIF_AVIS_MAJOR_WITH_PITM_AND_ALPHA,
     "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_a1lx.avif",
     "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_a1op.avif",
     "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_a1op_lsel.avif",
@@ -107,7 +105,6 @@ static AVIF_UNSUPPORTED_IMAGES: &[&str] = &[
     "av1-avif/testFiles/Microsoft/Chimera_10bit_cropped_to_1920x1008.avif",
     "av1-avif/testFiles/Microsoft/Chimera_10bit_cropped_to_1920x1008_with_HDR_metadata.avif",
     "av1-avif/testFiles/Microsoft/Chimera_8bit_cropped_480x256.avif",
-    "av1-avif/testFiles/Netflix/avis/alpha_video.avif",
     "av1-avif/testFiles/Xiph/abandoned_filmgrain.avif",
     "av1-avif/testFiles/Xiph/fruits_2layer_thumbsize.avif",
     "av1-avif/testFiles/Xiph/quebec_3layer_op2.avif",
@@ -115,12 +112,6 @@ static AVIF_UNSUPPORTED_IMAGES: &[&str] = &[
     "av1-avif/testFiles/Xiph/tiger_3layer_3res.avif",
     "link-u-avif-sample-images/kimono.crop.avif",
     "link-u-avif-sample-images/kimono.mirror-vertical.rotate270.crop.avif",
-    "link-u-avif-sample-images/star-10bpc-with-alpha.avifs",
-    "link-u-avif-sample-images/star-10bpc.avifs",
-    "link-u-avif-sample-images/star-12bpc-with-alpha.avifs",
-    "link-u-avif-sample-images/star-12bpc.avifs",
-    "link-u-avif-sample-images/star-8bpc-with-alpha.avifs",
-    "link-u-avif-sample-images/star-8bpc.avifs",
 ];
 /// See https://github.com/AOMediaCodec/av1-avif/issues/150
 ///     https://github.com/AOMediaCodec/av1-avif/issues/174
@@ -1201,8 +1192,8 @@ fn public_avis_major_no_pitm() {
     match mp4::read_avif(input, ParseStrictness::Normal) {
         Ok(context) => {
             assert_eq!(context.major_brand, mp4::AVIS_BRAND);
-            assert!(context.unsupported_features.contains(mp4::Feature::Avis));
             assert!(context.primary_item_coded_data().is_none());
+            assert!(context.sequence.is_some());
         }
         Err(e) => panic!("Expected Ok(_), found {:?}", e),
     }
@@ -1214,9 +1205,9 @@ fn public_avis_major_with_pitm_and_alpha() {
     match mp4::read_avif(input, ParseStrictness::Normal) {
         Ok(context) => {
             assert_eq!(context.major_brand, mp4::AVIS_BRAND);
-            assert!(context.unsupported_features.contains(mp4::Feature::Avis));
             assert!(context.primary_item_coded_data().is_some());
             assert!(context.alpha_item_coded_data().is_some());
+            assert!(context.sequence.is_some());
         }
         Err(e) => panic!("Expected Ok(_), found {:?}", e),
     }
