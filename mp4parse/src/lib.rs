@@ -72,7 +72,7 @@ trait ToU64 {
 
 /// Statically verify that the platform `usize` can fit within a `u64`.
 /// If the size won't fit on the given platform, this will fail at compile time, but if a type
-/// which can fail TryInto<usize> is used, it may panic.
+/// which can fail `TryInto<usize>` is used, it may panic.
 impl ToU64 for usize {
     fn to_u64(self) -> u64 {
         static_assertions::const_assert!(
@@ -90,7 +90,7 @@ pub trait ToUsize {
 
 /// Statically verify that the given type can fit within a `usize`.
 /// If the size won't fit on the given platform, this will fail at compile time, but if a type
-/// which can fail TryInto<usize> is used, it may panic.
+/// which can fail `TryInto<usize>` is used, it may panic.
 macro_rules! impl_to_usize_from {
     ( $from_type:ty ) => {
         impl ToUsize for $from_type {
