@@ -328,7 +328,7 @@ impl<'a> Iterator for TimeOffsetIterator<'a> {
 impl<'a> TimeOffsetIterator<'a> {
     fn next_offset_time(&mut self) -> TrackScaledTime<i64> {
         match self.next() {
-            Some(v) => TrackScaledTime::<i64>(v as i64, self.track_id),
+            Some(v) => TrackScaledTime::<i64>(v, self.track_id),
             _ => TrackScaledTime::<i64>(0, self.track_id),
         }
     }

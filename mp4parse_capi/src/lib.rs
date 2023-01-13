@@ -1390,7 +1390,7 @@ pub unsafe extern "C" fn mp4parse_get_fragment_info(
 
     if let (Some(time), Some(scale)) = (duration, context.timescale) {
         info.fragment_duration = match media_time_to_us(time, scale) {
-            Some(time_us) => time_us.0 as u64,
+            Some(time_us) => time_us.0,
             None => return Mp4parseStatus::Invalid,
         }
     }
