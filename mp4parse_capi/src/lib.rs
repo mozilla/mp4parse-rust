@@ -1112,7 +1112,7 @@ fn mp4parse_avif_get_info_safe(context: &AvifContext) -> mp4parse::Result<Mp4par
     let primary_item_bit_depth =
         get_bit_depth(context.primary_item_bits_per_channel().unwrap_or(Ok(&[]))?);
     let alpha_item_bit_depth =
-        get_bit_depth(context.primary_item_bits_per_channel().unwrap_or(Ok(&[]))?);
+        get_bit_depth(context.alpha_item_bits_per_channel().unwrap_or(Ok(&[]))?);
 
     if let Some(sequence) = &context.sequence {
         // Tracks must have track_id and samples
