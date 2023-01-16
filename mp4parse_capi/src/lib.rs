@@ -314,6 +314,20 @@ pub struct Mp4parseParser {
 
 #[repr(C)]
 #[derive(Debug)]
+pub enum Mp4parseAvifLoopMode {
+    NoEdits,
+    LoopByCount,
+    LoopInfinitely,
+}
+
+impl Default for Mp4parseAvifLoopMode {
+    fn default() -> Self {
+        Mp4parseAvifLoopMode::NoEdits
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
 pub struct Mp4parseAvifInfo {
     pub premultiplied_alpha: bool,
     pub major_brand: [u8; 4],
@@ -338,6 +352,14 @@ pub struct Mp4parseAvifInfo {
 
     /// Whether there is a sequence. Can be true with no primary image.
     pub has_sequence: bool,
+    /// Indicates whether the EditListBox requests that the image be looped.
+    pub loop_mode: Mp4parseAvifLoopMode,
+    /// Number of times to loop the animation during playback.
+    ///
+    /// The duration of the animation specified in `elst` must be looped to fill the
+    /// duration of the color track. If the resulting loop count is not an integer,
+    /// then it will be ceiled to play past and fill the entire track's duration.
+    pub loop_count: u64,
     /// The color track's ID, which must be valid if has_sequence is true.
     pub color_track_id: u32,
     pub color_track_bit_depth: u8,
@@ -1096,6 +1118,8 @@ fn mp4parse_avif_get_info_safe(context: &AvifContext) -> mp4parse::Result<Mp4par
         alpha_item_bit_depth: 0,
 
         has_sequence: false,
+        loop_mode: Mp4parseAvifLoopMode::NoEdits,
+        loop_count: 0,
         color_track_id: 0,
         color_track_bit_depth: 0,
         alpha_track_id: 0,
@@ -1182,10 +1206,38 @@ fn mp4parse_avif_get_info_safe(context: &AvifContext) -> mp4parse::Result<Mp4par
             _ => (0, 0),
         };
 
+        let (loop_mode, loop_count) = match color_track.tkhd.as_ref().map(|tkhd| tkhd.duration) {
+            Some(movie_duration) if movie_duration == std::u64::MAX => {
+                (Mp4parseAvifLoopMode::LoopInfinitely, 0)
+            }
+            Some(movie_duration) => match color_track.looped {
+                Some(true) => match color_track.edited_duration.map(|v| v.0) {
+                    Some(segment_duration) => {
+                        match movie_duration.checked_div(segment_duration).and_then(|n| {
+                            match movie_duration.checked_rem(segment_duration) {
+                                Some(0) => Some(n.saturating_sub(1)),
+                                Some(_) => Some(n),
+                                None => None,
+                            }
+                        }) {
+                            Some(n) => (Mp4parseAvifLoopMode::LoopByCount, n),
+                            None => (Mp4parseAvifLoopMode::LoopInfinitely, 0),
+                        }
+                    }
+                    None => (Mp4parseAvifLoopMode::NoEdits, 0),
+                },
+                Some(false) => (Mp4parseAvifLoopMode::LoopByCount, 0),
+                None => (Mp4parseAvifLoopMode::NoEdits, 0),
+            },
+            None => (Mp4parseAvifLoopMode::LoopInfinitely, 0),
+        };
+
         return Ok(Mp4parseAvifInfo {
             primary_item_bit_depth,
             alpha_item_bit_depth,
             has_sequence: true,
+            loop_mode,
+            loop_count,
             color_track_id,
             color_track_bit_depth,
             alpha_track_id,
