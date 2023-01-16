@@ -86,6 +86,8 @@ static AVIF_AVIS_MAJOR_NO_PITM: &str =
 /// but with https://github.com/AOMediaCodec/av1-avif/issues/177 fixed
 static AVIF_AVIS_MAJOR_WITH_PITM_AND_ALPHA: &str = "tests/alpha_video_fixed.avif";
 static AVIF_AVIS_MAJOR_NO_MOOV: &str = "tests/corrupt/alpha_video_moov_is_moop.avif";
+static AVIF_AVIS_NO_LOOP: &str = "tests/loop_none.avif";
+static AVIF_AVIS_LOOP_FOREVER: &str = "tests/loop_forever.avif";
 static AVIF_NO_PIXI_IMAGES: &[&str] = &[IMAGE_AVIF_NO_PIXI, IMAGE_AVIF_NO_ALPHA_PIXI];
 static AVIF_UNSUPPORTED_IMAGES: &[&str] = &[
     AVIF_A1LX,
@@ -1207,7 +1209,13 @@ fn public_avis_major_with_pitm_and_alpha() {
             assert_eq!(context.major_brand, mp4::AVIS_BRAND);
             assert!(context.primary_item_coded_data().is_some());
             assert!(context.alpha_item_coded_data().is_some());
-            assert!(context.sequence.is_some());
+            match context.sequence {
+                Some(sequence) => {
+                    assert!(!sequence.tracks.is_empty());
+                    assert_eq!(sequence.tracks[0].looped, None);
+                }
+                None => panic!("Expected sequence"),
+            }
         }
         Err(e) => panic!("Expected Ok(_), found {:?}", e),
     }
@@ -1216,6 +1224,36 @@ fn public_avis_major_with_pitm_and_alpha() {
 #[test]
 fn public_avif_avis_major_no_moov() {
     assert_avif_shall(AVIF_AVIS_MAJOR_NO_MOOV, Status::MoovMissing);
+}
+
+fn public_avis_loop_impl(path: &str, looped: bool) {
+    let input = &mut File::open(path).expect("Unknown file");
+    match mp4::read_avif(input, ParseStrictness::Normal) {
+        Ok(context) => match context.sequence {
+            Some(sequence) => {
+                assert!(!sequence.tracks.is_empty());
+                assert_eq!(sequence.tracks[0].looped, Some(looped));
+                if looped {
+                    assert!(sequence.tracks[0].edited_duration.is_some());
+                }
+            }
+            None => panic!(
+                "Expected sequence in {}",
+                AVIF_AVIS_MAJOR_WITH_PITM_AND_ALPHA
+            ),
+        },
+        Err(e) => panic!("Expected Ok(_), found {:?}", e),
+    }
+}
+
+#[test]
+fn public_avif_avis_no_loop() {
+    public_avis_loop_impl(AVIF_AVIS_NO_LOOP, false);
+}
+
+#[test]
+fn public_avif_avis_loop_forever() {
+    public_avis_loop_impl(AVIF_AVIS_LOOP_FOREVER, true);
 }
 
 #[test]

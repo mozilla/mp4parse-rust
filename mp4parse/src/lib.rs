@@ -988,6 +988,7 @@ pub struct TrackHeaderBox {
 /// Edit list box 'elst'
 #[derive(Debug)]
 struct EditListBox {
+    looped: bool,
     edits: TryVec<Edit>,
 }
 
@@ -2242,7 +2243,9 @@ where
 pub struct Track {
     pub id: usize,
     pub track_type: TrackType,
+    pub looped: Option<bool>,
     pub empty_duration: Option<MediaScaledTime>,
+    pub edited_duration: Option<MediaScaledTime>,
     pub media_time: Option<TrackScaledTime<u64>>,
     pub timescale: Option<TrackTimeScale<u64>>,
     pub duration: Option<TrackScaledTime<u64>>,
@@ -4402,6 +4405,8 @@ fn read_edts<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
                 if media_time < 0 {
                     debug!("unexpected negative media time in edit");
                 }
+                track.looped = Some(elst.looped);
+                track.edited_duration = Some(MediaScaledTime(elst.edits[idx].segment_duration));
                 track.media_time = Some(TrackScaledTime::<u64>(
                     std::cmp::max(0, media_time) as u64,
                     track.id,
@@ -4668,7 +4673,7 @@ fn read_tkhd<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackHeaderBox> {
 /// Parse a elst box.
 /// See ISOBMFF (ISO 14496-12:2020) § 8.6.6
 fn read_elst<T: Read>(src: &mut BMFFBox<T>) -> Result<EditListBox> {
-    let (version, _) = read_fullbox_extra(src)?;
+    let (version, flags) = read_fullbox_extra(src)?;
     let edit_count = be_u32(src)?;
     let mut edits = TryVec::with_capacity(edit_count.to_usize())?;
     for _ in 0..edit_count {
@@ -4696,7 +4701,10 @@ fn read_elst<T: Read>(src: &mut BMFFBox<T>) -> Result<EditListBox> {
     // Padding could be added in some contents.
     skip_box_remain(src)?;
 
-    Ok(EditListBox { edits })
+    Ok(EditListBox {
+        looped: flags == 1,
+        edits,
+    })
 }
 
 /// Parse a mdhd box.
