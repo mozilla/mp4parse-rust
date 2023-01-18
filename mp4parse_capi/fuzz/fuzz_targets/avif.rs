@@ -4,6 +4,7 @@ use libfuzzer_sys::fuzz_target;
 use mp4parse_capi::*;
 use std::convert::TryInto;
 use std::io::Read;
+use std::mem::MaybeUninit;
 
 type CursorType<'a> = std::io::Cursor<&'a [u8]>;
 
@@ -28,6 +29,12 @@ fuzz_target!(|data: &[u8]| {
         if mp4parse_avif_new(&io, ParseStrictness::Normal, &mut context) != Mp4parseStatus::Ok {
             return;
         }
+
+        let _info = {
+            let mut info = MaybeUninit::zeroed();
+            let _ = mp4parse_avif_get_info(&*context, info.as_mut_ptr());
+            info.assume_init()
+        };
 
         let _ = mp4parse_avif_get_image_safe(&*context);
 
