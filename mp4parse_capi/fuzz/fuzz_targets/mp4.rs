@@ -55,6 +55,8 @@ fuzz_target!(|data: &[u8]| {
                 }
                 // No C API for metadata tracks yet.
                 Mp4parseTrackType::Metadata => {}
+                // Skip image data - handled by AVIF fuzzer.
+                Mp4parseTrackType::Picture | Mp4parseTrackType::AuxiliaryVideo => {}
             }
 
             let mut indices = Default::default();
