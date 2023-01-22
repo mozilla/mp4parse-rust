@@ -1288,7 +1288,7 @@ fn public_avif_read_samples_impl(strictness: ParseStrictness) {
             let path = entry.path();
             let extension = path.extension().unwrap_or_default();
             if !path.is_file() || (extension != "avif" && extension != "avifs") {
-                eprintln!("Skipping {:?}", path);
+                eprintln!("Skipping {path:?}");
                 continue; // Skip directories, ReadMe.txt, etc.
             }
             let corrupt = (path.canonicalize().unwrap().parent().unwrap()
@@ -1318,10 +1318,10 @@ fn public_avif_read_samples_impl(strictness: ParseStrictness) {
                         "{:?}",
                         c.unsupported_features
                     );
-                    eprintln!("Successfully parsed {:?}", path)
+                    eprintln!("Successfully parsed {path:?}")
                 }
                 Err(e) if corrupt => {
-                    eprintln!("Expected error parsing corrupt input {:?}: {:?}", path, e)
+                    eprintln!("Expected error parsing corrupt input {path:?}: {e:?}")
                 }
                 Err(e) => panic!("Unexpected error parsing {:?}: {:?}", path, e),
             }

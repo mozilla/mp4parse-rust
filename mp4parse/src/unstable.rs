@@ -146,7 +146,7 @@ pub fn create_sample_table(
     };
 
     let (stsc, stco, stsz, stts) = match (&track.stsc, &track.stco, &track.stsz, &track.stts) {
-        (&Some(ref a), &Some(ref b), &Some(ref c), &Some(ref d)) => (a, b, c, d),
+        (Some(a), Some(b), Some(c), Some(d)) => (a, b, c, d),
         _ => return None,
     };
 

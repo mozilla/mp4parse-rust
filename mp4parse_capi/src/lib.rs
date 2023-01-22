@@ -72,8 +72,9 @@ struct HashMap;
 struct String;
 
 #[repr(C)]
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Default)]
 pub enum Mp4parseTrackType {
+    #[default]
     Video = 0,
     Picture = 1,
     AuxiliaryVideo = 2,
@@ -81,16 +82,11 @@ pub enum Mp4parseTrackType {
     Metadata = 4,
 }
 
-impl Default for Mp4parseTrackType {
-    fn default() -> Self {
-        Mp4parseTrackType::Video
-    }
-}
-
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[repr(C)]
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Default)]
 pub enum Mp4parseCodec {
+    #[default]
     Unknown,
     Aac,
     Flac,
@@ -111,15 +107,10 @@ pub enum Mp4parseCodec {
     AMRWB,
 }
 
-impl Default for Mp4parseCodec {
-    fn default() -> Self {
-        Mp4parseCodec::Unknown
-    }
-}
-
 #[repr(C)]
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Default)]
 pub enum Mp4ParseEncryptionSchemeType {
+    #[default]
     None,
     Cenc,
     Cbc1,
@@ -128,12 +119,6 @@ pub enum Mp4ParseEncryptionSchemeType {
     // Schemes also have a version component. At the time of writing, this does
     // not impact handling, so we do not expose it. Note that this may need to
     // be exposed in future, should the spec change.
-}
-
-impl Default for Mp4ParseEncryptionSchemeType {
-    fn default() -> Self {
-        Mp4ParseEncryptionSchemeType::None
-    }
 }
 
 #[repr(C)]
@@ -313,17 +298,12 @@ pub struct Mp4parseParser {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub enum Mp4parseAvifLoopMode {
+    #[default]
     NoEdits,
     LoopByCount,
     LoopInfinitely,
-}
-
-impl Default for Mp4parseAvifLoopMode {
-    fn default() -> Self {
-        Mp4parseAvifLoopMode::NoEdits
-    }
 }
 
 #[repr(C)]
@@ -1482,7 +1462,7 @@ pub unsafe extern "C" fn mp4parse_is_fragmented(
     iter.find(|track| track.track_id == Some(track_id))
         .map_or(Mp4parseStatus::BadArg, |track| {
             match (&track.stsc, &track.stco, &track.stts) {
-                (&Some(ref stsc), &Some(ref stco), &Some(ref stts))
+                (Some(stsc), Some(stco), Some(stts))
                     if stsc.samples.is_empty()
                         && stco.offsets.is_empty()
                         && stts.samples.is_empty() =>

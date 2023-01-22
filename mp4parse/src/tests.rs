@@ -1104,7 +1104,7 @@ fn read_stsd_mp4v() {
     let esds_specific_data = &mp4v[90..];
     #[cfg(feature = "mp4v")]
     let esds_specific_data = &mp4v[112..151];
-    println!("esds_specific_data {:?}", esds_specific_data);
+    println!("esds_specific_data {esds_specific_data:?}");
 
     let mut stream = make_box(BoxSize::Auto, b"mp4v", |s| s.append_bytes(mp4v.as_slice()));
     let mut iter = super::BoxIter::new(&mut stream);

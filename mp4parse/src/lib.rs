@@ -852,7 +852,7 @@ pub enum Error {
 
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -1533,7 +1533,7 @@ impl fmt::Debug for IsobmffItem {
         match &self {
             IsobmffItem::MdatLocation(extent) | IsobmffItem::IdatLocation(extent) => f
                 .debug_struct("IsobmffItem::Location")
-                .field("0", &format_args!("{:?}", extent))
+                .field("0", &format_args!("{extent:?}"))
                 .finish(),
             IsobmffItem::Data(data) => f
                 .debug_struct("IsobmffItem::Data")
@@ -2139,36 +2139,26 @@ enum Extent {
     ToEnd { offset: u64 },
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub enum TrackType {
     Audio,
     Video,
     Picture,
     AuxiliaryVideo,
     Metadata,
+    #[default]
     Unknown,
-}
-
-impl Default for TrackType {
-    fn default() -> Self {
-        TrackType::Unknown
-    }
 }
 
 // This type is used by mp4parse_capi since it needs to be passed from FFI consumers
 // The C-visible struct is renamed via mp4parse_capi/cbindgen.toml to match naming conventions
 #[repr(C)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum ParseStrictness {
     Permissive, // Error only on ambiguous inputs
-    Normal,     // Error on "shall" directives, log warnings for "should"
+    #[default]
+    Normal, // Error on "shall" directives, log warnings for "should"
     Strict,     // Error on "should" directives
-}
-
-impl Default for ParseStrictness {
-    fn default() -> Self {
-        ParseStrictness::Normal
-    }
 }
 
 fn fail_with_status_if(violation: bool, status: Status) -> Result<()> {
@@ -2181,8 +2171,9 @@ fn fail_with_status_if(violation: bool, status: Status) -> Result<()> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CodecType {
+    #[default]
     Unknown,
     MP3,
     AAC,
@@ -2202,12 +2193,6 @@ pub enum CodecType {
     AMRNB,
     #[cfg(feature = "3gpp")]
     AMRWB,
-}
-
-impl Default for CodecType {
-    fn default() -> Self {
-        CodecType::Unknown
-    }
 }
 
 /// The media's global (mvhd) timescale in units per second.
