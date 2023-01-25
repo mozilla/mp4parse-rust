@@ -65,6 +65,7 @@ static IMAGE_AVIF_IMIR_MISSING_ESSENTIAL: &str = "tests/imir-missing-essential.a
 static IMAGE_AVIF_IROT_MISSING_ESSENTIAL: &str = "tests/irot-missing-essential.avif";
 static IMAGE_AVIF_LSEL_MISSING_ESSENTIAL: &str = "tests/corrupt/lsel-missing-essential.avif";
 static IMAGE_AVIF_CLAP_MISSING_ESSENTIAL: &str = "tests/clap-missing-essential.avif";
+static IMAGE_AVIF_UNKNOWN_MDAT_SIZE: &str = "tests/unknown_mdat.avif";
 static AVIF_TEST_DIRS: &[&str] = &["tests", "av1-avif/testFiles", "link-u-avif-sample-images"];
 
 // These files are
@@ -908,6 +909,19 @@ fn public_avif_alpha_premultiplied() {
         assert!(context.alpha_item_coded_data().is_some());
         assert!(context.premultiplied_alpha);
     });
+}
+
+#[test]
+fn public_avif_unknown_mdat() {
+    let input = &mut File::open(IMAGE_AVIF_UNKNOWN_MDAT_SIZE).expect("Unknown file");
+    let context = mp4::read_avif(input, ParseStrictness::Normal).expect("read_avif failed");
+    assert_eq!(
+        context.primary_item_coded_data().unwrap(),
+        [
+            0x12, 0x00, 0x0A, 0x07, 0x38, 0x00, 0x06, 0x90, 0x20, 0x20, 0x69, 0x32, 0x0C, 0x16,
+            0x00, 0x00, 0x00, 0x48, 0x00, 0x00, 0x00, 0x79, 0x4C, 0xD2, 0x02
+        ]
+    );
 }
 
 #[test]
