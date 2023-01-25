@@ -2275,7 +2275,7 @@ impl<'a, T: Read> BoxIter<'a, T> {
         match r {
             Ok(h) => Ok(Some(BMFFBox {
                 head: h,
-                content: self.src.take(h.size - h.offset),
+                content: self.src.take(h.size.saturating_sub(h.offset)),
             })),
             Err(Error::UnexpectedEOF) => Ok(None),
             Err(e) => Err(e),
@@ -2337,7 +2337,13 @@ fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
     let name = BoxType::from(be_u32(src)?);
     let size = match size32 {
         // valid only for top-level box and indicates it's the last box in the file.  usually mdat.
-        0 => return Err(Error::Unsupported("unknown sized box")),
+        0 => {
+            if name == BoxType::MediaDataBox {
+                0
+            } else {
+                return Err(Error::Unsupported("unknown sized box"));
+            }
+        }
         1 => {
             let size64 = be_u64(src)?;
             if size64 < BoxHeader::MIN_LARGE_SIZE {
@@ -2375,7 +2381,7 @@ fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
     } else {
         None
     };
-    assert!(offset <= size);
+    assert!(offset <= size || size == 0);
     Ok(BoxHeader {
         name,
         size,
@@ -2536,7 +2542,26 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
             }
             BoxType::MediaDataBox => {
                 let file_offset = b.offset();
-                let data = b.read_into_try_vec()?;
+                let data = if b.head.size == 0 {
+                    // Unknown sized `mdat`, read in chunks until EOF.
+                    const BUF_SIZE: usize = 64 * 1024;
+                    let mut data = TryVec::with_capacity(BUF_SIZE)?;
+                    loop {
+                        let got = fallible_collections::try_read_up_to(
+                            b.content.get_mut(),
+                            BUF_SIZE as u64,
+                            &mut data,
+                        )?;
+                        if got == 0 {
+                            // Mark `content` as consumed.
+                            b.content.set_limit(0);
+                            break;
+                        }
+                    }
+                    data
+                } else {
+                    b.read_into_try_vec()?
+                };
                 media_storage.push(DataBox::from_mdat(file_offset, data))?;
             }
             _ => skip_box_content(&mut b)?,
