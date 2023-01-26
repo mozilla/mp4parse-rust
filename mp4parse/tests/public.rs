@@ -86,6 +86,8 @@ static AVIF_AVIS_MAJOR_NO_PITM: &str =
 /// This is av1-avif/testFiles/Netflix/avis/alpha_video.avif
 /// but with https://github.com/AOMediaCodec/av1-avif/issues/177 fixed
 static AVIF_AVIS_MAJOR_WITH_PITM_AND_ALPHA: &str = "tests/alpha_video_fixed.avif";
+static AVIF_AVIS_WITH_NO_PITM_NO_ILOC: &str = "tests/avis_with_no_ptim_no_iloc.avif";
+static AVIF_AVIS_WITH_PITM_NO_ILOC: &str = "tests/avis_with_pitm_no_iloc.avif";
 static AVIF_AVIS_MAJOR_NO_MOOV: &str = "tests/corrupt/alpha_video_moov_is_moop.avif";
 static AVIF_AVIS_NO_LOOP: &str = "tests/loop_none.avif";
 static AVIF_AVIS_LOOP_FOREVER: &str = "tests/loop_forever.avif";
@@ -1238,6 +1240,17 @@ fn public_avis_major_with_pitm_and_alpha() {
 #[test]
 fn public_avif_avis_major_no_moov() {
     assert_avif_shall(AVIF_AVIS_MAJOR_NO_MOOV, Status::MoovMissing);
+}
+
+#[test]
+fn public_avif_avis_with_no_pitm_no_iloc() {
+    let input = &mut File::open(AVIF_AVIS_WITH_NO_PITM_NO_ILOC).expect("Unknown file");
+    assert!(mp4::read_avif(input, ParseStrictness::Normal).is_ok());
+}
+
+#[test]
+fn public_avif_avis_with_pitm_no_iloc() {
+    assert_avif_should(AVIF_AVIS_WITH_PITM_NO_ILOC, Status::PitmNotFound);
 }
 
 fn public_avis_loop_impl(path: &str, looped: bool) {

@@ -222,7 +222,6 @@ pub enum Status {
     IlocBadQuantity,
     IlocBadSize,
     IlocDuplicateItemId,
-    IlocMissing,
     IlocNotFound,
     IlocOffsetOverflow,
     ImageItemType,
@@ -260,6 +259,7 @@ pub enum Status {
     NoImage,
     PitmBadQuantity,
     PitmMissing,
+    PitmNotFound,
     PixiBadChannelCount,
     PixiMissing,
     PsshSizeOverflow,
@@ -597,9 +597,6 @@ impl From<Status> for &str {
             Status::IlocDuplicateItemId => {
                 "duplicate item_ID in iloc"
             }
-            Status::IlocMissing => {
-                "iloc missing"
-            }
             Status::IlocNotFound => {
                 "ItemLocationBox (iloc) contains an extent not present in any mdat or idat box"
             }
@@ -731,6 +728,9 @@ impl From<Status> for &str {
             Status::PitmMissing => {
                 "Missing required PrimaryItemBox (pitm), required \
                  per HEIF (ISO/IEC 23008-12:2017) § 10.2.1"
+            }
+            Status::PitmNotFound => {
+                "PrimaryItemBox (pitm) referenced an item ID that was not present"
             }
             Status::PixiBadChannelCount => {
                 "invalid num_channels"
@@ -2708,6 +2708,12 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         assert!(item.is_some());
     }
 
+    if (primary_item_id.is_some() && primary_item.is_none())
+        || (alpha_item_id.is_some() && alpha_item.is_none())
+    {
+        fail_with_status_if(strictness == ParseStrictness::Strict, Status::PitmNotFound)?;
+    }
+
     assert!(primary_item.is_none() || primary_item_id.is_some());
     assert!(alpha_item.is_none() || alpha_item_id.is_some());
 
@@ -2918,7 +2924,7 @@ fn read_avif_meta<T: Read + Offset>(
         item_references: item_references.unwrap_or_default(),
         primary_item_id,
         item_infos: item_infos.unwrap_or_default(),
-        iloc_items: iloc_items.ok_or_else(|| Error::from(Status::IlocMissing))?,
+        iloc_items: iloc_items.unwrap_or_default(),
         item_data_box,
     })
 }
