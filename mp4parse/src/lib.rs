@@ -4402,6 +4402,7 @@ fn read_edts<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
         match b.head.name {
             BoxType::EditListBox => {
                 let elst = read_elst(&mut b)?;
+                track.looped = Some(elst.looped);
                 if elst.edits.is_empty() {
                     debug!("empty edit list");
                     continue;
@@ -4421,7 +4422,6 @@ fn read_edts<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
                 if media_time < 0 {
                     debug!("unexpected negative media time in edit");
                 }
-                track.looped = Some(elst.looped);
                 track.edited_duration = Some(MediaScaledTime(elst.edits[idx].segment_duration));
                 track.media_time = Some(TrackScaledTime::<u64>(
                     std::cmp::max(0, media_time) as u64,
