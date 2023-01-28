@@ -1245,7 +1245,19 @@ fn public_avif_avis_major_no_moov() {
 #[test]
 fn public_avif_avis_with_no_pitm_no_iloc() {
     let input = &mut File::open(AVIF_AVIS_WITH_NO_PITM_NO_ILOC).expect("Unknown file");
-    assert!(mp4::read_avif(input, ParseStrictness::Normal).is_ok());
+    match mp4::read_avif(input, ParseStrictness::Normal) {
+        Ok(context) => {
+            assert_eq!(context.major_brand, mp4::AVIS_BRAND);
+            match context.sequence {
+                Some(sequence) => {
+                    assert!(!sequence.tracks.is_empty());
+                    assert_eq!(sequence.tracks[0].looped, Some(false));
+                }
+                None => panic!("Expected sequence"),
+            }
+        }
+        Err(e) => panic!("Expected Ok(_), found {:?}", e),
+    }
 }
 
 #[test]
