@@ -7,7 +7,7 @@ use mp4parse as mp4;
 use crate::mp4::{ParseStrictness, Status};
 use std::convert::TryInto;
 use std::fs::File;
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::io::{Cursor, Read, Seek};
 
 static MINI_MP4: &str = "tests/minimal.mp4";
 static MINI_MP4_WITH_METADATA: &str = "tests/metadata.mp4";
@@ -949,7 +949,7 @@ fn for_strictness_result(
         ParseStrictness::Normal,
         ParseStrictness::Strict,
     ] {
-        input.seek(SeekFrom::Start(0)).expect("rewind failed");
+        input.rewind().expect("rewind failed");
         check(strictness, mp4::read_avif(input, strictness));
     }
 }
@@ -1116,6 +1116,7 @@ fn public_avif_transform_order() {
     assert_avif_shall(IMAGE_AVIF_TRANSFORM_ORDER, Status::TxformOrder);
 }
 
+#[allow(clippy::uninlined_format_args)]
 fn assert_unsupported_nonfatal(result: &mp4::Result<mp4::AvifContext>, feature: mp4::Feature) {
     match result {
         Ok(context) => {
