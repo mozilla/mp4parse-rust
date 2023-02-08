@@ -2348,19 +2348,8 @@ fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<Option<BoxHeader>> {
                 return Err(Error::Unsupported("unknown sized box"));
             }
         }
-        1 => {
-            let size64 = be_u64(src)?;
-            if size64 < BoxHeader::MIN_LARGE_SIZE {
-                return Status::BoxBadWideSize.into();
-            }
-            size64
-        }
-        _ => {
-            if u64::from(size32) < BoxHeader::MIN_SIZE {
-                return Status::BoxBadSize.into();
-            }
-            u64::from(size32)
-        }
+        1 => be_u64(src)?,
+        _ => u64::from(size32),
     };
     trace!("read_box_header: name: {:?}, size: {}", name, size);
     let mut offset = match size32 {
@@ -2385,7 +2374,13 @@ fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<Option<BoxHeader>> {
     } else {
         None
     };
-    assert!(offset <= size || size == 0);
+    if size != 0 && offset > size {
+        if size32 == 1 {
+            return Err(Error::from(Status::BoxBadWideSize));
+        } else {
+            return Err(Error::from(Status::BoxBadSize));
+        }
+    }
     Ok(Some(BoxHeader {
         name,
         size,
