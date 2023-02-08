@@ -2364,11 +2364,10 @@ fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<Option<BoxHeader>> {
             if count == 16 {
                 Some(buffer)
             } else {
-                debug!("malformed uuid (short read), skipping");
-                None
+                debug!("malformed uuid (short read)");
+                return Err(Error::UnexpectedEOF);
             }
         } else {
-            debug!("malformed uuid, skipping");
             None
         }
     } else {
