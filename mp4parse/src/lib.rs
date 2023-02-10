@@ -2373,12 +2373,11 @@ fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<Option<BoxHeader>> {
     } else {
         None
     };
-    if size != 0 && offset > size {
-        if size32 == 1 {
-            return Err(Error::from(Status::BoxBadWideSize));
-        } else {
-            return Err(Error::from(Status::BoxBadSize));
-        }
+    match size32 {
+        0 => (),
+        1 if offset > size => return Err(Error::from(Status::BoxBadWideSize)),
+        _ if offset > size => return Err(Error::from(Status::BoxBadSize)),
+        _ => (),
     }
     Ok(Some(BoxHeader {
         name,
