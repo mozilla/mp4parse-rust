@@ -1295,6 +1295,7 @@ pub unsafe extern "C" fn mp4parse_get_indice_table(
         &(*parser).context,
         &mut (*parser).sample_table,
         track_id,
+        None,
         &mut *indices,
     )
     .into()
@@ -1312,6 +1313,7 @@ pub unsafe extern "C" fn mp4parse_get_indice_table(
 pub unsafe extern "C" fn mp4parse_avif_get_indice_table(
     parser: *mut Mp4parseAvifParser,
     track_id: u32,
+    available_size: usize,
     indices: *mut Mp4parseByteData,
 ) -> Mp4parseStatus {
     if parser.is_null() {
@@ -1330,6 +1332,10 @@ pub unsafe extern "C" fn mp4parse_avif_get_indice_table(
             sequence,
             &mut (*parser).sample_table,
             track_id,
+            match available_size {
+                0 => None,
+                _ => Some(available_size),
+            },
             &mut *indices,
         )
         .into();
@@ -1342,6 +1348,7 @@ fn get_indice_table(
     context: &MediaContext,
     sample_table_cache: &mut TryHashMap<u32, TryVec<Indice>>,
     track_id: u32,
+    available_size: Option<usize>,
     indices: &mut Mp4parseByteData,
 ) -> Result<(), Mp4parseStatus> {
     let tracks = &context.tracks;
@@ -1380,7 +1387,7 @@ fn get_indice_table(
         _ => 0.into(),
     };
 
-    if let Some(v) = create_sample_table(track, offset_time) {
+    if let Some(v) = create_sample_table(track, offset_time, available_size) {
         indices.set_indices(&v);
         sample_table_cache.insert(track_id, v)?;
         return Ok(());
