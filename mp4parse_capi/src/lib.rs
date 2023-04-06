@@ -275,8 +275,9 @@ impl Default for Mp4parseTrackVideoInfo {
 #[derive(Default, Debug)]
 pub struct Mp4parseFragmentInfo {
     pub fragment_duration: u64, // in ticks
-                                // TODO:
-                                // info in trex box.
+    pub time_scale: u64,
+    // TODO:
+    // info in trex box.
 }
 
 #[derive(Default)]
@@ -1425,14 +1426,12 @@ pub unsafe extern "C" fn mp4parse_get_fragment_info(
         None => return Mp4parseStatus::Invalid,
     };
 
-    match duration {
-        Some(duration_ticks) => {
-            info.fragment_duration = duration_ticks.0;
-        }
-        None => return Mp4parseStatus::Invalid,
+    if let (Some(time), Some(scale)) = (duration, context.timescale) {
+        info.fragment_duration = time.0;
+        info.time_scale = scale.0;
+        return Mp4parseStatus::Ok;
     };
-
-    Mp4parseStatus::Ok
+    Mp4parseStatus::Invalid
 }
 
 /// Determine if an mp4 file is fragmented. A fragmented file needs mvex table
