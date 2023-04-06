@@ -1297,6 +1297,7 @@ pub unsafe extern "C" fn mp4parse_avif_get_indice_table(
     parser: *mut Mp4parseAvifParser,
     track_id: u32,
     indices: *mut Mp4parseByteData,
+    timescale: *mut u64,
 ) -> Mp4parseStatus {
     if parser.is_null() {
         return Mp4parseStatus::BadArg;
@@ -1306,10 +1307,35 @@ pub unsafe extern "C" fn mp4parse_avif_get_indice_table(
         return Mp4parseStatus::BadArg;
     }
 
+    if timescale.is_null() {
+        return Mp4parseStatus::BadArg;
+    }
+
     // Initialize fields to default values to ensure all fields are always valid.
     *indices = Default::default();
 
     if let Some(sequence) = &(*parser).context.sequence {
+        // Use the top level timescale, and the track timescale if present.
+        let mut found_timescale = false;
+        if let Some(context_timescale) = sequence.timescale {
+            *timescale = context_timescale.0;
+            found_timescale = true;
+        }
+        let maybe_track_timescale = match sequence
+            .tracks
+            .iter()
+            .find(|track| track.track_id == Some(track_id))
+        {
+            Some(track) => track.timescale,
+            _ => None,
+        };
+        if let Some(track_timescale) = maybe_track_timescale {
+            found_timescale = true;
+            *timescale = track_timescale.0;
+        }
+        if !found_timescale {
+            return Mp4parseStatus::Invalid;
+        }
         return get_indice_table(
             sequence,
             &mut (*parser).sample_table,
