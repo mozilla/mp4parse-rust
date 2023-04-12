@@ -650,7 +650,9 @@ pub unsafe extern "C" fn mp4parse_get_track_info(
                 info.duration = 0
             }
         }
-    };
+    } else {
+        return Mp4parseStatus::Invalid;
+    }
 
     info.track_id = match track.track_id {
         Some(track_id) => track_id,
@@ -1837,4 +1839,25 @@ fn minimal_mp4_get_track_info_invalid_track_number() {
     unsafe {
         mp4parse_free(parser);
     }
+}
+
+#[test]
+fn parse_no_timescale() {
+    let mut file = std::fs::File::open("tests/no_timescale.mp4").expect("Unknown file");
+    let io = Mp4parseIo {
+        read: Some(valid_read),
+        userdata: &mut file as *mut _ as *mut std::os::raw::c_void,
+    };
+
+    unsafe {
+        let mut parser = std::ptr::null_mut();
+        let mut rv = mp4parse_new(&io, &mut parser);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert!(!parser.is_null());
+
+        // The file has a video track, but the track has a timescale of 0, so.
+        let mut track_info = Mp4parseTrackInfo::default();
+        rv = mp4parse_get_track_info(parser, 0, &mut track_info);
+        assert_eq!(rv, Mp4parseStatus::Invalid);
+    };
 }
