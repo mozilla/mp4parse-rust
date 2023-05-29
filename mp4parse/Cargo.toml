@@ -19,6 +19,7 @@ repository = "https://github.com/mozilla/mp4parse-rust"
 # Avoid complaints about trying to package test files.
 exclude = [
   "*.mp4",
+  "*.avif",
   "av1-avif/*"
 ]
 
