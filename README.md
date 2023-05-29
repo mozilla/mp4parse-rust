@@ -29,9 +29,10 @@ typically run by `cargo test`, so manual verification is required.
 
 # Versioning
 
-Prior to Firefox 95, versions of this library have been updated sporadically,
-and uploaded to crates.io even less frequently. Going forward, there will be
-a new release on github and crates.io whenever the version of the code used
-in Firefox (see [toolkit/library/rust/shared/Cargo.toml](https://searchfox.org/mozilla-central/source/toolkit/library/rust/shared/Cargo.toml#12))
-is updated. For convenience, tags will be added to indicate what version of
-the mp4parse is used in what version of Firefox.
+The master branch represents the last version released to crates.io plus any
+development since that release.  Firefox will ship specific git revisions from
+the master branch (refer to the `mp4parse_capi` dependency listed in
+[toolkit/library/rust/shared/Cargo.toml](https://searchfox.org/mozilla-central/source/toolkit/library/rust/shared/Cargo.toml#15)
+for the currently shipping revision).  When sufficient changes to merit a new
+crates.io release have occurred, the version in Cargo.toml will be bumped and
+tagged, and the new version published to crates.io.
