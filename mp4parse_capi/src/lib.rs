@@ -90,6 +90,8 @@ pub enum Mp4parseCodec {
     Flac,
     Opus,
     Avc,
+    #[cfg(feature = "hevc")]
+    Hevc,
     Vp9,
     Av1,
     Mp3,
@@ -954,6 +956,8 @@ fn mp4parse_get_track_video_info_safe(
             VideoCodecSpecific::VPxConfig(_) => Mp4parseCodec::Vp9,
             VideoCodecSpecific::AV1Config(_) => Mp4parseCodec::Av1,
             VideoCodecSpecific::AVCConfig(_) => Mp4parseCodec::Avc,
+            #[cfg(feature = "hevc")]
+            VideoCodecSpecific::HEVCConfig(_) => Mp4parseCodec::Hevc,
             VideoCodecSpecific::H263Config(_) => Mp4parseCodec::H263,
             #[cfg(feature = "mp4v")]
             VideoCodecSpecific::ESDSConfig(_) => Mp4parseCodec::Mp4v,
@@ -972,6 +976,10 @@ fn mp4parse_get_track_video_info_safe(
                 sample_info.extra_data.set_data(&config.raw_config);
             }
             VideoCodecSpecific::AVCConfig(ref data) | VideoCodecSpecific::ESDSConfig(ref data) => {
+                sample_info.extra_data.set_data(data);
+            }
+            #[cfg(feature = "hevc")]
+            VideoCodecSpecific::HEVCConfig(ref data) => {
                 sample_info.extra_data.set_data(data);
             }
             _ => {}

@@ -45,6 +45,7 @@ missing-pixi-permitted = []
 meta-xml = []
 unstable-api = []
 mp4v = []
+hevc = []
 
 [[bench]]
 name = "avif_benchmark"

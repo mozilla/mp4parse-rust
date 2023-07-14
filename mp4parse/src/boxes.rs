@@ -235,4 +235,10 @@ box_database!(
     SortArtistEntry                   0x736f_6172, // "soar"
     SortAlbumArtistEntry              0x736f_6161, // "soaa"
     SortComposerEntry                 0x736f_636f, // "soco"
+    #[cfg(feature = "hevc")]
+    HEV1SampleEntry                   0x6865_7631, // "hev1"
+    #[cfg(feature = "hevc")]
+    HVC1SampleEntry                   0x6876_6331, // "hvc1"
+    #[cfg(feature = "hevc")]
+    HEVCConfigurationBox              0x6876_6343, // "hvcC"
 );

@@ -1157,6 +1157,8 @@ pub struct AudioSampleEntry {
 #[derive(Debug)]
 pub enum VideoCodecSpecific {
     AVCConfig(TryVec<u8>),
+    #[cfg(feature = "hevc")]
+    HEVCConfig(TryVec<u8>),
     VPxConfig(VPxConfigBox),
     AV1Config(AV1ConfigBox),
     ESDSConfig(TryVec<u8>),
@@ -2180,6 +2182,8 @@ pub enum CodecType {
     FLAC,
     Opus,
     H264, // 14496-10
+    #[cfg(feature = "hevc")]
+    H265, // 23008-2
     MP4V, // 14496-2
     AV1,
     VP9,
@@ -5579,6 +5583,8 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
     let name = src.get_header().name;
     let codec_type = match name {
         BoxType::AVCSampleEntry | BoxType::AVC3SampleEntry => CodecType::H264,
+        #[cfg(feature = "hevc")]
+        BoxType::HEV1SampleEntry | BoxType::HVC1SampleEntry => CodecType::H265,
         BoxType::MP4VideoSampleEntry => CodecType::MP4V,
         BoxType::VP8SampleEntry => CodecType::VP8,
         BoxType::VP9SampleEntry => CodecType::VP9,
@@ -5628,6 +5634,24 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 debug!("{:?} (avcc)", avcc);
                 // TODO(kinetik): Parse avcC box?  For now we just stash the data.
                 codec_specific = Some(VideoCodecSpecific::AVCConfig(avcc));
+            }
+            #[cfg(feature = "hevc")]
+            BoxType::HEVCConfigurationBox => {
+                if (name != BoxType::HEV1SampleEntry
+                    && name != BoxType::HVC1SampleEntry
+                    && name != BoxType::ProtectedVisualSampleEntry)
+                    || codec_specific.is_some()
+                {
+                    return Status::StsdBadVideoSampleEntry.into();
+                }
+                let hvcc_size = b
+                    .head
+                    .size
+                    .checked_sub(b.head.offset)
+                    .expect("offset invalid");
+                let hvcc = read_buf(&mut b.content, hvcc_size)?;
+                debug!("{:?} (hvcc)", hvcc);
+                codec_specific = Some(VideoCodecSpecific::HEVCConfig(hvcc));
             }
             BoxType::H263SpecificBox => {
                 if (name != BoxType::H263SampleEntry) || codec_specific.is_some() {
