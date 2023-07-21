@@ -4328,7 +4328,7 @@ fn read_edts<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
 #[allow(clippy::type_complexity)] // Allow the complex return, maybe rework in future
 fn parse_mdhd<T: Read>(
     f: &mut BMFFBox<T>,
-    track: &mut Track,
+    track: &Track,
 ) -> Result<(
     MediaHeaderBox,
     Option<TrackScaledTime<u64>>,
@@ -5020,7 +5020,7 @@ fn read_ds_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
     }
 
     // We are in an Audio esda Box.
-    let frequency_table = vec![
+    let frequency_table = [
         (0x0, 96000),
         (0x1, 88200),
         (0x2, 64000),
@@ -5767,7 +5767,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
 /// Parse a stsd box.
 /// See ISOBMFF (ISO 14496-12:2020) § 8.5.2
 /// See MP4 (ISO 14496-14:2020) § 6.7.2
-fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &mut Track) -> Result<SampleDescriptionBox> {
+fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &Track) -> Result<SampleDescriptionBox> {
     let (_, flags) = read_fullbox_extra(src)?;
 
     if flags != 0 {
