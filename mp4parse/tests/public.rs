@@ -1458,7 +1458,7 @@ fn public_video_hevc() {
         assert_eq!(v.codec_type, mp4::CodecType::HEVC);
         assert_eq!(v.width, 640);
         assert_eq!(v.height, 480);
-        let _codec_specific = match &v.codec_specific {
+        match &v.codec_specific {
             mp4::VideoCodecSpecific::HEVCConfig(config) => {
                 assert_eq!(config.configuration_version, 1);
                 assert_eq!(config.general_profile_space, 0);
