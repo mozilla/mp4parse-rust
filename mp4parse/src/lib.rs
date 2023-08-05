@@ -5592,8 +5592,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
         BoxType::AV1SampleEntry => CodecType::AV1,
         BoxType::ProtectedVisualSampleEntry => CodecType::EncryptedVideo,
         BoxType::H263SampleEntry => CodecType::H263,
-        BoxType::HEVCSampleEntry => CodecType::HEVC,
-        BoxType::HEVCSampleEntry2 => CodecType::HEVC,
+        BoxType::HEV1SampleEntry | BoxType::HVC1SampleEntry => CodecType::HEVC,
         _ => {
             debug!("Unsupported video codec, box {:?} found", name);
             CodecType::Unknown
@@ -5706,7 +5705,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 protection_info.push(sinf)?;
             }
             BoxType::HEVCConfigurationBox => {
-                if name != BoxType::HEVCSampleEntry && name != BoxType::HEVCSampleEntry2 {
+                if name != BoxType::HEV1SampleEntry && name != BoxType::HVC1SampleEntry {
                     return Status::StsdBadVideoSampleEntry.into();
                 }
                 let hvcc = read_hvcc(&mut b)?;
