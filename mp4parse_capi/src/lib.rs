@@ -980,7 +980,9 @@ fn mp4parse_get_track_video_info_safe(
             VideoCodecSpecific::AV1Config(ref config) => {
                 sample_info.extra_data.set_data(&config.raw_config);
             }
-            VideoCodecSpecific::AVCConfig(ref data) | VideoCodecSpecific::ESDSConfig(ref data) => {
+            VideoCodecSpecific::AVCConfig(ref data)
+            | VideoCodecSpecific::ESDSConfig(ref data)
+            | VideoCodecSpecific::HEVCConfig(ref data) => {
                 sample_info.extra_data.set_data(data);
             }
             _ => {}

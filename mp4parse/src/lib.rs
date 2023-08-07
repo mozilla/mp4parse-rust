@@ -1161,7 +1161,7 @@ pub enum VideoCodecSpecific {
     AV1Config(AV1ConfigBox),
     ESDSConfig(TryVec<u8>),
     H263Config(TryVec<u8>),
-    HEVCConfig(HEVCConfigBox),
+    HEVCConfig(TryVec<u8>),
 }
 
 #[derive(Debug)]
@@ -1232,44 +1232,6 @@ impl AV1ConfigBox {
     pub fn config_obus(&self) -> &[u8] {
         &self.raw_config[Self::CONFIG_OBUS_OFFSET..]
     }
-}
-
-// Spec 8.3.2.1.2 HEVCDecoderConfigurationRecord
-#[derive(Debug)]
-pub struct NALUnit {
-    pub nal_unit_length: u16,
-    pub nal_unit_content: TryVec<u8>,
-}
-
-#[derive(Debug)]
-pub struct HEVCArrayInfo {
-    pub array_completeness: u8,
-    pub nal_unit_type: u8,
-    pub num_nalus: u16,
-    pub nal_units: TryVec<NALUnit>,
-}
-
-#[derive(Debug)]
-pub struct HEVCConfigBox {
-    pub configuration_version: u8,
-    pub general_profile_space: u8,
-    pub general_tier_flag: u8,
-    pub general_profile_idc: u8,
-    pub general_profile_compatibility_flags: u32,
-    pub general_constraint_indicator_flags: u64,
-    pub general_level_idc: u8,
-    pub min_spatial_segmentation_idc: u16,
-    pub parallelism_type: u8,
-    pub chroma_format_idc: u8,
-    pub bit_depth_luma_minus8: u8,
-    pub bit_depth_chroma_minus8: u8,
-    pub avg_frame_rate: u16,
-    pub constant_frame_rate: u8,
-    pub num_temporal_layers: u8,
-    pub temporal_id_nested: u8,
-    pub length_size_minus_one: u8,
-    pub num_of_arrays: u8,
-    pub array_infos: TryVec<HEVCArrayInfo>,
 }
 
 #[derive(Debug)]
@@ -4967,102 +4929,6 @@ fn read_av1c<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1ConfigBox> {
     })
 }
 
-fn read_hvcc<T: Read>(src: &mut BMFFBox<T>) -> Result<HEVCConfigBox> {
-    let configuration_version = src.read_u8()?;
-    let (general_profile_space, general_tier_flag, general_profile_idc) = {
-        let byte = src.read_u8()?;
-        ((byte >> 6) & 0x03, (byte >> 5) & 0x01, byte & 0x1F)
-    };
-    let general_profile_compatibility_flags = src.read_u32::<byteorder::BigEndian>()?;
-    let general_constraint_indicator_flags = {
-        let flag_high = src.read_u32::<byteorder::BigEndian>()?;
-        let flag_low: u16 = src.read_u16::<byteorder::BigEndian>()?;
-        (flag_high as u64) << 16 | flag_low as u64
-    };
-    let general_level_idc = src.read_u8()?;
-    let (min_spatial_segmentation_idc, parallelism_type, chroma_format_idc) = {
-        let byte = src.read_u32::<byteorder::BigEndian>()?;
-        (
-            ((byte >> 16) & 0x0FFF) as u16,
-            ((byte >> 8) & 0x03) as u8,
-            (byte & 0x03) as u8,
-        )
-    };
-    let (bit_depth_luma_minus8, bit_depth_chroma_minus8) = {
-        let byte = src.read_u16::<byteorder::BigEndian>()?;
-        (((byte >> 8) & 0x07) as u8, (byte & 0x07) as u8)
-    };
-    let avg_frame_rate = src.read_u16::<byteorder::BigEndian>()?;
-    let (constant_frame_rate, num_temporal_layers, temporal_id_nested, length_size_minus_one) = {
-        let byte = src.read_u8()?;
-        (
-            (byte >> 6) & 0x03,
-            (byte >> 3) & 0x07,
-            (byte >> 2) & 0x01,
-            byte & 0x03,
-        )
-    };
-    let num_of_arrays = src.read_u8()?;
-    let mut array_infos = TryVec::new();
-    for _i in 0..num_of_arrays {
-        let array_info = read_hevc_arry_info(src)?;
-        array_infos.push(array_info)?;
-    }
-    Ok(HEVCConfigBox {
-        configuration_version,
-        general_profile_space,
-        general_tier_flag,
-        general_profile_idc,
-        general_profile_compatibility_flags,
-        general_constraint_indicator_flags,
-        general_level_idc,
-        min_spatial_segmentation_idc,
-        parallelism_type,
-        chroma_format_idc,
-        bit_depth_luma_minus8,
-        bit_depth_chroma_minus8,
-        avg_frame_rate,
-        constant_frame_rate,
-        num_temporal_layers,
-        temporal_id_nested,
-        length_size_minus_one,
-        num_of_arrays,
-        array_infos,
-    })
-}
-
-fn read_hevc_arry_info<T: Read>(src: &mut BMFFBox<T>) -> Result<HEVCArrayInfo> {
-    let (array_completeness, nal_unit_type) = {
-        let byte = src.read_u8()?;
-        ((byte >> 7) & 0x01, byte & 0x3F)
-    };
-    let num_nalus = src.read_u16::<byteorder::BigEndian>()?;
-    let mut nal_units = TryVec::new();
-    for _i in 0..num_nalus {
-        let nal = read_nal_unit(src)?;
-        nal_units.push(nal)?;
-    }
-    Ok(HEVCArrayInfo {
-        array_completeness,
-        nal_unit_type,
-        num_nalus,
-        nal_units,
-    })
-}
-
-fn read_nal_unit<T: Read>(src: &mut BMFFBox<T>) -> Result<NALUnit> {
-    let nal_unit_length = src.read_u16::<byteorder::BigEndian>()?;
-    let mut nal_unit_content = TryVec::new();
-    for _i in 0..nal_unit_length {
-        let byte = src.read_u8()?;
-        nal_unit_content.push(byte)?;
-    }
-    Ok(NALUnit {
-        nal_unit_length,
-        nal_unit_content,
-    })
-}
-
 fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock> {
     let temp = src.read_u8()?;
     let block_type = temp & 0x7f;
@@ -5705,10 +5571,18 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 protection_info.push(sinf)?;
             }
             BoxType::HEVCConfigurationBox => {
-                if name != BoxType::HEV1SampleEntry && name != BoxType::HVC1SampleEntry {
+                if (name != BoxType::HEV1SampleEntry && name != BoxType::HVC1SampleEntry)
+                    || codec_specific.is_some()
+                {
                     return Status::StsdBadVideoSampleEntry.into();
                 }
-                let hvcc = read_hvcc(&mut b)?;
+                let hvcc_size = b
+                    .head
+                    .size
+                    .checked_sub(b.head.offset)
+                    .expect("offset invalid");
+                let hvcc = read_buf(&mut b.content, hvcc_size)?;
+                debug!("{:?} (hvcc)", hvcc);
                 codec_specific = Some(VideoCodecSpecific::HEVCConfig(hvcc));
             }
             _ => {

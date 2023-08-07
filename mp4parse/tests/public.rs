@@ -289,7 +289,8 @@ fn public_api() {
                         mp4::VideoCodecSpecific::H263Config(ref _h263) => {
                             "H263"
                         }
-                        mp4::VideoCodecSpecific::HEVCConfig(ref _hevc) => {
+                        mp4::VideoCodecSpecific::HEVCConfig(ref hevc) => {
+                            assert!(!hevc.is_empty());
                             "HEVC"
                         }
                     },
@@ -1458,27 +1459,8 @@ fn public_video_hevc() {
         assert_eq!(v.codec_type, mp4::CodecType::HEVC);
         assert_eq!(v.width, 640);
         assert_eq!(v.height, 480);
-        match &v.codec_specific {
-            mp4::VideoCodecSpecific::HEVCConfig(config) => {
-                assert_eq!(config.configuration_version, 1);
-                assert_eq!(config.general_profile_space, 0);
-                assert_eq!(config.general_tier_flag, 0);
-                assert_eq!(config.general_profile_idc, 1);
-                assert_eq!(config.general_profile_compatibility_flags, 1610612736);
-                assert_eq!(config.general_constraint_indicator_flags, 158329674399744);
-                assert_eq!(config.general_level_idc, 90);
-                assert_eq!(config.min_spatial_segmentation_idc, 0);
-                assert_eq!(config.parallelism_type, 0);
-                assert_eq!(config.chroma_format_idc, 1);
-                assert_eq!(config.bit_depth_luma_minus8, 0);
-                assert_eq!(config.bit_depth_chroma_minus8, 0);
-                assert_eq!(config.avg_frame_rate, 0);
-                assert_eq!(config.constant_frame_rate, 0);
-                assert_eq!(config.num_temporal_layers, 1);
-                assert_eq!(config.temporal_id_nested, 1);
-                assert_eq!(config.length_size_minus_one, 3);
-                assert_eq!(config.num_of_arrays, 4);
-            }
+        let _codec_specific = match &v.codec_specific {
+            mp4::VideoCodecSpecific::HEVCConfig(_) => true,
             _ => {
                 panic!("expected a HEVCConfig",);
             }
@@ -1495,6 +1477,7 @@ fn public_audio_amrnb() {
 
     let mut c = Cursor::new(&buf);
     let context = mp4::read_mp4(&mut c).expect("read_mp4 failed");
+
     for track in context.tracks {
         let stsd = track.stsd.expect("expected an stsd");
         let a = match stsd.descriptions.first().expect("expected a SampleEntry") {
