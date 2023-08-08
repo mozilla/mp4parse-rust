@@ -1477,7 +1477,6 @@ fn public_audio_amrnb() {
 
     let mut c = Cursor::new(&buf);
     let context = mp4::read_mp4(&mut c).expect("read_mp4 failed");
-
     for track in context.tracks {
         let stsd = track.stsd.expect("expected an stsd");
         let a = match stsd.descriptions.first().expect("expected a SampleEntry") {
