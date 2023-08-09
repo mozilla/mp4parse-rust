@@ -100,7 +100,7 @@ pub enum Mp4parseCodec {
     Ec3,
     Alac,
     H263,
-    HEVC,
+    Hevc,
     #[cfg(feature = "3gpp")]
     AMRNB,
     #[cfg(feature = "3gpp")]
@@ -963,7 +963,7 @@ fn mp4parse_get_track_video_info_safe(
             VideoCodecSpecific::AV1Config(_) => Mp4parseCodec::Av1,
             VideoCodecSpecific::AVCConfig(_) => Mp4parseCodec::Avc,
             VideoCodecSpecific::H263Config(_) => Mp4parseCodec::H263,
-            VideoCodecSpecific::HEVCConfig(_) => Mp4parseCodec::HEVC,
+            VideoCodecSpecific::HEVCConfig(_) => Mp4parseCodec::Hevc,
             #[cfg(feature = "mp4v")]
             VideoCodecSpecific::ESDSConfig(_) => Mp4parseCodec::Mp4v,
             #[cfg(not(feature = "mp4v"))]

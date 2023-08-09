@@ -2061,7 +2061,7 @@ pub enum CodecType {
     LPCM, // QT
     ALAC,
     H263,
-    HEVC,
+    HEVC, // 23008-2
     #[cfg(feature = "3gpp")]
     AMRNB,
     #[cfg(feature = "3gpp")]
@@ -5571,7 +5571,9 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 protection_info.push(sinf)?;
             }
             BoxType::HEVCConfigurationBox => {
-                if (name != BoxType::HEV1SampleEntry && name != BoxType::HVC1SampleEntry)
+                if (name != BoxType::HEV1SampleEntry
+                    && name != BoxType::HVC1SampleEntry
+                    && name != BoxType::ProtectedVisualSampleEntry)
                     || codec_specific.is_some()
                 {
                     return Status::StsdBadVideoSampleEntry.into();
