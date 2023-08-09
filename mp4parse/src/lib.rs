@@ -1161,6 +1161,7 @@ pub enum VideoCodecSpecific {
     AV1Config(AV1ConfigBox),
     ESDSConfig(TryVec<u8>),
     H263Config(TryVec<u8>),
+    HEVCConfig(TryVec<u8>),
 }
 
 #[derive(Debug)]
@@ -2060,6 +2061,7 @@ pub enum CodecType {
     LPCM, // QT
     ALAC,
     H263,
+    HEVC, // 23008-2
     #[cfg(feature = "3gpp")]
     AMRNB,
     #[cfg(feature = "3gpp")]
@@ -5456,6 +5458,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
         BoxType::AV1SampleEntry => CodecType::AV1,
         BoxType::ProtectedVisualSampleEntry => CodecType::EncryptedVideo,
         BoxType::H263SampleEntry => CodecType::H263,
+        BoxType::HEV1SampleEntry | BoxType::HVC1SampleEntry => CodecType::HEVC,
         _ => {
             debug!("Unsupported video codec, box {:?} found", name);
             CodecType::Unknown
@@ -5566,6 +5569,23 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 let sinf = read_sinf(&mut b)?;
                 debug!("{:?} (sinf)", sinf);
                 protection_info.push(sinf)?;
+            }
+            BoxType::HEVCConfigurationBox => {
+                if (name != BoxType::HEV1SampleEntry
+                    && name != BoxType::HVC1SampleEntry
+                    && name != BoxType::ProtectedVisualSampleEntry)
+                    || codec_specific.is_some()
+                {
+                    return Status::StsdBadVideoSampleEntry.into();
+                }
+                let hvcc_size = b
+                    .head
+                    .size
+                    .checked_sub(b.head.offset)
+                    .expect("offset invalid");
+                let hvcc = read_buf(&mut b.content, hvcc_size)?;
+                debug!("{:?} (hvcc)", hvcc);
+                codec_specific = Some(VideoCodecSpecific::HEVCConfig(hvcc));
             }
             _ => {
                 debug!("Unsupported video codec, box {:?} found", b.head.name);
