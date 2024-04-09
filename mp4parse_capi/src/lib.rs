@@ -439,7 +439,7 @@ pub struct Mp4parseIo {
 
 impl Read for Mp4parseIo {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if buf.len() > isize::max_value() as usize {
+        if buf.len() > isize::MAX as usize {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 "buf length overflow in Mp4parseIo Read impl",
@@ -583,7 +583,7 @@ pub unsafe extern "C" fn mp4parse_get_track_count(
     let context = (*parser).context();
 
     // Make sure the track count fits in a u32.
-    if context.tracks.len() > u32::max_value() as usize {
+    if context.tracks.len() > u32::MAX as usize {
         return Mp4parseStatus::Invalid;
     }
     *count = context.tracks.len() as u32;
@@ -763,7 +763,7 @@ fn get_track_audio_info(
 
         match audio.codec_specific {
             AudioCodecSpecific::ES_Descriptor(ref esds) => {
-                if esds.codec_esds.len() > std::u32::MAX as usize {
+                if esds.codec_esds.len() > u32::MAX as usize {
                     return Err(Mp4parseStatus::Invalid);
                 }
                 sample_info.extra_data.length = esds.codec_esds.len();
@@ -802,7 +802,7 @@ fn get_track_audio_info(
                     Ok(_) => {
                         opus_header.insert(track_index, v)?;
                         if let Some(v) = opus_header.get(&track_index) {
-                            if v.len() > std::u32::MAX as usize {
+                            if v.len() > u32::MAX as usize {
                                 return Err(Mp4parseStatus::Invalid);
                             }
                             sample_info.codec_specific_config.length = v.len();
@@ -849,7 +849,7 @@ fn get_track_audio_info(
                 sample_info.protected_data.skip_byte_block =
                     tenc.skip_byte_block_count.unwrap_or(0);
                 if let Some(ref iv_vec) = tenc.constant_iv {
-                    if iv_vec.len() > std::u32::MAX as usize {
+                    if iv_vec.len() > u32::MAX as usize {
                         return Err(Mp4parseStatus::Invalid);
                     }
                     sample_info.protected_data.constant_iv.set_data(iv_vec);
@@ -864,7 +864,7 @@ fn get_track_audio_info(
         .insert(track_index, audio_sample_infos)?;
     match parser.audio_track_sample_descriptions.get(&track_index) {
         Some(sample_info) => {
-            if sample_info.len() > std::u32::MAX as usize {
+            if sample_info.len() > u32::MAX as usize {
                 // Should never happen due to upper limits on number of sample
                 // descriptions a track can have, but lets be safe.
                 return Err(Mp4parseStatus::Invalid);
@@ -1017,7 +1017,7 @@ fn mp4parse_get_track_video_info_safe(
                 sample_info.protected_data.skip_byte_block =
                     tenc.skip_byte_block_count.unwrap_or(0);
                 if let Some(ref iv_vec) = tenc.constant_iv {
-                    if iv_vec.len() > std::u32::MAX as usize {
+                    if iv_vec.len() > u32::MAX as usize {
                         return Err(Mp4parseStatus::Invalid);
                     }
                     sample_info.protected_data.constant_iv.set_data(iv_vec);
@@ -1032,7 +1032,7 @@ fn mp4parse_get_track_video_info_safe(
         .insert(track_index, video_sample_infos)?;
     match parser.video_track_sample_descriptions.get(&track_index) {
         Some(sample_info) => {
-            if sample_info.len() > std::u32::MAX as usize {
+            if sample_info.len() > u32::MAX as usize {
                 // Should never happen due to upper limits on number of sample
                 // descriptions a track can have, but lets be safe.
                 return Err(Mp4parseStatus::Invalid);
@@ -1185,7 +1185,7 @@ fn mp4parse_avif_get_info_safe(context: &AvifContext) -> mp4parse::Result<Mp4par
         };
 
         let (loop_mode, loop_count) = match color_track.tkhd.as_ref().map(|tkhd| tkhd.duration) {
-            Some(movie_duration) if movie_duration == std::u64::MAX => {
+            Some(movie_duration) if movie_duration == u64::MAX => {
                 (Mp4parseAvifLoopMode::LoopInfinitely, 0)
             }
             Some(movie_duration) => match color_track.looped {
