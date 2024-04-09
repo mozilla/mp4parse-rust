@@ -2000,9 +2000,9 @@ enum ConstructionMethod {
 /// Describes a region where a item specified by an `ItemLocationBoxItem` is stored.
 /// The offset is `u64` since that's the maximum possible size and since the relative
 /// nature of `DataBox` means this can still possibly succeed even in the case
-/// that the raw value exceeds std::usize::MAX on platforms where that type is smaller
+/// that the raw value exceeds usize::MAX on platforms where that type is smaller
 /// than u64. However, `len` is stored as a `usize` since no value larger than
-/// `std::usize::MAX` can be used in a successful indexing operation in rust.
+/// `usize::MAX` can be used in a successful indexing operation in rust.
 /// `extent_index` is omitted since it's only used for ConstructionMethod::Item which
 /// is currently not implemented.
 #[derive(Clone, Debug)]
@@ -4338,7 +4338,7 @@ fn parse_mdhd<T: Read>(
 )> {
     let mdhd = read_mdhd(f)?;
     let duration = match mdhd.duration {
-        std::u64::MAX => None,
+        u64::MAX => None,
         duration => Some(TrackScaledTime::<u64>(duration, track.id)),
     };
     if mdhd.timescale == 0 {
@@ -4509,8 +4509,8 @@ fn read_mvhd<T: Read>(src: &mut BMFFBox<T>) -> Result<MovieHeaderBox> {
         1 => be_u64(src)?,
         0 => {
             let d = be_u32(src)?;
-            if d == std::u32::MAX {
-                std::u64::MAX
+            if d == u32::MAX {
+                u64::MAX
             } else {
                 u64::from(d)
             }
@@ -4636,8 +4636,8 @@ fn read_mdhd<T: Read>(src: &mut BMFFBox<T>) -> Result<MediaHeaderBox> {
                 // upcasting, we need to preserve the special all-1s
                 // ("unknown") case by hand.
                 let d = be_u32(src)?;
-                if d == std::u32::MAX {
-                    std::u64::MAX
+                if d == u32::MAX {
+                    u64::MAX
                 } else {
                     u64::from(d)
                 }
@@ -6291,10 +6291,10 @@ mod media_data_box_tests {
 
     #[test]
     fn extent_with_length_which_overflows_usize() {
-        let mdat = DataBox::at_offset(std::u64::MAX - 1, vec![1; 5]);
+        let mdat = DataBox::at_offset(u64::MAX - 1, vec![1; 5]);
         let extent = Extent::WithLength {
-            offset: std::u64::MAX,
-            len: std::usize::MAX,
+            offset: u64::MAX,
+            len: usize::MAX,
         };
 
         assert!(mdat.get(&extent).is_none());
@@ -6304,10 +6304,8 @@ mod media_data_box_tests {
     // because the range end is unbounded, we don't calculate it.
     #[test]
     fn extent_to_end_which_overflows_usize() {
-        let mdat = DataBox::at_offset(std::u64::MAX - 1, vec![1; 5]);
-        let extent = Extent::ToEnd {
-            offset: std::u64::MAX,
-        };
+        let mdat = DataBox::at_offset(u64::MAX - 1, vec![1; 5]);
+        let extent = Extent::ToEnd { offset: u64::MAX };
 
         assert_eq!(mdat.get(&extent), Some(&[1, 1, 1, 1][..]));
     }
