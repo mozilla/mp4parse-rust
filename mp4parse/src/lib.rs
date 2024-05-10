@@ -5736,17 +5736,15 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 codec_type = CodecType::ALAC;
                 codec_specific = Some(AudioCodecSpecific::ALACSpecificBox(alac));
             }
-            BoxType::QTWaveAtom => {
-                match read_qt_wave_atom(&mut b) {
-                    Ok(qt_esds) => {
-                        codec_type = qt_esds.audio_codec;
-                        codec_specific = Some(AudioCodecSpecific::ES_Descriptor(qt_esds));
-                    },
-                    Err(e) => {
-                        warn!("Failed to parse wave atom: {e:?}");
-                    }
+            BoxType::QTWaveAtom => match read_qt_wave_atom(&mut b) {
+                Ok(qt_esds) => {
+                    codec_type = qt_esds.audio_codec;
+                    codec_specific = Some(AudioCodecSpecific::ES_Descriptor(qt_esds));
                 }
-            }
+                Err(e) => {
+                    warn!("Failed to parse wave atom: {e:?}");
+                }
+            },
             BoxType::ProtectionSchemeInfoBox => {
                 if name != BoxType::ProtectedAudioSampleEntry {
                     return Status::StsdBadAudioSampleEntry.into();
