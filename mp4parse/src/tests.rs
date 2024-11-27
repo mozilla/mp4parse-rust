@@ -1298,6 +1298,30 @@ fn read_esds_invalid_descriptor() {
 }
 
 #[test]
+fn read_esds_depends_on_core_coder_invalid() {
+    // dependsOnCoreCoder flag is set, but coreCoderDelay bits are not present.
+    // Extracted from BMO #1709329 audio-stripped.m4a using Bento4.
+    // "mp4extract --payload-only moov/trak/mdia/minf/stbl/stsd/mp4a/esds audio-stripped.m4a /dev/stdout | xxd -i -c 15"
+    let esds = vec![
+        0x03, 0x80, 0x80, 0x80, 0x22, 0x00, 0x01, 0x00, 0x04, 0x80, 0x80, 0x80, 0x14, 0x40, 0x15,
+        0x00, 0x02, 0x15, 0x00, 0x02, 0x04, 0x88, 0x00, 0x01, 0xea, 0x64, 0x05, 0x80, 0x80, 0x80,
+        0x02, 0x12, 0x12, 0x06, 0x80, 0x80, 0x80, 0x01, 0x02,
+    ];
+
+    let mut stream = make_box(BoxSize::Auto, b"esds", |s| {
+        s.B32(0) // reserved
+            .append_bytes(esds.as_slice())
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+
+    match super::read_esds(&mut stream) {
+        Ok(esds) => assert_eq!(esds.audio_codec, super::CodecType::AAC),
+        _ => panic!("unexpected result with invalid descriptor"),
+    }
+}
+
+#[test]
 fn read_esds_redundant_descriptor() {
     // the '2' at the end is redundant data.
     let esds = vec![
