@@ -5431,14 +5431,13 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Resu
 
     match std::str::from_utf8(src.read_into_try_vec()?.as_slice()) {
         Ok(name) => {
-            match name.bytes().position(|b| b == b'\0') {
-                None => fail_with_status_if(
+            // `name` must be nul-terminated and any trailing bytes after the first nul ignored.
+            // See https://github.com/MPEGGroup/FileFormat/issues/35
+            if !name.bytes().any(|b| b == b'\0') {
+                fail_with_status_if(
                     strictness != ParseStrictness::Permissive,
                     Status::HdlrNameNoNul,
-                )?,
-                // `name` must be nul-terminated and any trailing bytes after the first nul ignored.
-                // See https://github.com/MPEGGroup/FileFormat/issues/35
-                Some(_) => (),
+                )?;
             }
         }
         Err(_) => fail_with_status_if(
