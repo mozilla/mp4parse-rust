@@ -161,6 +161,31 @@ struct HashMap;
 #[allow(dead_code)]
 struct String;
 
+// Arbitrary 1MB limit.
+const CAPACITY_HINT_LIMIT: usize = 1024 * 1024;
+
+/// Returns a `TryVec<T>` with preallocated capacity for up to `expected_items`.
+/// `expected_items` is treated as a hint only and the returned `TryVec<T>`'s
+/// capacity may be less than `expected_items`.
+fn vec_with_capacity_hint<T>(expected_items: usize) -> Result<TryVec<T>, TryReserveError> {
+    let reserved_items = expected_items.min(CAPACITY_HINT_LIMIT / std::mem::size_of::<T>());
+    TryVec::with_capacity(reserved_items)
+}
+
+/// Returns a `TryHashMap<T>` with preallocated capacity for up to `expected_items`.
+/// `expected_items` is treated as a hint only and the returned `TryHashMap<T>`'s
+/// capacity may be less than `expected_items`.
+fn hashmap_with_capacity_hint<K, V>(
+    expected_items: usize,
+) -> Result<TryHashMap<K, V>, TryReserveError>
+where
+    K: Eq + std::hash::Hash,
+{
+    let reserved_items = expected_items
+        .min(CAPACITY_HINT_LIMIT / (std::mem::size_of::<K>() + std::mem::size_of::<V>()));
+    TryHashMap::with_capacity(reserved_items)
+}
+
 /// The return value to the C API
 /// Any detail that needs to be communicated to the caller must be encoded here
 /// since the [`Error`] type's associated data is part of the FFI.
@@ -2847,7 +2872,7 @@ fn read_iinf<T: Read>(
     } else {
         be_u32(src)?.to_usize()
     };
-    let mut item_infos = TryVec::with_capacity(entry_count)?;
+    let mut item_infos = vec_with_capacity_hint(entry_count)?;
 
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
@@ -3956,7 +3981,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<ItemId, ItemLoc
         IlocVersion::Two => iloc.read_u32(32)?,
     };
 
-    let mut items = TryHashMap::with_capacity(item_count.to_usize())?;
+    let mut items = hashmap_with_capacity_hint(item_count.to_usize())?;
 
     for _ in 0..item_count {
         let item_id = ItemId(match version {
@@ -4579,7 +4604,7 @@ fn read_tkhd<T: Read>(src: &mut BMFFBox<T>) -> Result<TrackHeaderBox> {
 fn read_elst<T: Read>(src: &mut BMFFBox<T>) -> Result<EditListBox> {
     let (version, flags) = read_fullbox_extra(src)?;
     let edit_count = be_u32(src)?;
-    let mut edits = TryVec::with_capacity(edit_count.to_usize())?;
+    let mut edits = vec_with_capacity_hint(edit_count.to_usize())?;
     for _ in 0..edit_count {
         let (segment_duration, media_time) = match version {
             1 => {
@@ -4658,7 +4683,7 @@ fn read_mdhd<T: Read>(src: &mut BMFFBox<T>) -> Result<MediaHeaderBox> {
 fn read_stco<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let offset_count = be_u32(src)?;
-    let mut offsets = TryVec::with_capacity(offset_count.to_usize())?;
+    let mut offsets = vec_with_capacity_hint(offset_count.to_usize())?;
     for _ in 0..offset_count {
         offsets.push(be_u32(src)?.into())?;
     }
@@ -4674,7 +4699,7 @@ fn read_stco<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
 fn read_co64<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let offset_count = be_u32(src)?;
-    let mut offsets = TryVec::with_capacity(offset_count.to_usize())?;
+    let mut offsets = vec_with_capacity_hint(offset_count.to_usize())?;
     for _ in 0..offset_count {
         offsets.push(be_u64(src)?)?;
     }
@@ -4690,7 +4715,7 @@ fn read_co64<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
 fn read_stss<T: Read>(src: &mut BMFFBox<T>) -> Result<SyncSampleBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let sample_count = be_u32(src)?;
-    let mut samples = TryVec::with_capacity(sample_count.to_usize())?;
+    let mut samples = vec_with_capacity_hint(sample_count.to_usize())?;
     for _ in 0..sample_count {
         samples.push(be_u32(src)?)?;
     }
@@ -4706,7 +4731,7 @@ fn read_stss<T: Read>(src: &mut BMFFBox<T>) -> Result<SyncSampleBox> {
 fn read_stsc<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleToChunkBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let sample_count = be_u32(src)?;
-    let mut samples = TryVec::with_capacity(sample_count.to_usize())?;
+    let mut samples = vec_with_capacity_hint(sample_count.to_usize())?;
     for _ in 0..sample_count {
         let first_chunk = be_u32(src)?;
         let samples_per_chunk = be_u32(src)?;
@@ -4738,7 +4763,7 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
         return Status::CttsBadSize.into();
     }
 
-    let mut offsets = TryVec::with_capacity(counts.to_usize())?;
+    let mut offsets = vec_with_capacity_hint(counts.to_usize())?;
     for _ in 0..counts {
         let (sample_count, time_offset) = match version {
             // According to spec, Version0 shoule be used when version == 0;
@@ -4792,7 +4817,7 @@ fn read_stsz<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleSizeBox> {
 fn read_stts<T: Read>(src: &mut BMFFBox<T>) -> Result<TimeToSampleBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let sample_count = be_u32(src)?;
-    let mut samples = TryVec::with_capacity(sample_count.to_usize())?;
+    let mut samples = vec_with_capacity_hint(sample_count.to_usize())?;
     for _ in 0..sample_count {
         let sample_count = be_u32(src)?;
         let sample_delta = be_u32(src)?;
@@ -5797,7 +5822,7 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &Track) -> Result<SampleDescr
     }
 
     let description_count = be_u32(src)?.to_usize();
-    let mut descriptions = TryVec::with_capacity(description_count)?;
+    let mut descriptions = vec_with_capacity_hint(description_count)?;
 
     let mut iter = src.box_iter();
     while descriptions.len() < description_count {
