@@ -1416,7 +1416,6 @@ fn get_indice_table(
 /// info raw pointers passed to it. Callers should ensure the parser
 /// pointer points to a valid `Mp4parseParser` and that the info pointer points
 /// to a valid `Mp4parseFragmentInfo`.
-
 #[no_mangle]
 pub unsafe extern "C" fn mp4parse_get_fragment_info(
     parser: *mut Mp4parseParser,

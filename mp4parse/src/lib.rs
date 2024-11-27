@@ -128,13 +128,13 @@ impl<'a, T> OffsetReader<'a, T> {
     }
 }
 
-impl<'a, T> Offset for OffsetReader<'a, T> {
+impl<T> Offset for OffsetReader<'_, T> {
     fn offset(&self) -> u64 {
         self.offset
     }
 }
 
-impl<'a, T: Read> Read for OffsetReader<'a, T> {
+impl<T: Read> Read for OffsetReader<'_, T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let bytes_read = self.reader.read(buf)?;
         trace!("Read {} bytes at offset {}", bytes_read, self.offset);
@@ -2138,7 +2138,7 @@ struct BoxIter<'a, T: 'a> {
     src: &'a mut T,
 }
 
-impl<'a, T: Read> BoxIter<'a, T> {
+impl<T: Read> BoxIter<'_, T> {
     fn new(src: &mut T) -> BoxIter<T> {
         BoxIter { src }
     }
@@ -2156,19 +2156,19 @@ impl<'a, T: Read> BoxIter<'a, T> {
     }
 }
 
-impl<'a, T: Read> Read for BMFFBox<'a, T> {
+impl<T: Read> Read for BMFFBox<'_, T> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.content.read(buf)
     }
 }
 
-impl<'a, T: Read> TryRead for BMFFBox<'a, T> {
+impl<T: Read> TryRead for BMFFBox<'_, T> {
     fn try_read_to_end(&mut self, buf: &mut TryVec<u8>) -> std::io::Result<usize> {
         fallible_collections::try_read_up_to(self, self.bytes_left(), buf)
     }
 }
 
-impl<'a, T: Offset> Offset for BMFFBox<'a, T> {
+impl<T: Offset> Offset for BMFFBox<'_, T> {
     fn offset(&self) -> u64 {
         self.content.get_ref().offset()
     }
@@ -2183,12 +2183,12 @@ impl<'a, T: Read> BMFFBox<'a, T> {
         &self.head
     }
 
-    fn box_iter<'b>(&'b mut self) -> BoxIter<BMFFBox<'a, T>> {
+    fn box_iter(&mut self) -> BoxIter<BMFFBox<'a, T>> {
         BoxIter::new(self)
     }
 }
 
-impl<'a, T> Drop for BMFFBox<'a, T> {
+impl<T> Drop for BMFFBox<'_, T> {
     fn drop(&mut self) {
         if self.content.limit() > 0 {
             let name: FourCC = From::from(self.head.name);
@@ -2206,10 +2206,7 @@ impl<'a, T> Drop for BMFFBox<'a, T> {
 ///
 /// See ISOBMFF (ISO 14496-12:2020) § 4.2
 fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
-    let size32 = match be_u32(src) {
-        Ok(v) => v,
-        Err(error) => return Err(error),
-    };
+    let size32 = be_u32(src)?;
     let name = BoxType::from(be_u32(src)?);
     let size = match size32 {
         // valid only for top-level box and indicates it's the last box in the file.  usually mdat.
@@ -2484,7 +2481,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
             return Status::MultipleAlpha.into();
         }
 
-        let premultiplied_alpha = alpha_item_id.map_or(false, |alpha_item_id| {
+        let premultiplied_alpha = alpha_item_id.is_some_and(|alpha_item_id| {
             item_references.iter().any(|iref| {
                 iref.from_item_id == primary_item_id
                     && iref.to_item_id == alpha_item_id
@@ -2623,7 +2620,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
 
     // Returns true iff `id` is `Some` and there is no corresponding property for it
     let missing_property_for = |id: Option<ItemId>, property: BoxType| -> bool {
-        id.map_or(false, |id| {
+        id.is_some_and(|id| {
             item_properties
                 .get(id, property)
                 .map_or(true, |opt| opt.is_none())
