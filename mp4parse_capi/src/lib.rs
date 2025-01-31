@@ -259,6 +259,7 @@ pub struct Mp4parseTrackVideoInfo {
     pub rotation: u16,
     pub sample_info_count: u32,
     pub sample_info: *const Mp4parseTrackVideoSampleInfo,
+    pub pixel_aspect_ratio: f32,
 }
 
 impl Default for Mp4parseTrackVideoInfo {
@@ -269,6 +270,7 @@ impl Default for Mp4parseTrackVideoInfo {
             rotation: 0,
             sample_info_count: 0,
             sample_info: std::ptr::null(),
+            pixel_aspect_ratio: 0.0,
         }
     }
 }
@@ -975,6 +977,9 @@ fn mp4parse_get_track_video_info_safe(
         };
         sample_info.image_width = video.width;
         sample_info.image_height = video.height;
+        if let Some(ratio) = video.pixel_aspect_ratio {
+            info.pixel_aspect_ratio = ratio;
+        }
 
         match video.codec_specific {
             VideoCodecSpecific::AV1Config(ref config) => {
