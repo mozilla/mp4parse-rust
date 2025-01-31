@@ -1472,7 +1472,6 @@ fn public_video_hevc() {
     }
 }
 
-
 #[test]
 fn public_parse_pasp_h264() {
     let mut fd = File::open(VIDEO_H264_PASP_MP4).expect("Unknown file");
@@ -1490,8 +1489,15 @@ fn public_parse_pasp_h264() {
         assert_eq!(v.codec_type, mp4::CodecType::H264);
         assert_eq!(v.width, 640);
         assert_eq!(v.height, 480);
-        assert!(v.pixel_aspect_ratio.is_some(), "pixel_aspect_ratio should exist");
-        assert_eq!(v.pixel_aspect_ratio.unwrap() as f32, 16.0 / 9.0, "pixel_aspect_ratio should be 16/9");
+        assert!(
+            v.pixel_aspect_ratio.is_some(),
+            "pixel_aspect_ratio should exist"
+        );
+        assert_eq!(
+            v.pixel_aspect_ratio.unwrap() as f32,
+            16.0 / 9.0,
+            "pixel_aspect_ratio should be 16/9"
+        );
     }
 }
 

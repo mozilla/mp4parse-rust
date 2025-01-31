@@ -5591,9 +5591,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
             BoxType::PixelAspectRatioBox => {
                 let pasp = read_pasp(&mut b)?;
                 let aspect_ratio = pasp.h_spacing as f32 / pasp.v_spacing as f32;
-                let is_valid_aspect_ratio = |value: f32| -> bool {
-                    value > 0.0 && value < 10.0
-                };
+                let is_valid_aspect_ratio = |value: f32| -> bool { value > 0.0 && value < 10.0 };
                 // Only set pixel_aspect_ratio if it is valid
                 if is_valid_aspect_ratio(aspect_ratio) {
                     pixel_aspect_ratio = Some(aspect_ratio);
