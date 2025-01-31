@@ -1173,6 +1173,7 @@ pub struct VideoSampleEntry {
     pub height: u16,
     pub codec_specific: VideoCodecSpecific,
     pub protection_info: TryVec<ProtectionSchemeInfoBox>,
+    pub pixel_aspect_ratio: Option<f32>,
 }
 
 /// Represent a Video Partition Codec Configuration 'vpcC' box (aka vp9). The meaning of each
@@ -5480,6 +5481,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
 
     // Skip clap/pasp/etc. for now.
     let mut codec_specific = None;
+    let mut pixel_aspect_ratio = None;
     let mut protection_info = TryVec::new();
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
@@ -5586,6 +5588,18 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 debug!("{:?} (hvcc)", hvcc);
                 codec_specific = Some(VideoCodecSpecific::HEVCConfig(hvcc));
             }
+            BoxType::PixelAspectRatioBox => {
+                let pasp = read_pasp(&mut b)?;
+                let aspect_ratio = pasp.h_spacing as f32 / pasp.v_spacing as f32;
+                let is_valid_aspect_ratio = |value: f32| -> bool {
+                    value > 0.0 && value < 10.0
+                };
+                // Only set pixel_aspect_ratio if it is valid
+                if is_valid_aspect_ratio(aspect_ratio) {
+                    pixel_aspect_ratio = Some(aspect_ratio);
+                }
+                debug!("Parsed pasp box: {:?}, PAR {:?}", pasp, pixel_aspect_ratio);
+            }
             _ => {
                 debug!("Unsupported video codec, box {:?} found", b.head.name);
                 skip_box_content(&mut b)?;
@@ -5603,6 +5617,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 height,
                 codec_specific,
                 protection_info,
+                pixel_aspect_ratio,
             })
         }),
     )
