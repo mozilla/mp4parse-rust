@@ -1622,13 +1622,7 @@ fn arg_validation() {
             mp4parse_get_track_info(std::ptr::null_mut(), 0, &mut dummy_info)
         );
 
-        let mut dummy_video = Mp4parseTrackVideoInfo {
-            display_width: 0,
-            display_height: 0,
-            rotation: 0,
-            sample_info_count: 0,
-            sample_info: std::ptr::null(),
-        };
+        let mut dummy_video = Default::default();
         assert_eq!(
             Mp4parseStatus::BadArg,
             mp4parse_get_track_video_info(std::ptr::null_mut(), 0, &mut dummy_video)
@@ -1690,13 +1684,7 @@ fn arg_validation_with_parser() {
             mp4parse_get_track_info(parser, 0, &mut dummy_info)
         );
 
-        let mut dummy_video = Mp4parseTrackVideoInfo {
-            display_width: 0,
-            display_height: 0,
-            rotation: 0,
-            sample_info_count: 0,
-            sample_info: std::ptr::null(),
-        };
+        let mut dummy_video = Default::default();
         assert_eq!(
             Mp4parseStatus::BadArg,
             mp4parse_get_track_video_info(parser, 0, &mut dummy_video)
