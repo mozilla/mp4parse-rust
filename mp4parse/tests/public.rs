@@ -1494,7 +1494,7 @@ fn public_parse_pasp_h264() {
             "pixel_aspect_ratio should exist"
         );
         assert_eq!(
-            v.pixel_aspect_ratio.unwrap() as f32,
+            { v.pixel_aspect_ratio.unwrap() },
             16.0 / 9.0,
             "pixel_aspect_ratio should be 16/9"
         );
