@@ -2265,7 +2265,7 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> Result<(u8, u32)> {
     let flags_c = src.read_u8()?;
     Ok((
         version,
-        u32::from(flags_a) << 16 | u32::from(flags_b) << 8 | u32::from(flags_c),
+        (u32::from(flags_a) << 16) | (u32::from(flags_b) << 8) | u32::from(flags_c),
     ))
 }
 
@@ -4734,7 +4734,7 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
 
     if counts
         .checked_mul(8)
-        .map_or(true, |bytes| u64::from(bytes) > src.bytes_left())
+        .is_none_or(|bytes| u64::from(bytes) > src.bytes_left())
     {
         return Status::CttsBadSize.into();
     }

@@ -688,7 +688,7 @@ fn make_dfla(
             }
         };
         let block_type = (block_type as u32) & 0x7f;
-        s.B32(flag << 31 | block_type << 24 | size)
+        s.B32((flag << 31) | (block_type << 24) | size)
             .append_bytes(data)
     })
 }
