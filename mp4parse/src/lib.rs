@@ -4734,7 +4734,7 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
 
     if counts
         .checked_mul(8)
-        .is_none_or(|bytes| u64::from(bytes) > src.bytes_left())
+        .map_or(true, |bytes| u64::from(bytes) > src.bytes_left())
     {
         return Status::CttsBadSize.into();
     }
