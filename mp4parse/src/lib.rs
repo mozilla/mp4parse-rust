@@ -2417,7 +2417,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
                 if image_sequence.is_some() {
                     return Status::MoovBadQuantity.into();
                 }
-                image_sequence = Some(read_moov(&mut b, None)?);
+                image_sequence = Some(read_moov(&mut b, None, strictness)?);
             }
             BoxType::MediaDataBox => {
                 let file_offset = b.offset();
@@ -4058,7 +4058,7 @@ fn read_iloc<T: Read>(src: &mut BMFFBox<T>) -> Result<TryHashMap<ItemId, ItemLoc
 }
 
 /// Read the contents of a box, including sub boxes.
-pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
+pub fn read_mp4<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<MediaContext> {
     let mut context = None;
     let mut found_ftyp = false;
     // TODO(kinetik): Top-level parsing should handle zero-sized boxes
@@ -4087,7 +4087,7 @@ pub fn read_mp4<T: Read>(f: &mut T) -> Result<MediaContext> {
                 debug!("{:?}", ftyp);
             }
             BoxType::MovieBox => {
-                context = Some(read_moov(&mut b, context)?);
+                context = Some(read_moov(&mut b, context, strictness)?);
             }
             #[cfg(feature = "meta-xml")]
             BoxType::MetadataBox => {
@@ -4133,7 +4133,11 @@ fn parse_mvhd<T: Read>(f: &mut BMFFBox<T>) -> Result<Option<MediaTimeScale>> {
 /// Note that despite the spec indicating "exactly one" moov box should exist at
 /// the file container level, we support reading and merging multiple moov boxes
 /// such as with tests/test_case_1185230.mp4.
-fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Result<MediaContext> {
+fn read_moov<T: Read>(
+    f: &mut BMFFBox<T>,
+    context: Option<MediaContext>,
+    strictness: ParseStrictness,
+) -> Result<MediaContext> {
     let MediaContext {
         mut timescale,
         mut tracks,
@@ -4152,7 +4156,7 @@ fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Resu
             }
             BoxType::TrackBox => {
                 let mut track = Track::new(tracks.len());
-                read_trak(&mut b, &mut track)?;
+                read_trak(&mut b, &mut track, strictness)?;
                 tracks.push(track)?;
             }
             BoxType::MovieExtendsBox => {
@@ -4262,7 +4266,11 @@ fn read_mehd<T: Read>(src: &mut BMFFBox<T>) -> Result<MediaScaledTime> {
 
 /// Parse a Track Box
 /// See ISOBMFF (ISO 14496-12:2020) § 8.3.1.
-fn read_trak<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
+fn read_trak<T: Read>(
+    f: &mut BMFFBox<T>,
+    track: &mut Track,
+    strictness: ParseStrictness,
+) -> Result<()> {
     let mut iter = f.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
@@ -4273,7 +4281,7 @@ fn read_trak<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
                 debug!("{:?}", tkhd);
             }
             BoxType::EditBox => read_edts(&mut b, track)?,
-            BoxType::MediaBox => read_mdia(&mut b, track)?,
+            BoxType::MediaBox => read_mdia(&mut b, track, strictness)?,
             BoxType::TrackReferenceBox => track.tref = Some(read_tref(&mut b)?),
             _ => skip_box_content(&mut b)?,
         };
@@ -4346,7 +4354,11 @@ fn parse_mdhd<T: Read>(
     Ok((mdhd, duration, timescale))
 }
 
-fn read_mdia<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
+fn read_mdia<T: Read>(
+    f: &mut BMFFBox<T>,
+    track: &mut Track,
+    strictness: ParseStrictness,
+) -> Result<()> {
     let mut iter = f.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
@@ -4369,7 +4381,7 @@ fn read_mdia<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
                 }
                 debug!("{:?}", hdlr);
             }
-            BoxType::MediaInformationBox => read_minf(&mut b, track)?,
+            BoxType::MediaInformationBox => read_minf(&mut b, track, strictness)?,
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
@@ -4403,11 +4415,15 @@ fn read_tref_auxl<T: Read>(f: &mut BMFFBox<T>) -> Result<TrackReference> {
     Ok(TrackReference { track_ids })
 }
 
-fn read_minf<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
+fn read_minf<T: Read>(
+    f: &mut BMFFBox<T>,
+    track: &mut Track,
+    strictness: ParseStrictness,
+) -> Result<()> {
     let mut iter = f.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
-            BoxType::SampleTableBox => read_stbl(&mut b, track)?,
+            BoxType::SampleTableBox => read_stbl(&mut b, track, strictness)?,
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
@@ -4415,12 +4431,16 @@ fn read_minf<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
     Ok(())
 }
 
-fn read_stbl<T: Read>(f: &mut BMFFBox<T>, track: &mut Track) -> Result<()> {
+fn read_stbl<T: Read>(
+    f: &mut BMFFBox<T>,
+    track: &mut Track,
+    strictness: ParseStrictness,
+) -> Result<()> {
     let mut iter = f.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::SampleDescriptionBox => {
-                let stsd = read_stsd(&mut b, track)?;
+                let stsd = read_stsd(&mut b, track, strictness)?;
                 debug!("{:?}", stsd);
                 track.stsd = Some(stsd);
             }
@@ -4942,7 +4962,11 @@ fn read_flac_metadata<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACMetadataBlock
 }
 
 /// See MPEG-4 Systems (ISO 14496-1:2010) § 7.2.6.5
-fn find_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
+fn find_descriptor(
+    data: &[u8],
+    esds: &mut ES_Descriptor,
+    strictness: ParseStrictness,
+) -> Result<()> {
     // Tags for elementary stream description
     const ESDESCR_TAG: u8 = 0x03;
     const DECODER_CONFIG_TAG: u8 = 0x04;
@@ -4982,13 +5006,13 @@ fn find_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
 
         match tag {
             ESDESCR_TAG => {
-                read_es_descriptor(descriptor, esds)?;
+                read_es_descriptor(descriptor, esds, strictness)?;
             }
             DECODER_CONFIG_TAG => {
-                read_dc_descriptor(descriptor, esds)?;
+                read_dc_descriptor(descriptor, esds, strictness)?;
             }
             DECODER_SPECIFIC_TAG => {
-                read_ds_descriptor(descriptor, esds)?;
+                read_ds_descriptor(descriptor, esds, strictness)?;
             }
             _ => {
                 debug!("Unsupported descriptor, tag {}", tag);
@@ -5014,7 +5038,11 @@ fn get_audio_object_type(bit_reader: &mut BitReader) -> Result<u16> {
 }
 
 /// See MPEG-4 Systems (ISO 14496-1:2010) § 7.2.6.7 and probably 14496-3 somewhere?
-fn read_ds_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
+fn read_ds_descriptor(
+    data: &[u8],
+    esds: &mut ES_Descriptor,
+    _strictness: ParseStrictness,
+) -> Result<()> {
     #[cfg(feature = "mp4v")]
     // Check if we are in a Visual esda Box.
     if esds.video_codec != CodecType::Unknown {
@@ -5191,7 +5219,11 @@ fn read_surround_channel_count(bit_reader: &mut BitReader, channels: u8) -> Resu
 }
 
 /// See MPEG-4 Systems (ISO 14496-1:2010) § 7.2.6.6
-fn read_dc_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
+fn read_dc_descriptor(
+    data: &[u8],
+    esds: &mut ES_Descriptor,
+    strictness: ParseStrictness,
+) -> Result<()> {
     let des = &mut Cursor::new(data);
     let object_profile = des.read_u8()?;
 
@@ -5207,7 +5239,11 @@ fn read_dc_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
     skip(des, 12)?;
 
     if data.len().to_u64() > des.position() {
-        find_descriptor(&data[des.position().try_into()?..data.len()], esds)?;
+        find_descriptor(
+            &data[des.position().try_into()?..data.len()],
+            esds,
+            strictness,
+        )?;
     }
 
     esds.audio_codec = match object_profile {
@@ -5225,7 +5261,11 @@ fn read_dc_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
 }
 
 /// See MPEG-4 Systems (ISO 14496-1:2010) § 7.2.6.5
-fn read_es_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
+fn read_es_descriptor(
+    data: &[u8],
+    esds: &mut ES_Descriptor,
+    strictness: ParseStrictness,
+) -> Result<()> {
     let des = &mut Cursor::new(data);
 
     skip(des, 2)?;
@@ -5246,20 +5286,24 @@ fn read_es_descriptor(data: &[u8], esds: &mut ES_Descriptor) -> Result<()> {
     }
 
     if data.len().to_u64() > des.position() {
-        find_descriptor(&data[des.position().try_into()?..data.len()], esds)?;
+        find_descriptor(
+            &data[des.position().try_into()?..data.len()],
+            esds,
+            strictness,
+        )?;
     }
 
     Ok(())
 }
 
 /// See MP4 (ISO 14496-14:2020) § 6.7.2
-fn read_esds<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
+fn read_esds<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Result<ES_Descriptor> {
     let (_, _) = read_fullbox_extra(src)?;
 
     let esds_array = read_buf(src, src.bytes_left())?;
 
     let mut es_data = ES_Descriptor::default();
-    find_descriptor(&esds_array, &mut es_data)?;
+    find_descriptor(&esds_array, &mut es_data, strictness)?;
 
     es_data.codec_esds = esds_array;
 
@@ -5558,7 +5602,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 {
                     // Read ES_Descriptor inside an esds box.
                     // See ISOBMFF (ISO 14496-1:2010) § 7.2.6.5
-                    let esds = read_esds(&mut b)?;
+                    let esds = read_esds(&mut b, ParseStrictness::Normal)?;
                     codec_specific =
                         Some(VideoCodecSpecific::ESDSConfig(esds.decoder_specific_data));
                 }
@@ -5621,13 +5665,16 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
     )
 }
 
-fn read_qt_wave_atom<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
+fn read_qt_wave_atom<T: Read>(
+    src: &mut BMFFBox<T>,
+    strictness: ParseStrictness,
+) -> Result<ES_Descriptor> {
     let mut codec_specific = None;
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
         match b.head.name {
             BoxType::ESDBox => {
-                let esds = read_esds(&mut b)?;
+                let esds = read_esds(&mut b, strictness)?;
                 codec_specific = Some(esds);
             }
             _ => skip_box_content(&mut b)?,
@@ -5639,7 +5686,10 @@ fn read_qt_wave_atom<T: Read>(src: &mut BMFFBox<T>) -> Result<ES_Descriptor> {
 
 /// Parse an audio description inside an stsd box.
 /// See ISOBMFF (ISO 14496-12:2020) § 12.2.3
-fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry> {
+fn read_audio_sample_entry<T: Read>(
+    src: &mut BMFFBox<T>,
+    strictness: ParseStrictness,
+) -> Result<SampleEntry> {
     let name = src.get_header().name;
 
     // Skip uninteresting fields.
@@ -5713,7 +5763,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 {
                     return Status::StsdBadAudioSampleEntry.into();
                 }
-                let esds = read_esds(&mut b)?;
+                let esds = read_esds(&mut b, strictness)?;
                 codec_type = esds.audio_codec;
                 codec_specific = Some(AudioCodecSpecific::ES_Descriptor(esds));
             }
@@ -5746,7 +5796,7 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 codec_specific = Some(AudioCodecSpecific::ALACSpecificBox(alac));
             }
             BoxType::QTWaveAtom => {
-                let qt_esds = read_qt_wave_atom(&mut b)?;
+                let qt_esds = read_qt_wave_atom(&mut b, strictness)?;
                 codec_type = qt_esds.audio_codec;
                 codec_specific = Some(AudioCodecSpecific::ES_Descriptor(qt_esds));
             }
@@ -5799,7 +5849,11 @@ fn read_audio_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
 /// Parse a stsd box.
 /// See ISOBMFF (ISO 14496-12:2020) § 8.5.2
 /// See MP4 (ISO 14496-14:2020) § 6.7.2
-fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &Track) -> Result<SampleDescriptionBox> {
+fn read_stsd<T: Read>(
+    src: &mut BMFFBox<T>,
+    track: &Track,
+    strictness: ParseStrictness,
+) -> Result<SampleDescriptionBox> {
     let (_, flags) = read_fullbox_extra(src)?;
 
     if flags != 0 {
@@ -5819,7 +5873,7 @@ fn read_stsd<T: Read>(src: &mut BMFFBox<T>, track: &Track) -> Result<SampleDescr
                 TrackType::Video => read_video_sample_entry(&mut b),
                 TrackType::Picture => read_video_sample_entry(&mut b),
                 TrackType::AuxiliaryVideo => read_video_sample_entry(&mut b),
-                TrackType::Audio => read_audio_sample_entry(&mut b),
+                TrackType::Audio => read_audio_sample_entry(&mut b, strictness),
                 TrackType::Metadata => Err(Error::Unsupported("metadata track")),
                 TrackType::Unknown => Err(Error::Unsupported("unknown track type")),
             };

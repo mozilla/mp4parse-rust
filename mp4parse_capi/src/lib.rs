@@ -391,8 +391,8 @@ impl ContextParser for Mp4parseParser {
         }
     }
 
-    fn read<T: Read>(io: &mut T, _strictness: ParseStrictness) -> mp4parse::Result<Self::Context> {
-        let r = mp4parse::read_mp4(io);
+    fn read<T: Read>(io: &mut T, strictness: ParseStrictness) -> mp4parse::Result<Self::Context> {
+        let r = mp4parse::read_mp4(io, strictness);
         log::debug!("mp4parse::read_mp4 -> {:?}", r);
         r
     }
