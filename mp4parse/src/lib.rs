@@ -200,7 +200,7 @@ pub enum Status {
     ElstBadVersion,
     EsdsBadAudioSampleEntry,
     EsdsBadDescriptor,
-    EsdsDecSpecificIntoTagQuantity,
+    EsdsDecSpecificInfoTagQuantity,
     FtypBadSize,
     FtypNotFirst,
     HdlrNameNoNul,
@@ -514,7 +514,7 @@ impl From<Status> for &str {
             Status::EsdsBadDescriptor => {
                 "Invalid descriptor."
             }
-            Status::EsdsDecSpecificIntoTagQuantity => {
+            Status::EsdsDecSpecificInfoTagQuantity => {
                 "There can be only one DecSpecificInfoTag descriptor"
             }
             Status::FtypBadSize => {
@@ -5041,7 +5041,7 @@ fn get_audio_object_type(bit_reader: &mut BitReader) -> Result<u16> {
 fn read_ds_descriptor(
     data: &[u8],
     esds: &mut ES_Descriptor,
-    _strictness: ParseStrictness,
+    strictness: ParseStrictness,
 ) -> Result<()> {
     #[cfg(feature = "mp4v")]
     // Check if we are in a Visual esda Box.
@@ -5198,7 +5198,10 @@ fn read_ds_descriptor(
             esds.audio_sample_rate = Some(sample_frequency_value);
             esds.audio_channel_count = Some(channel_counts);
             if !esds.decoder_specific_data.is_empty() {
-                return Status::EsdsDecSpecificIntoTagQuantity.into();
+                fail_with_status_if(
+                    strictness == ParseStrictness::Strict,
+                    Status::EsdsDecSpecificInfoTagQuantity,
+                )?;
             }
             esds.decoder_specific_data.extend_from_slice(data)?;
 
