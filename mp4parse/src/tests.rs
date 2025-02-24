@@ -1319,6 +1319,30 @@ fn read_esds_redundant_descriptor() {
 }
 
 #[test]
+fn read_esds_multiple_descriptors() {
+    // Permit multiple descriptors in non-strict mode.
+    // Extracted from BMO #1936124 using Bento4.
+    // "mp4extract --payload-only moov/trak[0]/mdia/minf/stbl/stsd/mp4a/esds bug1936124.mp4 /dev/stdout | xxd -i -c 15"
+    let esds = vec![
+        0x03, 0x1d, 0x00, 0x00, 0x00, 0x04, 0x15, 0x40, 0x15, 0x00, 0x06, 0x00, 0x00, 0x01, 0x77,
+        0x00, 0x00, 0x01, 0x77, 0x00, 0x05, 0x02, 0x11, 0x90, 0x05, 0x02, 0x11, 0x90, 0x06, 0x01,
+        0x02,
+    ];
+
+    let mut stream = make_box(BoxSize::Auto, b"esds", |s| {
+        s.B32(0) // reserved
+            .append_bytes(esds.as_slice())
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+
+    match super::read_esds(&mut stream, ParseStrictness::Normal) {
+        Ok(esds) => assert_eq!(esds.audio_codec, super::CodecType::AAC),
+        _ => panic!("unexpected result with multiple descriptors"),
+    }
+}
+
+#[test]
 fn read_stsd_lpcm() {
     // Extract from sample converted by ffmpeg.
     // "ffmpeg -i ./gizmo-short.mp4 -acodec pcm_s16le -ar 96000 -vcodec copy -f mov gizmo-short.mov"
