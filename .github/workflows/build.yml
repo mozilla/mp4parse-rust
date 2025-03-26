@@ -41,7 +41,7 @@ jobs:
         submodules: recursive
 
     - name: Install Rust
-      run: rustup toolchain install ${{ matrix.rust }} --profile minimal --component rustfmt clippy
+      run: rustup toolchain install ${{ matrix.rust }} --profile minimal --component rustfmt,clippy
 
     - name: Check format
       shell: bash
