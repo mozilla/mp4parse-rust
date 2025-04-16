@@ -35,7 +35,7 @@ use std::io::{Read, Take};
 mod macros;
 
 mod boxes;
-use crate::boxes::{BoxType, FourCC};
+pub use crate::boxes::{BoxType, FourCC};
 
 // Unit tests.
 #[cfg(test)]
@@ -920,16 +920,16 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 ///
 /// See ISOBMFF (ISO 14496-12:2020) § 4.2
 #[derive(Debug, Clone, Copy)]
-struct BoxHeader {
+pub struct BoxHeader {
     /// Box type.
-    name: BoxType,
+    pub name: BoxType,
     /// Size of the box in bytes.
-    size: u64,
+    pub size: u64,
     /// Offset to the start of the contained data (or header size).
-    offset: u64,
+    pub offset: u64,
     /// Uuid for extended type.
     #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
-    uuid: Option<[u8; 16]>,
+    pub uuid: Option<[u8; 16]>,
 }
 
 impl BoxHeader {
@@ -2130,21 +2130,21 @@ impl Track {
 }
 
 /// See ISOBMFF (ISO 14496-12:2020) § 4.2
-struct BMFFBox<'a, T: 'a> {
-    head: BoxHeader,
-    content: Take<&'a mut T>,
+pub struct BMFFBox<'a, T: 'a> {
+    pub head: BoxHeader,
+    pub content: Take<&'a mut T>,
 }
 
-struct BoxIter<'a, T: 'a> {
+pub struct BoxIter<'a, T: 'a> {
     src: &'a mut T,
 }
 
 impl<T: Read> BoxIter<'_, T> {
-    fn new(src: &mut T) -> BoxIter<T> {
+    pub fn new(src: &mut T) -> BoxIter<T> {
         BoxIter { src }
     }
 
-    fn next_box(&mut self) -> Result<Option<BMFFBox<T>>> {
+    pub fn next_box(&mut self) -> Result<Option<BMFFBox<T>>> {
         let r = read_box_header(self.src);
         match r {
             Ok(h) => Ok(Some(BMFFBox {
@@ -4133,7 +4133,7 @@ fn parse_mvhd<T: Read>(f: &mut BMFFBox<T>) -> Result<Option<MediaTimeScale>> {
 /// Note that despite the spec indicating "exactly one" moov box should exist at
 /// the file container level, we support reading and merging multiple moov boxes
 /// such as with tests/test_case_1185230.mp4.
-fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Result<MediaContext> {
+pub fn read_moov<T: Read>(f: &mut BMFFBox<T>, context: Option<MediaContext>) -> Result<MediaContext> {
     let MediaContext {
         mut timescale,
         mut tracks,
