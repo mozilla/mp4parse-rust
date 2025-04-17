@@ -4760,7 +4760,8 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
         })?;
     }
 
-    check_parser_state!(src.content);
+    // Padding could be added in some contents.
+    skip_box_remain(src)?;
 
     Ok(CompositionOffsetBox { samples: offsets })
 }
