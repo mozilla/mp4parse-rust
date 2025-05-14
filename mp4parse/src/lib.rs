@@ -5011,9 +5011,17 @@ fn find_descriptor(
             DECODER_CONFIG_TAG => {
                 read_dc_descriptor(descriptor, esds, strictness)?;
             }
-            DECODER_SPECIFIC_TAG => {
-                read_ds_descriptor(descriptor, esds, strictness)?;
-            }
+            DECODER_SPECIFIC_TAG => match read_ds_descriptor(descriptor, esds, strictness) {
+                Ok(()) => {}
+                Err(Error::InvalidData(Status::BitReaderError))
+                    if strictness != ParseStrictness::Strict =>
+                {
+                    debug!("Unexpected EOS parsing ds descriptor in non-strict mode");
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            },
             _ => {
                 debug!("Unsupported descriptor, tag {}", tag);
             }
