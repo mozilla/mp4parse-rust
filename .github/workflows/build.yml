@@ -22,7 +22,7 @@ jobs:
         experimental: [false]
         features: ["", "missing-pixi-permitted"]
         include:
-          - os: ubuntu-20.04
+          - os: ubuntu-22.04
             rust: nightly
             release: false
             experimental: false
@@ -76,14 +76,14 @@ jobs:
     # https://github.com/mozilla/mp4parse-rust/pull/210#issuecomment-597420191
     - name: Install cargo-fuzz
       run: rustup run ${{ matrix.rust }} cargo install cargo-fuzz
-      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.rust == 'nightly' }}
+      if: ${{ matrix.os == 'ubuntu-22.04' && matrix.rust == 'nightly' }}
 
     - name: Build fuzzer
       working-directory: mp4parse_capi
       run: rustup run ${{ matrix.rust }} cargo fuzz build
-      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.rust == 'nightly' }}
+      if: ${{ matrix.os == 'ubuntu-22.04' && matrix.rust == 'nightly' }}
 
     - name: Clippy fuzzer
       working-directory: mp4parse_capi/fuzz
       run: rustup run ${{ matrix.rust }} cargo clippy -- -D warnings
-      if: ${{ matrix.os == 'ubuntu-20.04' && matrix.rust == 'nightly' }}
+      if: ${{ matrix.os == 'ubuntu-22.04' && matrix.rust == 'nightly' }}
