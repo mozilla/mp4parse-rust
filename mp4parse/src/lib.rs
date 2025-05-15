@@ -4475,7 +4475,7 @@ fn read_stbl<T: Read>(
                 track.stss = Some(stss);
             }
             BoxType::CompositionOffsetBox => {
-                let ctts = read_ctts(&mut b)?;
+                let ctts = read_ctts(&mut b, strictness)?;
                 debug!("{:?}", ctts);
                 track.ctts = Some(ctts);
             }
@@ -4747,7 +4747,10 @@ fn read_stsc<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleToChunkBox> {
 
 /// Parse a Composition Time to Sample Box
 /// See ISOBMFF (ISO 14496-12:2020) § 8.6.1.3
-fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
+fn read_ctts<T: Read>(
+    src: &mut BMFFBox<T>,
+    strictness: ParseStrictness,
+) -> Result<CompositionOffsetBox> {
     let (version, _) = read_fullbox_extra(src)?;
 
     let counts = be_u32(src)?;
@@ -4780,8 +4783,12 @@ fn read_ctts<T: Read>(src: &mut BMFFBox<T>) -> Result<CompositionOffsetBox> {
         })?;
     }
 
-    // Padding could be added in some contents.
-    skip_box_remain(src)?;
+    if strictness == ParseStrictness::Strict {
+        check_parser_state!(src.content);
+    } else {
+        // Padding may be present in some content.
+        skip_box_remain(src)?;
+    }
 
     Ok(CompositionOffsetBox { samples: offsets })
 }
