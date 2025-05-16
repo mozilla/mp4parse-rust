@@ -393,7 +393,7 @@ impl ContextParser for Mp4parseParser {
 
     fn read<T: Read>(io: &mut T, strictness: ParseStrictness) -> mp4parse::Result<Self::Context> {
         let r = mp4parse::read_mp4(io, strictness);
-        log::debug!("mp4parse::read_mp4 -> {:?}", r);
+        log::debug!("mp4parse::read_mp4 -> {r:?}");
         r
     }
 }
@@ -423,9 +423,9 @@ impl ContextParser for Mp4parseAvifParser {
     fn read<T: Read>(io: &mut T, strictness: ParseStrictness) -> mp4parse::Result<Self::Context> {
         let r = mp4parse::read_avif(io, strictness);
         if r.is_err() {
-            log::debug!("{:?}", r);
+            log::debug!("{r:?}");
         }
-        log::trace!("mp4parse::read_avif -> {:?}", r);
+        log::trace!("mp4parse::read_avif -> {r:?}");
         r
     }
 }
