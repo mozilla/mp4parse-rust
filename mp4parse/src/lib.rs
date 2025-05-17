@@ -2206,7 +2206,7 @@ impl<T> Drop for BMFFBox<'_, T> {
 /// skip unknown or uninteresting boxes.
 ///
 /// See ISOBMFF (ISO 14496-12:2020) § 4.2
-fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
+pub fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
     let size32 = be_u32(src)?;
     let name = BoxType::from(be_u32(src)?);
     let size = match size32 {
@@ -2258,7 +2258,7 @@ fn read_box_header<T: ReadBytesExt>(src: &mut T) -> Result<BoxHeader> {
 }
 
 /// Parse the extra header fields for a full box.
-fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> Result<(u8, u32)> {
+pub fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> Result<(u8, u32)> {
     let version = src.read_u8()?;
     let flags_a = src.read_u8()?;
     let flags_b = src.read_u8()?;
@@ -2270,7 +2270,7 @@ fn read_fullbox_extra<T: ReadBytesExt>(src: &mut T) -> Result<(u8, u32)> {
 }
 
 // Parse the extra fields for a full box whose flag fields must be zero.
-fn read_fullbox_version_no_flags<T: ReadBytesExt>(src: &mut T) -> Result<u8> {
+pub fn read_fullbox_version_no_flags<T: ReadBytesExt>(src: &mut T) -> Result<u8> {
     let (version, flags) = read_fullbox_extra(src)?;
 
     if flags != 0 {
@@ -2281,7 +2281,7 @@ fn read_fullbox_version_no_flags<T: ReadBytesExt>(src: &mut T) -> Result<u8> {
 }
 
 /// Skip over the entire contents of a box.
-fn skip_box_content<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
+pub fn skip_box_content<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
     // Skip the contents of unknown chunks.
     let to_skip = {
         let header = src.get_header();
@@ -2296,7 +2296,7 @@ fn skip_box_content<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
 }
 
 /// Skip over the remain data of a box.
-fn skip_box_remain<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
+pub fn skip_box_remain<T: Read>(src: &mut BMFFBox<T>) -> Result<()> {
     let remain = {
         let header = src.get_header();
         let len = src.bytes_left();
