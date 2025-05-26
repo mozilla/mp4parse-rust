@@ -391,9 +391,9 @@ impl ContextParser for Mp4parseParser {
         }
     }
 
-    fn read<T: Read>(io: &mut T, _strictness: ParseStrictness) -> mp4parse::Result<Self::Context> {
-        let r = mp4parse::read_mp4(io);
-        log::debug!("mp4parse::read_mp4 -> {:?}", r);
+    fn read<T: Read>(io: &mut T, strictness: ParseStrictness) -> mp4parse::Result<Self::Context> {
+        let r = mp4parse::read_mp4(io, strictness);
+        log::debug!("mp4parse::read_mp4 -> {r:?}");
         r
     }
 }
@@ -423,9 +423,9 @@ impl ContextParser for Mp4parseAvifParser {
     fn read<T: Read>(io: &mut T, strictness: ParseStrictness) -> mp4parse::Result<Self::Context> {
         let r = mp4parse::read_avif(io, strictness);
         if r.is_err() {
-            log::debug!("{:?}", r);
+            log::debug!("{r:?}");
         }
-        log::trace!("mp4parse::read_avif -> {:?}", r);
+        log::trace!("mp4parse::read_avif -> {r:?}");
         r
     }
 }
@@ -442,8 +442,7 @@ pub struct Mp4parseIo {
 impl Read for Mp4parseIo {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if buf.len() > isize::MAX as usize {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            return Err(std::io::Error::other(
                 "buf length overflow in Mp4parseIo Read impl",
             ));
         }
@@ -451,10 +450,7 @@ impl Read for Mp4parseIo {
         if rv >= 0 {
             Ok(rv as usize)
         } else {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "I/O error in Mp4parseIo Read impl",
-            ))
+            Err(std::io::Error::other("I/O error in Mp4parseIo Read impl"))
         }
     }
 }

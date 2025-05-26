@@ -192,8 +192,8 @@ fn main() {
     logger.init();
 
     for filename in filenames {
-        info!("-- dump of '{}' --", filename);
+        info!("-- dump of '{filename}' --");
         dump_func(filename.as_str(), strictness);
-        info!("-- end of '{}' --", filename);
+        info!("-- end of '{filename}' --");
     }
 }
