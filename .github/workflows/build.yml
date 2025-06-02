@@ -16,21 +16,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-2019, macos-13]
+        os: [ubuntu-24.04, windows-2025, macos-14]
         rust: [stable]
         release: [true, false]
         experimental: [false]
         features: ["", "missing-pixi-permitted"]
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
             rust: nightly
             release: false
             experimental: false
-          - os: windows-2019
+          - os: windows-2025
             rust: nightly
             release: false
             experimental: false
-          - os: macos-13
+          - os: macos-14
             rust: nightly
             release: false
             experimental: false
@@ -41,7 +41,10 @@ jobs:
         submodules: recursive
 
     - name: Install Rust
-      run: rustup toolchain install ${{ matrix.rust }} --profile minimal --component rustfmt,clippy
+      run: |
+        rustup toolchain install ${{ matrix.rust }} --profile minimal
+        rustup component add rustfmt --toolchain ${{ matrix.rust }}
+        rustup component add clippy --toolchain ${{ matrix.rust }}
 
     - name: Check format
       shell: bash
@@ -76,14 +79,14 @@ jobs:
     # https://github.com/mozilla/mp4parse-rust/pull/210#issuecomment-597420191
     - name: Install cargo-fuzz
       run: rustup run ${{ matrix.rust }} cargo install cargo-fuzz
-      if: ${{ matrix.os == 'ubuntu-22.04' && matrix.rust == 'nightly' }}
+      if: ${{ matrix.os == 'ubuntu-24.04' && matrix.rust == 'nightly' }}
 
     - name: Build fuzzer
       working-directory: mp4parse_capi
       run: rustup run ${{ matrix.rust }} cargo fuzz build
-      if: ${{ matrix.os == 'ubuntu-22.04' && matrix.rust == 'nightly' }}
+      if: ${{ matrix.os == 'ubuntu-24.04' && matrix.rust == 'nightly' }}
 
     - name: Clippy fuzzer
       working-directory: mp4parse_capi/fuzz
       run: rustup run ${{ matrix.rust }} cargo clippy -- -D warnings
-      if: ${{ matrix.os == 'ubuntu-22.04' && matrix.rust == 'nightly' }}
+      if: ${{ matrix.os == 'ubuntu-24.04' && matrix.rust == 'nightly' }}
