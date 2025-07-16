@@ -2050,6 +2050,7 @@ pub enum CodecType {
     Unknown,
     MP3,
     AAC,
+    XHEAAC, // xHE-AAC (Extended High Efficiency AAC)
     FLAC,
     Opus,
     H264, // 14496-10
@@ -5118,7 +5119,11 @@ fn read_ds_descriptor(
     };
 
     match audio_object_type {
-        1..=4 | 6 | 7 | 17 | 19..=23 => {
+        // Note: audio_object_type == 42 (xHE-AAC) uses UsacConfig rather than GASpecificConfig
+        // (similar to Chromium's AAC parsing). This may need different handling in the future
+        // if GASpecificConfig parsing is extended or made stricter, or if we need specific
+        // fields from the UsacConfig.
+        1..=4 | 6 | 7 | 17 | 19..=23 | 42 => {
             if sample_frequency.is_none() {
                 return Err(Error::Unsupported("unknown frequency"));
             }
@@ -5205,6 +5210,7 @@ fn read_ds_descriptor(
             esds.extended_audio_object_type = extended_audio_object_type;
             esds.audio_sample_rate = Some(sample_frequency_value);
             esds.audio_channel_count = Some(channel_counts);
+
             if !esds.decoder_specific_data.is_empty() {
                 fail_with_status_if(
                     strictness == ParseStrictness::Strict,
@@ -5258,7 +5264,13 @@ fn read_dc_descriptor(
     }
 
     esds.audio_codec = match object_profile {
-        0x40 | 0x66 | 0x67 => CodecType::AAC,
+        0x40 | 0x66 | 0x67 => {
+            if esds.audio_object_type == Some(42) {
+                CodecType::XHEAAC
+            } else {
+                CodecType::AAC
+            }
+        }
         0x69 | 0x6B => CodecType::MP3,
         _ => CodecType::Unknown,
     };
