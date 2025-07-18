@@ -105,6 +105,7 @@ pub enum Mp4parseCodec {
     AMRNB,
     #[cfg(feature = "3gpp")]
     AMRWB,
+    XHEAAC, // xHE-AAC (Extended High Efficiency AAC)
 }
 
 #[repr(C)]
@@ -736,6 +737,11 @@ fn get_track_audio_info(
             AudioCodecSpecific::FLACSpecificBox(_) => Mp4parseCodec::Flac,
             AudioCodecSpecific::ES_Descriptor(ref esds) if esds.audio_codec == CodecType::AAC => {
                 Mp4parseCodec::Aac
+            }
+            AudioCodecSpecific::ES_Descriptor(ref esds)
+                if esds.audio_codec == CodecType::XHEAAC =>
+            {
+                Mp4parseCodec::XHEAAC
             }
             AudioCodecSpecific::ES_Descriptor(ref esds) if esds.audio_codec == CodecType::MP3 => {
                 Mp4parseCodec::Mp3
