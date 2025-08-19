@@ -650,12 +650,24 @@ pub unsafe extern "C" fn mp4parse_get_track_info(
             None => return Mp4parseStatus::Invalid,
         };
 
-        match track.duration {
-            Some(duration) => info.duration = duration.0,
-            None => {
-                // Duration unknown; stagefright returns 0 for this.
-                info.duration = 0
+        // Use edited duration if available
+        info.duration = if let Some(edited_duration) = track.edited_duration {
+            if let Some(context_timescale) = context.timescale {
+                match rational_scale(edited_duration.0, context_timescale.0, timescale.0) {
+                    Some(converted) => converted,
+                    None => {
+                        // Fall back to media duration
+                        track.duration.map_or(0, |d| d.0)
+                    }
+                }
+            } else {
+                track.duration.map_or(0, |d| d.0)
             }
+        } else if let Some(duration) = track.duration {
+            duration.0
+        } else {
+            // Duration unknown; stagefright returns 0 for this.
+            0
         }
     } else {
         return Mp4parseStatus::Invalid;
