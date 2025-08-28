@@ -5818,11 +5818,15 @@ fn read_audio_sample_entry<T: Read>(
                 codec_type = CodecType::ALAC;
                 codec_specific = Some(AudioCodecSpecific::ALACSpecificBox(alac));
             }
-            BoxType::QTWaveAtom => {
-                let qt_esds = read_qt_wave_atom(&mut b, strictness)?;
-                codec_type = qt_esds.audio_codec;
-                codec_specific = Some(AudioCodecSpecific::ES_Descriptor(qt_esds));
-            }
+            BoxType::QTWaveAtom => match read_qt_wave_atom(&mut b, strictness) {
+                Ok(qt_esds) => {
+                    codec_type = qt_esds.audio_codec;
+                    codec_specific = Some(AudioCodecSpecific::ES_Descriptor(qt_esds));
+                }
+                Err(e) => {
+                    warn!("Failed to parse wave atom: {e:?}");
+                }
+            },
             BoxType::ProtectionSchemeInfoBox => {
                 if name != BoxType::ProtectedAudioSampleEntry {
                     return Status::StsdBadAudioSampleEntry.into();
