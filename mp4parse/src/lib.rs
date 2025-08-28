@@ -5515,7 +5515,10 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Resu
 }
 
 /// Parse an video description inside an stsd box.
-fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Result<SampleEntry> {
+fn read_video_sample_entry<T: Read>(
+    src: &mut BMFFBox<T>,
+    strictness: ParseStrictness,
+) -> Result<SampleEntry> {
     let name = src.get_header().name;
     let codec_type = match name {
         BoxType::AVCSampleEntry | BoxType::AVC3SampleEntry => CodecType::H264,
