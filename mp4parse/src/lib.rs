@@ -4485,7 +4485,7 @@ fn read_ftyp<T: Read>(src: &mut BMFFBox<T>) -> Result<FileTypeBox> {
     let major = be_u32(src)?;
     let minor = be_u32(src)?;
     let bytes_left = src.bytes_left();
-    if bytes_left % 4 != 0 {
+    if !bytes_left.is_multiple_of(4) {
         return Status::FtypBadSize.into();
     }
     // Is a brand_count of zero valid?
