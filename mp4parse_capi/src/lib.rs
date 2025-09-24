@@ -184,14 +184,12 @@ pub struct Mp4parsePsshInfo {
 }
 
 #[repr(u8)]
-#[derive(Debug, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub enum OptionalFourCc {
     #[default]
     None,
     Some([u8; 4]),
 }
-
 
 #[repr(C)]
 #[derive(Default, Debug)]
