@@ -647,11 +647,22 @@ pub unsafe extern "C" fn mp4parse_get_track_info(
             None => return Mp4parseStatus::Invalid,
         };
 
-        match track.duration {
-            Some(duration) => info.duration = duration.0,
-            None => {
-                // Duration unknown; stagefright returns 0 for this.
-                info.duration = 0
+        // If an edited duration (from elst) is present, use that instead of the raw track duration
+        // This is important for files produced by afconvert which use elst to specify the actual
+        // duration
+        if let Some(edited_duration) = track.edited_duration {
+            // edited_duration is in context timescale, need to convert to track timescale
+            match rational_scale(edited_duration.0, context_timescale.0, timescale.0) {
+                Some(duration) => info.duration = duration,
+                None => return Mp4parseStatus::Invalid,
+            }
+        } else {
+            match track.duration {
+                Some(duration) => info.duration = duration.0,
+                None => {
+                    // Duration unknown; stagefright returns 0 for this.
+                    info.duration = 0
+                }
             }
         }
     } else {
@@ -1757,7 +1768,8 @@ fn minimal_mp4_get_track_info() {
     });
     assert_eq!(info.track_type, Mp4parseTrackType::Audio);
     assert_eq!(info.track_id, 2);
-    assert_eq!(info.duration, 2944);
+    // Note: this file has an elst, and so this duration is from elst
+    assert_eq!(info.duration, 1920);
     assert_eq!(info.media_time, 1024);
 
     unsafe {
