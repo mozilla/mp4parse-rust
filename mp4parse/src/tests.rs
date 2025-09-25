@@ -1147,7 +1147,8 @@ fn read_stsd_mp4v() {
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
 
-    let sample_entry = super::read_video_sample_entry(&mut stream).unwrap();
+    let sample_entry =
+        super::read_video_sample_entry(&mut stream, ParseStrictness::Normal).unwrap();
 
     match sample_entry {
         super::SampleEntry::Video(v) => {
@@ -1247,7 +1248,7 @@ fn unknown_video_sample_entry() {
     });
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
-    match super::read_video_sample_entry(&mut stream) {
+    match super::read_video_sample_entry(&mut stream, ParseStrictness::Normal) {
         Ok(super::SampleEntry::Unknown) => (),
         _ => panic!("expected a different error result"),
     }
