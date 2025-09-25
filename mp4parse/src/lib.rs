@@ -4485,6 +4485,7 @@ fn read_ftyp<T: Read>(src: &mut BMFFBox<T>) -> Result<FileTypeBox> {
     let major = be_u32(src)?;
     let minor = be_u32(src)?;
     let bytes_left = src.bytes_left();
+    #[allow(clippy::manual_is_multiple_of)] // Allow until Gecko's MSRV is 1.87.
     if bytes_left % 4 != 0 {
         return Status::FtypBadSize.into();
     }
