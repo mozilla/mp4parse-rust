@@ -167,12 +167,20 @@ impl Default for Mp4parseByteData {
 impl Mp4parseByteData {
     fn set_data(&mut self, data: &[u8]) {
         self.length = data.len();
-        self.data = data.as_ptr();
+        self.data = if data.is_empty() {
+            std::ptr::null()
+        } else {
+            data.as_ptr()
+        };
     }
 
     fn set_indices(&mut self, data: &[Indice]) {
         self.length = data.len();
-        self.indices = data.as_ptr();
+        self.indices = if data.is_empty() {
+            std::ptr::null()
+        } else {
+            data.as_ptr()
+        };
     }
 }
 
@@ -702,7 +710,11 @@ fn get_track_audio_info(
 ) -> Result<(), Mp4parseStatus> {
     if let Some(sample_info) = parser.audio_track_sample_descriptions.get(&track_index) {
         info.sample_info_count = sample_info.len() as u32;
-        info.sample_info = sample_info.as_ptr();
+        info.sample_info = if sample_info.is_empty() {
+            std::ptr::null()
+        } else {
+            sample_info.as_ptr()
+        };
         return Ok(());
     }
 
@@ -774,10 +786,10 @@ fn get_track_audio_info(
                 if esds.codec_esds.len() > u32::MAX as usize {
                     return Err(Mp4parseStatus::Invalid);
                 }
-                sample_info.extra_data.length = esds.codec_esds.len();
-                sample_info.extra_data.data = esds.codec_esds.as_ptr();
-                sample_info.codec_specific_config.length = esds.decoder_specific_data.len();
-                sample_info.codec_specific_config.data = esds.decoder_specific_data.as_ptr();
+                sample_info.extra_data.set_data(&esds.codec_esds);
+                sample_info
+                    .codec_specific_config
+                    .set_data(&esds.decoder_specific_data);
                 if let Some(rate) = esds.audio_sample_rate {
                     sample_info.sample_rate = rate;
                 }
@@ -798,8 +810,7 @@ fn get_track_audio_info(
                 if streaminfo.block_type != 0 || streaminfo.data.len() != 34 {
                     return Err(Mp4parseStatus::Invalid);
                 }
-                sample_info.codec_specific_config.length = streaminfo.data.len();
-                sample_info.codec_specific_config.data = streaminfo.data.as_ptr();
+                sample_info.codec_specific_config.set_data(&streaminfo.data);
             }
             AudioCodecSpecific::OpusSpecificBox(ref opus) => {
                 let mut v = TryVec::new();
@@ -813,15 +824,13 @@ fn get_track_audio_info(
                             if v.len() > u32::MAX as usize {
                                 return Err(Mp4parseStatus::Invalid);
                             }
-                            sample_info.codec_specific_config.length = v.len();
-                            sample_info.codec_specific_config.data = v.as_ptr();
+                            sample_info.codec_specific_config.set_data(v);
                         }
                     }
                 }
             }
             AudioCodecSpecific::ALACSpecificBox(ref alac) => {
-                sample_info.codec_specific_config.length = alac.data.len();
-                sample_info.codec_specific_config.data = alac.data.as_ptr();
+                sample_info.codec_specific_config.set_data(&alac.data);
             }
             AudioCodecSpecific::MP3 | AudioCodecSpecific::LPCM => (),
             #[cfg(feature = "3gpp")]
@@ -878,7 +887,11 @@ fn get_track_audio_info(
                 return Err(Mp4parseStatus::Invalid);
             }
             info.sample_info_count = sample_info.len() as u32;
-            info.sample_info = sample_info.as_ptr();
+            info.sample_info = if sample_info.is_empty() {
+                std::ptr::null()
+            } else {
+                sample_info.as_ptr()
+            };
         }
         None => return Err(Mp4parseStatus::Invalid), // Shouldn't happen, we just inserted the info!
     }
@@ -959,7 +972,11 @@ fn mp4parse_get_track_video_info_safe(
 
     if let Some(sample_info) = parser.video_track_sample_descriptions.get(&track_index) {
         info.sample_info_count = sample_info.len() as u32;
-        info.sample_info = sample_info.as_ptr();
+        info.sample_info = if sample_info.is_empty() {
+            std::ptr::null()
+        } else {
+            sample_info.as_ptr()
+        };
         return Ok(());
     }
 
@@ -1062,7 +1079,11 @@ fn mp4parse_get_track_video_info_safe(
                 return Err(Mp4parseStatus::Invalid);
             }
             info.sample_info_count = sample_info.len() as u32;
-            info.sample_info = sample_info.as_ptr();
+            info.sample_info = if sample_info.is_empty() {
+                std::ptr::null()
+            } else {
+                sample_info.as_ptr()
+            };
         }
         None => return Err(Mp4parseStatus::Invalid), // Shouldn't happen, we just inserted the info!
     }
