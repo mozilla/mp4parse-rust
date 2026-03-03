@@ -132,6 +132,57 @@ fn parse_sample_table() {
 }
 
 #[test]
+fn repeated_get_indice_table_returns_stable_pointer() {
+    let mut file =
+        std::fs::File::open("tests/bipbop_nonfragment_header.mp4").expect("Unknown file");
+    let io = Mp4parseIo {
+        read: Some(buf_read),
+        userdata: &mut file as *mut _ as *mut std::os::raw::c_void,
+    };
+
+    unsafe {
+        let mut parser = std::ptr::null_mut();
+        let rv = mp4parse_new(&io, &mut parser);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert!(!parser.is_null());
+
+        let mut track_info = Mp4parseTrackInfo::default();
+        let rv = mp4parse_get_track_info(parser, 1, &mut track_info);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(track_info.track_type, Mp4parseTrackType::Audio);
+
+        let mut indice1 = Mp4parseByteData::default();
+        let rv = mp4parse_get_indice_table(parser, track_info.track_id, &mut indice1);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(indice1.length, 216);
+        let ptr1 = indice1.indices;
+
+        // Query the same track again — must return the cached pointer.
+        let mut indice2 = Mp4parseByteData::default();
+        let rv = mp4parse_get_indice_table(parser, track_info.track_id, &mut indice2);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(indice2.length, 216);
+        let ptr2 = indice2.indices;
+
+        // Pointer must be stable across calls.
+        assert_eq!(ptr1, ptr2);
+
+        // Data behind the first pointer must still be valid.
+        let audio_indice_0 = Indice {
+            start_offset: 27_046.into(),
+            end_offset: 27_052.into(),
+            start_composition: 0.into(),
+            end_composition: 1024.into(),
+            start_decode: 0.into(),
+            sync: true,
+        };
+        assert_eq!(*indice1.indices.offset(0), audio_indice_0);
+
+        mp4parse_free(parser);
+    }
+}
+
+#[test]
 fn parse_sample_table_with_elst() {
     let mut file = std::fs::File::open("tests/short-cenc.mp4").expect("Unknown file");
     let io = Mp4parseIo {

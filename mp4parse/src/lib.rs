@@ -26,6 +26,7 @@ use fallible_collections::TryRead;
 use fallible_collections::TryReserveError;
 
 use num_traits::Num;
+use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto as _};
 use std::fmt;
 use std::io::Cursor;
@@ -4173,6 +4174,22 @@ pub fn read_moov<T: Read>(
             _ => skip_box_content(&mut b)?,
         };
         check_parser_state!(b.content);
+    }
+
+    // ISO/IEC 14496-12 §6.1.4 (Track Identifiers) and §8.5.3 (tkhd semantics):
+    // track_ID values are unique within a file/presentation and must not be reused.
+    let mut track_ids = HashSet::new();
+    for track in &tracks {
+        if let Some(track_id) = track.track_id {
+            if !track_ids.insert(track_id) {
+                if strictness == ParseStrictness::Strict {
+                    return Err(Error::from(Status::Invalid));
+                }
+                warn!(
+                    "Duplicate track_id {track_id} found; track_id-based lookups will use first occurrence"
+                );
+            }
+        }
     }
 
     Ok(MediaContext {

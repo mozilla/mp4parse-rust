@@ -239,8 +239,23 @@ pub fn create_sample_table(
 
         let start_decode = decode_time;
 
-        sample.start_composition = CheckedInteger(track_offset_time.0 + start_composition?.0);
-        sample.end_composition = CheckedInteger(track_offset_time.0 + end_composition?.0);
+        let start_composition_val: i64 = match start_composition {
+            Some(sc) => sc.0,
+            None => return None,
+        };
+        let end_composition_val: i64 = match end_composition {
+            Some(ec) => ec.0,
+            None => return None,
+        };
+
+        let track_offset: i64 = track_offset_time.0;
+
+        sample.start_composition = CheckedInteger(
+            track_offset.checked_add(start_composition_val)?
+        );
+        sample.end_composition = CheckedInteger(
+            track_offset.checked_add(end_composition_val)?
+        );
         sample.start_decode = CheckedInteger(start_decode.0);
     }
 
