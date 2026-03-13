@@ -479,6 +479,7 @@ impl Read for Mp4parseIo {
         }
         let rv = self.read.unwrap()(buf.as_mut_ptr(), buf.len(), self.userdata);
         if rv >= 0 {
+            assert!(rv as usize <= buf.len(), "read callback returned more bytes than buffer size");
             Ok(rv as usize)
         } else {
             Err(std::io::Error::other("I/O error in Mp4parseIo Read impl"))
