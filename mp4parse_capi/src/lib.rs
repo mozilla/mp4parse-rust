@@ -831,8 +831,12 @@ fn get_track_audio_info(
                 }
             }
         };
-        sample_info.channels = audio.channelcount as u16;
+        sample_info.channels =
+            u16::try_from(audio.channelcount).map_err(|_| Mp4parseStatus::Invalid)?;
         sample_info.bit_depth = audio.samplesize;
+        if audio.samplerate < 0.0 || audio.samplerate > u32::MAX as f64 {
+            return Err(Mp4parseStatus::Invalid);
+        }
         sample_info.sample_rate = audio.samplerate as u32;
         // sample_info.profile is handled below on a per case basis
 
