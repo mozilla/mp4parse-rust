@@ -341,7 +341,7 @@ pub enum Mp4parseAvifLoopMode {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Mp4parseAvifInfo {
     pub premultiplied_alpha: bool,
     pub major_brand: [u8; 4],
@@ -383,7 +383,7 @@ pub struct Mp4parseAvifInfo {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Mp4parseAvifImage {
     pub primary_image: Mp4parseByteData,
     /// If no alpha item exists, members' `.length` will be 0 and `.data` will be null
@@ -1170,6 +1170,9 @@ pub unsafe extern "C" fn mp4parse_avif_get_info(
         return Mp4parseStatus::BadArg;
     }
 
+    // Initialize fields to default values to ensure all fields are always valid.
+    *avif_info = Default::default();
+
     if let Ok(info) = mp4parse_avif_get_info_safe((*parser).context()) {
         *avif_info = info;
         Mp4parseStatus::Ok
@@ -1351,6 +1354,9 @@ pub unsafe extern "C" fn mp4parse_avif_get_image(
     if parser.is_null() || avif_image.is_null() {
         return Mp4parseStatus::BadArg;
     }
+
+    // Initialize fields to default values to ensure all fields are always valid.
+    *avif_image = Default::default();
 
     if let Ok(image) = mp4parse_avif_get_image_safe(&*parser) {
         *avif_image = image;
