@@ -1386,7 +1386,7 @@ pub unsafe extern "C" fn mp4parse_get_indice_table(
     track_id: u32,
     indices: *mut Mp4parseByteData,
 ) -> Mp4parseStatus {
-    if parser.is_null() {
+    if parser.is_null() || indices.is_null() {
         return Mp4parseStatus::BadArg;
     }
 
@@ -1565,7 +1565,7 @@ pub unsafe extern "C" fn mp4parse_is_fragmented(
     track_id: u32,
     fragmented: *mut u8,
 ) -> Mp4parseStatus {
-    if parser.is_null() {
+    if parser.is_null() || fragmented.is_null() {
         return Mp4parseStatus::BadArg;
     }
 
