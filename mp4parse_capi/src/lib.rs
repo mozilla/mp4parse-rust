@@ -1480,8 +1480,10 @@ fn get_indice_table(
     };
 
     if let Some(v) = create_sample_table(track, offset_time) {
-        indices.set_indices(&v);
         sample_table_cache.insert(track_id, v)?;
+        if let Some(cached) = sample_table_cache.get(&track_id) {
+            indices.set_indices(cached);
+        }
         return Ok(());
     }
 
