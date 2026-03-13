@@ -299,6 +299,11 @@ pub struct Mp4parseFragmentInfo {
 
 /// Parser state for MP4 files, exposed to C callers via raw pointer.
 ///
+/// # Thread safety
+///
+/// A parser instance must not be accessed from multiple threads
+/// concurrently. The caller is responsible for serializing all access.
+///
 /// # Pointer stability
 ///
 /// Several C API functions return raw pointers into data cached on this
@@ -429,6 +434,12 @@ impl ContextParser for Mp4parseParser {
     }
 }
 
+/// Parser state for AVIF files, exposed to C callers via raw pointer.
+///
+/// # Thread safety
+///
+/// A parser instance must not be accessed from multiple threads
+/// concurrently. The caller is responsible for serializing all access.
 #[derive(Default)]
 pub struct Mp4parseAvifParser {
     context: AvifContext,
