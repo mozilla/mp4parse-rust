@@ -660,7 +660,10 @@ pub unsafe extern "C" fn mp4parse_get_track_info(
     let track = &context.tracks[track_index];
 
     if let (Some(timescale), Some(context_timescale)) = (track.timescale, context.timescale) {
-        info.time_scale = timescale.0 as u32;
+        info.time_scale = match timescale.0.try_into() {
+            Ok(v) => v,
+            Err(_) => return Mp4parseStatus::Invalid,
+        };
         let media_time: CheckedInteger<u64> = track
             .media_time
             .map_or(0.into(), |media_time| media_time.0.into());
