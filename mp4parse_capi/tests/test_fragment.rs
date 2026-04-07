@@ -103,6 +103,7 @@ fn parse_opus_fragment() {
         assert_eq!((*audio.sample_info).bit_depth, 16);
         assert_eq!((*audio.sample_info).sample_rate, 48000);
         assert_eq!((*audio.sample_info).extra_data.length, 0);
+        assert!((*audio.sample_info).extra_data.data.is_null());
         assert_eq!((*audio.sample_info).codec_specific_config.length, 19);
 
         let mut is_fragmented_file: u8 = 0;
