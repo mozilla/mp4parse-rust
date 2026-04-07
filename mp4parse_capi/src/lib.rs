@@ -35,9 +35,11 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 use byteorder::WriteBytesExt;
+use fallible_collections::TryReserveError;
 use mp4parse::unstable::rational_scale;
 use std::convert::TryFrom;
 use std::convert::TryInto;
+use std::hash::Hash;
 
 use std::io::Read;
 
@@ -433,6 +435,24 @@ impl ContextParser for Mp4parseParser {
 pub struct Mp4parseAvifParser {
     context: AvifContext,
     sample_table: TryHashMap<u32, TryVec<Indice>>,
+}
+
+trait CacheInsertExt<K, V> {
+    fn insert_cache_entry(&mut self, key: K, value: V) -> Result<(), TryReserveError>;
+}
+
+impl<K, V> CacheInsertExt<K, V> for TryHashMap<K, V>
+where
+    K: Eq + Hash,
+{
+    fn insert_cache_entry(&mut self, key: K, value: V) -> Result<(), TryReserveError> {
+        let replaced = self.insert(key, value)?;
+        debug_assert!(
+            replaced.is_none(),
+            "cache entries must never be replaced once published"
+        );
+        Ok(())
+    }
 }
 
 impl Mp4parseAvifParser {
@@ -854,7 +874,7 @@ fn get_track_audio_info(
                         return Err(Mp4parseStatus::Invalid);
                     }
                     Ok(_) => {
-                        opus_header.insert((track_index, desc_i), v)?;
+                        opus_header.insert_cache_entry((track_index, desc_i), v)?;
                         if let Some(v) = opus_header.get(&(track_index, desc_i)) {
                             if v.len() > u32::MAX as usize {
                                 return Err(Mp4parseStatus::Invalid);
@@ -913,7 +933,7 @@ fn get_track_audio_info(
 
     parser
         .audio_track_sample_descriptions
-        .insert(track_index, audio_sample_infos)?;
+        .insert_cache_entry(track_index, audio_sample_infos)?;
     match parser.audio_track_sample_descriptions.get(&track_index) {
         Some(sample_info) => {
             if sample_info.len() > u32::MAX as usize {
@@ -1105,7 +1125,7 @@ fn mp4parse_get_track_video_info_safe(
 
     parser
         .video_track_sample_descriptions
-        .insert(track_index, video_sample_infos)?;
+        .insert_cache_entry(track_index, video_sample_infos)?;
     match parser.video_track_sample_descriptions.get(&track_index) {
         Some(sample_info) => {
             if sample_info.len() > u32::MAX as usize {
@@ -1481,7 +1501,7 @@ fn get_indice_table(
 
     if let Some(v) = create_sample_table(track, offset_time) {
         indices.set_indices(&v);
-        sample_table_cache.insert(track_id, v)?;
+        sample_table_cache.insert_cache_entry(track_id, v)?;
         return Ok(());
     }
 
