@@ -70,6 +70,7 @@ fn parse_cenc() {
         assert_eq!(protected_data.crypt_byte_block, 0);
         assert_eq!(protected_data.skip_byte_block, 0);
         assert_eq!(protected_data.constant_iv.length, 0);
+        assert!(protected_data.constant_iv.data.is_null());
 
         // Verify audio track and crypto information
         let mut audio = Mp4parseTrackAudioInfo::default();
@@ -98,6 +99,7 @@ fn parse_cenc() {
         assert_eq!(protected_data.crypt_byte_block, 0);
         assert_eq!(protected_data.skip_byte_block, 0);
         assert_eq!(protected_data.constant_iv.length, 0);
+        assert!(protected_data.constant_iv.data.is_null());
     }
 }
 
@@ -246,9 +248,11 @@ fn parse_unencrypted() {
         assert_eq!(protected_data.is_encrypted, 0x00);
         assert_eq!(protected_data.iv_size, 0);
         assert_eq!(protected_data.kid.length, 0);
+        assert!(protected_data.kid.data.is_null());
         assert_eq!(protected_data.crypt_byte_block, 0);
         assert_eq!(protected_data.skip_byte_block, 0);
         assert_eq!(protected_data.constant_iv.length, 0);
+        assert!(protected_data.constant_iv.data.is_null());
     }
 }
 
