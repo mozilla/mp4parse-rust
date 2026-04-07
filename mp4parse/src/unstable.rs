@@ -250,12 +250,8 @@ pub fn create_sample_table(
 
         let track_offset: i64 = track_offset_time.0;
 
-        sample.start_composition = CheckedInteger(
-            track_offset.checked_add(start_composition_val)?
-        );
-        sample.end_composition = CheckedInteger(
-            track_offset.checked_add(end_composition_val)?
-        );
+        sample.start_composition = CheckedInteger(track_offset.checked_add(start_composition_val)?);
+        sample.end_composition = CheckedInteger(track_offset.checked_add(end_composition_val)?);
         sample.start_decode = CheckedInteger(start_decode.0);
     }
 
