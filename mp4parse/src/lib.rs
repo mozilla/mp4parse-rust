@@ -227,6 +227,8 @@ pub enum Status {
     IlocOffsetOverflow,
     ImageItemType,
     InfeFlagsNonzero,
+    InfeStringNoNul,
+    InfeStringNotUtf8,
     InvalidUtf8,
     IpcoIndexOverflow,
     IpmaBadIndex,
@@ -610,6 +612,14 @@ impl From<Status> for &str {
             Status::InfeFlagsNonzero => {
                 "'infe' flags field shall be 0 \
                  per ISOBMFF (ISO 14496-12:2020) § 8.11.6.2"
+            }
+            Status::InfeStringNoNul => {
+                "'infe' strings shall be null-terminated \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.6.3"
+            }
+            Status::InfeStringNotUtf8 => {
+                "'infe' strings field shall be valid utf8 \
+                 per ISOBMFF (ISO 14496-12:2020) § 8.11.6.3"
             }
             Status::InvalidUtf8 => {
                 "invalid utf8"
@@ -1594,6 +1604,10 @@ pub struct AvifContext {
     pub sequence: Option<MediaContext>,
     /// A collection of unsupported features encountered during the parse
     pub unsupported_features: UnsupportedFeatures,
+    /// AVIF box containing the Exif metadata, if any
+    exif_metadata: Option<AvifItem>,
+    /// AVIF box containing the XMP metadata, if any
+    xmp_metadata: Option<AvifItem>,
 }
 
 impl AvifContext {
@@ -1655,6 +1669,18 @@ impl AvifContext {
         }
     }
 
+
+    pub fn exif_metadata(&self) -> Option<&[u8]> {
+        self.exif_metadata
+            .as_ref()
+            .map(|item| self.item_as_slice(item))
+    }
+
+    pub fn xmp_metadata(&self) -> Option<&[u8]> {
+        self.xmp_metadata
+            .as_ref()
+            .map(|item| self.item_as_slice(item))
+    }
 
     pub fn spatial_extents(&self) -> Result<&ImageSpatialExtentsProperty> {
         if let Some(primary_item) = &self.primary_item {
@@ -1970,7 +1996,7 @@ impl DataBox {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct PropertyIndex(u16);
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, PartialOrd)]
-struct ItemId(u32);
+pub struct ItemId(u32);
 
 impl ItemId {
     fn read(src: &mut impl ReadBytesExt, version: u8) -> Result<ItemId> {
@@ -1986,9 +2012,13 @@ impl ItemId {
 /// See ISOBMFF (ISO 14496-12:2020) § 8.11.6
 /// Only versions {2, 3} are supported
 #[derive(Debug)]
-struct ItemInfoEntry {
-    item_id: ItemId,
-    item_type: u32,
+pub struct ItemInfoEntry {
+    pub item_id: ItemId,
+    pub item_type: u32,
+    pub item_name: TryVec<u8>,
+    pub content_type: Option<TryVec<u8>>,
+    pub content_encoding: Option<TryVec<u8>>,
+    pub uri_type: Option<TryVec<u8>>,
 }
 
 /// See ISOBMFF (ISO 14496-12:2020) § 8.11.12
@@ -2577,24 +2607,17 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
     debug!("alpha_item_id: {alpha_item_id:?}");
     let mut primary_item = None;
     let mut alpha_item = None;
+    let mut items: TryHashMap<ItemId, AvifItem> = Default::default();
 
     // store data or record location of relevant items
     for (item_id, loc) in iloc_items {
-        let item = if Some(item_id) == primary_item_id {
-            &mut primary_item
-        } else if Some(item_id) == alpha_item_id {
-            &mut alpha_item
-        } else {
-            continue;
-        };
-
-        assert!(item.is_none());
+        let mut item: Option<AvifItem> = None;
 
         // If our item is spread over multiple extents, we'll need to copy it
         // into a contiguous buffer. Otherwise, we can just store the extent
         // and return a pointer into the mdat/idat later to avoid the copy.
         if loc.extents.len() > 1 {
-            *item = Some(AvifItem::with_inline_data(item_id))
+            item = Some(AvifItem::with_inline_data(item_id))
         }
 
         trace!(
@@ -2607,10 +2630,10 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         // true if the extent is successfully added to the AvifItem
         let mut find_and_add_to_item = |extent: &Extent, dat: &DataBox| -> Result<bool> {
             if let Some(extent_slice) = dat.get(extent) {
-                match item {
+                match &mut item {
                     None => {
                         trace!("Using IsobmffItem::Location");
-                        *item = Some(AvifItem {
+                        item = Some(AvifItem {
                             id: item_id,
                             image_data: dat.location(extent),
                         });
@@ -2670,6 +2693,14 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         }
 
         assert!(item.is_some());
+
+        if Some(item_id) == primary_item_id {
+            primary_item = item;
+        } else if Some(item_id) == alpha_item_id {
+            alpha_item = item;
+        } else {
+            items.insert(item_id, item.unwrap())?;
+        };
     }
 
     if (primary_item_id.is_some() && primary_item.is_none())
@@ -2773,6 +2804,21 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
     check_image_item(&mut primary_item)?;
     check_image_item(&mut alpha_item)?;
 
+    let mut exif_metadata = None;
+    let mut xmp_metadata = None;
+
+    item_infos.into_iter().for_each(|item| {
+        if &item.item_type.to_be_bytes() == b"Exif" {
+            exif_metadata = items.remove(&item.item_id);
+        } else if &item.item_type.to_be_bytes() == b"mime"
+            && item
+                .content_type
+                .is_some_and(|v| v.as_slice() == b"application/rdf+xml")
+        {
+            xmp_metadata = items.remove(&item.item_id);
+        }
+    });
+
     Ok(AvifContext {
         strictness,
         media_storage,
@@ -2783,6 +2829,8 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
         item_properties,
         major_brand,
         sequence: image_sequence,
+        exif_metadata,
+        xmp_metadata,
         unsupported_features,
     })
 }
@@ -2957,6 +3005,39 @@ impl std::fmt::Display for U32BE {
     }
 }
 
+fn read_infe_string<T: Read>(
+    src: &mut BMFFBox<T>,
+    strictness: ParseStrictness,
+) -> Result<TryVec<u8>> {
+    let mut s = TryVec::new();
+    loop {
+        match src.read_u8() {
+            Ok(v) => {
+                s.push(v)?;
+                if v == 0 {
+                    break;
+                }
+            },
+            Err(_) => break,
+        }
+    }
+    match std::str::from_utf8(&s) {
+        Ok(s) => {
+            if !s.bytes().any(|b| b == b'\0') {
+                fail_with_status_if(
+                    strictness != ParseStrictness::Permissive,
+                    Status::InfeStringNoNul,
+                )?;
+            }
+        }
+        Err(_) => fail_with_status_if(
+            strictness != ParseStrictness::Permissive,
+            Status::InfeStringNotUtf8,
+        )?,
+    }
+    Ok(s)
+}
+
 /// Parse an Item Info Entry
 /// See ISOBMFF (ISO 14496-12:2020) § 8.11.6.2
 fn read_infe<T: Read>(
@@ -2988,15 +3069,32 @@ fn read_infe<T: Read>(
     let item_type = be_u32(src)?;
     debug!("infe {:?} item_type: {}", item_id, U32BE(item_type));
 
-    // There are some additional fields here, but they're not of interest to us
-    skip_box_remain(src)?;
-
     if item_protection_index != 0 {
         unsupported_features.insert(Feature::Ipro);
-        Ok(None)
-    } else {
-        Ok(Some(ItemInfoEntry { item_id, item_type }))
+        skip_box_remain(src)?;
+        return Ok(None);
     }
+
+    let item_name = read_infe_string(src, strictness)?;
+
+    let (content_type, content_encoding, uri_type) = if &item_type.to_be_bytes() == b"mime" {
+        (
+            Some(read_infe_string(src, strictness)?),
+            Some(read_infe_string(src, strictness)?),
+            None
+        )
+    } else {
+        (None, None, Some(read_infe_string(src, strictness)?))
+    };
+
+    Ok(Some(ItemInfoEntry {
+        item_id,
+        item_type,
+        item_name,
+        content_type,
+        content_encoding,
+        uri_type
+    }))
 }
 
 /// Parse an Item Reference Box
