@@ -1722,6 +1722,15 @@ impl AvifContext {
         }
     }
 
+    pub fn image_mirror(&self) -> Result<Option<ImageMirror>> {
+        let mirror_ptr = self.image_mirror_ptr()?;
+        if mirror_ptr.is_null() {
+            Ok(None)
+        } else {
+            unsafe { Ok(Some(std::ptr::read_unaligned(mirror_ptr))) }
+        }
+    }
+
     pub fn image_mirror_ptr(&self) -> Result<*const ImageMirror> {
         if let Some(primary_item) = &self.primary_item {
             match self
