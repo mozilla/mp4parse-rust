@@ -5533,7 +5533,10 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Resu
 }
 
 /// Parse an video description inside an stsd box.
-fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry> {
+fn read_video_sample_entry<T: Read>(
+    src: &mut BMFFBox<T>,
+    strictness: ParseStrictness,
+) -> Result<SampleEntry> {
     let name = src.get_header().name;
     let codec_type = match name {
         BoxType::AVCSampleEntry | BoxType::AVC3SampleEntry => CodecType::H264,
@@ -5688,7 +5691,12 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 skip_box_content(&mut b)?;
             }
         }
-        check_parser_state!(b.content);
+        if strictness == ParseStrictness::Strict {
+            check_parser_state!(b.content);
+        } else {
+            // Padding may be present in some content.
+            skip_box_remain(&mut b)?;
+        }
     }
 
     Ok(
@@ -5836,11 +5844,18 @@ fn read_audio_sample_entry<T: Read>(
                 codec_type = CodecType::ALAC;
                 codec_specific = Some(AudioCodecSpecific::ALACSpecificBox(alac));
             }
-            BoxType::QTWaveAtom => {
-                let qt_esds = read_qt_wave_atom(&mut b, strictness)?;
-                codec_type = qt_esds.audio_codec;
-                codec_specific = Some(AudioCodecSpecific::ES_Descriptor(qt_esds));
-            }
+            BoxType::QTWaveAtom => match read_qt_wave_atom(&mut b, strictness) {
+                Ok(qt_esds) => {
+                    codec_type = qt_esds.audio_codec;
+                    codec_specific = Some(AudioCodecSpecific::ES_Descriptor(qt_esds));
+                }
+                Err(e) => {
+                    warn!("Failed to parse wave atom: {e:?}");
+                    if strictness == ParseStrictness::Strict {
+                        return Err(e);
+                    }
+                }
+            },
             BoxType::ProtectionSchemeInfoBox => {
                 if name != BoxType::ProtectedAudioSampleEntry {
                     return Status::StsdBadAudioSampleEntry.into();
@@ -5908,9 +5923,9 @@ fn read_stsd<T: Read>(
     while descriptions.len() < description_count {
         if let Some(mut b) = iter.next_box()? {
             let description = match track.track_type {
-                TrackType::Video => read_video_sample_entry(&mut b),
-                TrackType::Picture => read_video_sample_entry(&mut b),
-                TrackType::AuxiliaryVideo => read_video_sample_entry(&mut b),
+                TrackType::Video => read_video_sample_entry(&mut b, strictness),
+                TrackType::Picture => read_video_sample_entry(&mut b, strictness),
+                TrackType::AuxiliaryVideo => read_video_sample_entry(&mut b, strictness),
                 TrackType::Audio => read_audio_sample_entry(&mut b, strictness),
                 TrackType::Metadata => Err(Error::Unsupported("metadata track")),
                 TrackType::Unknown => Err(Error::Unsupported("unknown track type")),
