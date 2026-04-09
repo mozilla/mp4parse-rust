@@ -1640,6 +1640,37 @@ impl AvifContext {
         }
     }
 
+    pub fn av1_config(&self) -> Result<&AV1ConfigBox> {
+        if let Some(primary_item) = &self.primary_item {
+            match self
+                .item_properties
+                .get(primary_item.id, BoxType::AV1CodecConfigurationBox)?
+            {
+                Some(ItemProperty::AV1Config(av1c)) => Ok(av1c),
+                Some(other_property) => panic!("property key mismatch: {:?}", other_property),
+                None => Err(Error::from(Status::Av1cMissing)),
+            }
+        } else {
+            Err(Error::from(Status::PitmMissing))
+        }
+    }
+
+
+    pub fn spatial_extents(&self) -> Result<&ImageSpatialExtentsProperty> {
+        if let Some(primary_item) = &self.primary_item {
+            match self
+                .item_properties
+                .get(primary_item.id, BoxType::ImageSpatialExtentsProperty)?
+            {
+                Some(ItemProperty::ImageSpatialExtents(ispe)) => Ok(ispe),
+                Some(other_property) => panic!("property key mismatch: {:?}", other_property),
+                None => Err(Error::from(Status::IspeMissing)),
+            }
+        } else {
+            Err(Error::from(Status::PitmMissing))
+        }
+    }
+
     pub fn spatial_extents_ptr(&self) -> Result<*const ImageSpatialExtentsProperty> {
         if let Some(primary_item) = &self.primary_item {
             match self
@@ -1658,6 +1689,21 @@ impl AvifContext {
             }
         } else {
             Ok(std::ptr::null())
+        }
+    }
+
+    pub fn colour_information(&self) -> Result<&ColourInformation> {
+        if let Some(primary_item) = &self.primary_item {
+            match self
+                .item_properties
+                .get(primary_item.id, BoxType::ColourInformationBox)?
+            {
+                Some(ItemProperty::Colour(v)) => Ok(v),
+                Some(other_property) => panic!("property key mismatch: {:?}", other_property),
+                None => Err(Error::from(Status::ItemTypeMissing)),
+            }
+        } else {
+            Err(Error::from(Status::PitmMissing))
         }
     }
 
@@ -1722,6 +1768,21 @@ impl AvifContext {
         }
     }
 
+    pub fn image_mirror(&self) -> Result<&ImageMirror> {
+        if let Some(primary_item) = &self.primary_item {
+            match self
+                .item_properties
+                .get(primary_item.id, BoxType::ImageMirror)?
+            {
+                Some(ItemProperty::Mirroring(imir)) => Ok(imir),
+                Some(other_property) => panic!("property key mismatch: {:?}", other_property),
+                None => Err(Error::from(Status::ItemTypeMissing)),
+            }
+        } else {
+            Err(Error::from(Status::PitmMissing))
+        }
+    }
+
     pub fn image_mirror_ptr(&self) -> Result<*const ImageMirror> {
         if let Some(primary_item) = &self.primary_item {
             match self
@@ -1734,6 +1795,21 @@ impl AvifContext {
             }
         } else {
             Ok(std::ptr::null())
+        }
+    }
+
+    pub fn pixel_aspect_ratio(&self) -> Result<&PixelAspectRatio> {
+        if let Some(primary_item) = &self.primary_item {
+            match self
+                .item_properties
+                .get(primary_item.id, BoxType::PixelAspectRatioBox)?
+            {
+                Some(ItemProperty::PixelAspectRatio(pasp)) => Ok(pasp),
+                Some(other_property) => panic!("property key mismatch: {:?}", other_property),
+                None => Err(Error::from(Status::ItemTypeMissing)),
+            }
+        } else {
+            Err(Error::from(Status::PitmMissing))
         }
     }
 
@@ -3645,8 +3721,8 @@ fn read_ipco<T: Read>(
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ImageSpatialExtentsProperty {
-    image_width: u32,
-    image_height: u32,
+    pub image_width: u32,
+    pub image_height: u32,
 }
 
 /// Parse image spatial extents property
@@ -3669,8 +3745,8 @@ fn read_ispe<T: Read>(src: &mut BMFFBox<T>) -> Result<ImageSpatialExtentsPropert
 #[repr(C)]
 #[derive(Debug)]
 pub struct PixelAspectRatio {
-    h_spacing: u32,
-    v_spacing: u32,
+    pub h_spacing: u32,
+    pub v_spacing: u32,
 }
 
 /// Parse pixel aspect ratio property
@@ -3722,16 +3798,16 @@ fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<PixelInformation> {
 #[repr(C)]
 #[derive(Debug)]
 pub struct NclxColourInformation {
-    colour_primaries: u8,
-    transfer_characteristics: u8,
-    matrix_coefficients: u8,
-    full_range_flag: bool,
+    pub colour_primaries: u8,
+    pub transfer_characteristics: u8,
+    pub matrix_coefficients: u8,
+    pub full_range_flag: bool,
 }
 
 /// The raw bytes of the ICC profile
 #[repr(C)]
 pub struct IccColourInformation {
-    bytes: TryVec<u8>,
+    pub bytes: TryVec<u8>,
 }
 
 impl fmt::Debug for IccColourInformation {
