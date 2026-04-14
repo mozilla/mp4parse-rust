@@ -51,10 +51,8 @@ where
     };
     section = func(section);
     match size {
-        BoxSize::Short(size) => {
-            if size > 0 {
-                assert_eq!(u64::from(size), section.size())
-            }
+        BoxSize::Short(size) if size > 0 => {
+            assert_eq!(u64::from(size), section.size())
         }
         BoxSize::Long(size) => assert_eq!(size, section.size()),
         BoxSize::Auto => {
