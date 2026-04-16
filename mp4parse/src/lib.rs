@@ -1175,6 +1175,7 @@ pub struct VideoSampleEntry {
     pub codec_specific: VideoCodecSpecific,
     pub protection_info: TryVec<ProtectionSchemeInfoBox>,
     pub pixel_aspect_ratio: Option<f32>,
+    pub colour_info: Option<ColourInformation>,
 }
 
 /// Represent a Video Partition Codec Configuration 'vpcC' box (aka vp9). The meaning of each
@@ -3722,10 +3723,10 @@ fn read_pixi<T: Read>(src: &mut BMFFBox<T>) -> Result<PixelInformation> {
 #[repr(C)]
 #[derive(Debug)]
 pub struct NclxColourInformation {
-    colour_primaries: u8,
-    transfer_characteristics: u8,
-    matrix_coefficients: u8,
-    full_range_flag: bool,
+    pub colour_primaries: u8,
+    pub transfer_characteristics: u8,
+    pub matrix_coefficients: u8,
+    pub full_range_flag: bool,
 }
 
 /// The raw bytes of the ICC profile
@@ -5533,7 +5534,10 @@ fn read_hdlr<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Resu
 }
 
 /// Parse an video description inside an stsd box.
-fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry> {
+fn read_video_sample_entry<T: Read>(
+    src: &mut BMFFBox<T>,
+    strictness: ParseStrictness,
+) -> Result<SampleEntry> {
     let name = src.get_header().name;
     let codec_type = match name {
         BoxType::AVCSampleEntry | BoxType::AVC3SampleEntry => CodecType::H264,
@@ -5567,6 +5571,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
     // Skip clap/pasp/etc. for now.
     let mut codec_specific = None;
     let mut pixel_aspect_ratio = None;
+    let mut colour_info = None;
     let mut protection_info = TryVec::new();
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
@@ -5683,6 +5688,19 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 }
                 debug!("Parsed pasp box: {pasp:?}, PAR {pixel_aspect_ratio:?}");
             }
+            BoxType::ColourInformationBox => {
+                if colour_info.is_some() {
+                    // ISO 14496-12:2020 §12.1.5 requires at most one ColourInformationBox
+                    // per sample entry. Duplicates are a spec violation, but we tolerate
+                    // them to avoid breaking playback of malformed content.
+                    warn!("Multiple colr boxes in video sample entry, keeping first");
+                    skip_box_content(&mut b)?;
+                } else {
+                    let colr = read_colr(&mut b, strictness)?;
+                    debug!("Parsed colr box: {colr:?}");
+                    colour_info = Some(colr);
+                }
+            }
             _ => {
                 debug!("Unsupported video codec, box {:?} found", b.head.name);
                 skip_box_content(&mut b)?;
@@ -5701,6 +5719,7 @@ fn read_video_sample_entry<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleEntry>
                 codec_specific,
                 protection_info,
                 pixel_aspect_ratio,
+                colour_info,
             })
         }),
     )
@@ -5908,9 +5927,9 @@ fn read_stsd<T: Read>(
     while descriptions.len() < description_count {
         if let Some(mut b) = iter.next_box()? {
             let description = match track.track_type {
-                TrackType::Video => read_video_sample_entry(&mut b),
-                TrackType::Picture => read_video_sample_entry(&mut b),
-                TrackType::AuxiliaryVideo => read_video_sample_entry(&mut b),
+                TrackType::Video => read_video_sample_entry(&mut b, strictness),
+                TrackType::Picture => read_video_sample_entry(&mut b, strictness),
+                TrackType::AuxiliaryVideo => read_video_sample_entry(&mut b, strictness),
                 TrackType::Audio => read_audio_sample_entry(&mut b, strictness),
                 TrackType::Metadata => Err(Error::Unsupported("metadata track")),
                 TrackType::Unknown => Err(Error::Unsupported("unknown track type")),
