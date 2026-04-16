@@ -264,6 +264,18 @@ pub struct Mp4parseTrackVideoSampleInfo {
     pub image_height: u16,
     pub extra_data: Mp4parseByteData,
     pub protected_data: Mp4parseSinfInfo,
+    /// True when a `colr` box with `colour_type = 'nclx'` was present. When false,
+    /// the CICP fields below are all zero and must not be interpreted.
+    pub has_colour_info: bool,
+    /// CICP colour primaries (ISO 23091-2 § 8.1). Valid only when `has_colour_info`.
+    pub colour_primaries: u8,
+    /// CICP transfer characteristics (ISO 23091-2 § 8.2). Valid only when `has_colour_info`.
+    pub transfer_characteristics: u8,
+    /// CICP matrix coefficients (ISO 23091-2 § 8.3). Valid only when `has_colour_info`.
+    /// Note: value 0 is a valid CICP value (Identity/GBR), not an absence indicator.
+    pub matrix_coefficients: u8,
+    /// Full range flag from the colr nclx box. Valid only when `has_colour_info`.
+    pub full_range_flag: bool,
 }
 
 #[repr(C)]
@@ -1120,6 +1132,14 @@ fn mp4parse_get_track_video_info_safe(
                 };
             }
         }
+        if let Some(mp4parse::ColourInformation::Nclx(ref nclx)) = video.colour_info {
+            sample_info.has_colour_info = true;
+            sample_info.colour_primaries = nclx.colour_primaries;
+            sample_info.transfer_characteristics = nclx.transfer_characteristics;
+            sample_info.matrix_coefficients = nclx.matrix_coefficients;
+            sample_info.full_range_flag = nclx.full_range_flag;
+        }
+
         video_sample_infos.push(sample_info)?;
     }
 
