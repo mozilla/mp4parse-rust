@@ -185,6 +185,7 @@ pub enum Status {
     BoxBadWideSize,
     CheckParserStateErr,
     ColrBadQuantity,
+    ColrBadQuantityBMFF,
     ColrBadSize,
     ColrBadType,
     ColrReservedNonzero,
@@ -464,6 +465,10 @@ impl From<Status> for &str {
                 "Each item shall have at most one property association with a
                  ColourInformationBox (colr) for a given value of colour_type \
                  per HEIF (ISO/IEC DIS 23008-12) § 6.5.5.1"
+            }
+            Status::ColrBadQuantityBMFF => {
+                "Each sample entry shall have at most one ColourInformationBox (colr) \
+                 per ISOBMFF (ISO 14496-12:2020) § 12.1.5"
             }
             Status::ColrBadSize => {
                 "Unexpected size for colr box"
@@ -1175,6 +1180,8 @@ pub struct VideoSampleEntry {
     pub codec_specific: VideoCodecSpecific,
     pub protection_info: TryVec<ProtectionSchemeInfoBox>,
     pub pixel_aspect_ratio: Option<f32>,
+    /// Only `ColourInformation::Nclx` is currently surfaced through the C API;
+    /// `ColourInformation::Icc` is stored but not exposed to C consumers.
     pub colour_info: Option<ColourInformation>,
 }
 
@@ -3601,7 +3608,13 @@ fn read_ipco<T: Read>(
         let property = match b.head.name {
             BoxType::AuxiliaryTypeProperty => ItemProperty::AuxiliaryType(read_auxc(&mut b)?),
             BoxType::AV1CodecConfigurationBox => ItemProperty::AV1Config(read_av1c(&mut b)?),
-            BoxType::ColourInformationBox => ItemProperty::Colour(read_colr(&mut b, strictness)?),
+            BoxType::ColourInformationBox => match read_colr(&mut b, strictness)? {
+                ParsedColourInformation::Supported(colr) => ItemProperty::Colour(colr),
+                ParsedColourInformation::Unsupported(colour_type) => {
+                    error!("read_colr colour_type: {colour_type:?}");
+                    return Status::ColrBadType.into();
+                }
+            },
             BoxType::ImageMirror => ItemProperty::Mirroring(read_imir(&mut b)?),
             BoxType::ImageRotation => ItemProperty::Rotation(read_irot(&mut b)?),
             BoxType::ImageSpatialExtentsProperty => {
@@ -3759,12 +3772,17 @@ impl ColourInformation {
     }
 }
 
+enum ParsedColourInformation {
+    Supported(ColourInformation),
+    Unsupported(FourCC),
+}
+
 /// Parse colour information
 /// See ISOBMFF (ISO 14496-12:2020) § 12.1.5
 fn read_colr<T: Read>(
     src: &mut BMFFBox<T>,
     strictness: ParseStrictness,
-) -> Result<ColourInformation> {
+) -> Result<ParsedColourInformation> {
     let colour_type = be_u32(src)?.to_be_bytes();
 
     match &colour_type {
@@ -3791,22 +3809,26 @@ fn read_colr<T: Read>(
                 )?;
             }
 
-            Ok(ColourInformation::Nclx(NclxColourInformation {
-                colour_primaries,
-                transfer_characteristics,
-                matrix_coefficients,
-                full_range_flag,
-            }))
+            Ok(ParsedColourInformation::Supported(ColourInformation::Nclx(
+                NclxColourInformation {
+                    colour_primaries,
+                    transfer_characteristics,
+                    matrix_coefficients,
+                    full_range_flag,
+                },
+            )))
         }
-        b"rICC" | b"prof" => Ok(ColourInformation::Icc(
+        b"rICC" | b"prof" => Ok(ParsedColourInformation::Supported(ColourInformation::Icc(
             IccColourInformation {
                 bytes: src.read_into_try_vec()?,
             },
             FourCC::from(colour_type),
-        )),
+        ))),
         _ => {
-            error!("read_colr colour_type: {colour_type:?}");
-            Status::ColrBadType.into()
+            let four_cc = FourCC::from(colour_type);
+            warn!("read_colr: unsupported colour_type {four_cc:?}, skipping");
+            skip_box_remain(src)?;
+            Ok(ParsedColourInformation::Unsupported(four_cc))
         }
     }
 }
@@ -5690,15 +5712,19 @@ fn read_video_sample_entry<T: Read>(
             }
             BoxType::ColourInformationBox => {
                 if colour_info.is_some() {
-                    // ISO 14496-12:2020 §12.1.5 requires at most one ColourInformationBox
-                    // per sample entry. Duplicates are a spec violation, but we tolerate
-                    // them to avoid breaking playback of malformed content.
                     warn!("Multiple colr boxes in video sample entry, keeping first");
+                    fail_with_status_if(
+                        strictness != ParseStrictness::Permissive,
+                        Status::ColrBadQuantityBMFF,
+                    )?;
                     skip_box_content(&mut b)?;
                 } else {
-                    let colr = read_colr(&mut b, strictness)?;
-                    debug!("Parsed colr box: {colr:?}");
-                    colour_info = Some(colr);
+                    if let ParsedColourInformation::Supported(colr) =
+                        read_colr(&mut b, strictness)?
+                    {
+                        debug!("Parsed colr box: {colr:?}");
+                        colour_info = Some(colr);
+                    }
                 }
             }
             _ => {
