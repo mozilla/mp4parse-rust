@@ -256,6 +256,32 @@ impl Default for Mp4parseTrackAudioInfo {
     }
 }
 
+/// Mastering display colour volume from an `mdcv` box (ISO 14496-12).
+/// Primary indices are R\[0\], G\[1\], B\[2\]. Divide chromaticity values by 50000.0
+/// and luminance values by 10000.0 to obtain physical units (chromaticity, cd/m²).
+#[repr(C)]
+#[derive(Default, Debug)]
+pub struct Mp4parseMasteringDisplayColourVolume {
+    pub display_primaries_x: [u16; 3],
+    pub display_primaries_y: [u16; 3],
+    pub white_point_x: u16,
+    pub white_point_y: u16,
+    /// In units of 0.0001 cd/m²
+    pub max_display_mastering_luminance: u32,
+    /// In units of 0.0001 cd/m²
+    pub min_display_mastering_luminance: u32,
+}
+
+/// Content light level from a `clli` box (ISO 14496-12).
+#[repr(C)]
+#[derive(Default, Debug)]
+pub struct Mp4parseContentLightLevel {
+    /// Maximum content light level in cd/m²
+    pub max_content_light_level: u16,
+    /// Maximum picture average light level in cd/m²
+    pub max_pic_average_light_level: u16,
+}
+
 #[repr(C)]
 #[derive(Default, Debug)]
 pub struct Mp4parseTrackVideoSampleInfo {
@@ -276,6 +302,12 @@ pub struct Mp4parseTrackVideoSampleInfo {
     pub matrix_coefficients: u8,
     /// Full range flag from the colr nclx box. Valid only when `has_colour_info`.
     pub full_range_flag: bool,
+    /// True when an `mdcv` box was present. When false, `mastering_display` must not be read.
+    pub has_mastering_display: bool,
+    pub mastering_display: Mp4parseMasteringDisplayColourVolume,
+    /// True when a `clli` box was present. When false, `content_light_level` must not be read.
+    pub has_content_light_level: bool,
+    pub content_light_level: Mp4parseContentLightLevel,
 }
 
 #[repr(C)]
@@ -1138,6 +1170,24 @@ fn mp4parse_get_track_video_info_safe(
             sample_info.transfer_characteristics = nclx.transfer_characteristics;
             sample_info.matrix_coefficients = nclx.matrix_coefficients;
             sample_info.full_range_flag = nclx.full_range_flag;
+        }
+        if let Some(ref mdcv) = video.hdr_mastering_display {
+            sample_info.has_mastering_display = true;
+            sample_info.mastering_display = Mp4parseMasteringDisplayColourVolume {
+                display_primaries_x: mdcv.display_primaries_x,
+                display_primaries_y: mdcv.display_primaries_y,
+                white_point_x: mdcv.white_point_x,
+                white_point_y: mdcv.white_point_y,
+                max_display_mastering_luminance: mdcv.max_display_mastering_luminance,
+                min_display_mastering_luminance: mdcv.min_display_mastering_luminance,
+            };
+        }
+        if let Some(ref clli) = video.hdr_content_light_level {
+            sample_info.has_content_light_level = true;
+            sample_info.content_light_level = Mp4parseContentLightLevel {
+                max_content_light_level: clli.max_content_light_level,
+                max_pic_average_light_level: clli.max_pic_average_light_level,
+            };
         }
 
         video_sample_infos.push(sample_info)?;

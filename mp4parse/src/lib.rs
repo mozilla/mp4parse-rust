@@ -1170,6 +1170,30 @@ pub enum VideoCodecSpecific {
     HEVCConfig(TryVec<u8>),
 }
 
+/// Mastering display colour volume from an `mdcv` box (ISO 14496-12).
+/// Primary indices are R\[0\], G\[1\], B\[2\]. Raw fixed-point values: divide chromaticity
+/// values by 50000 and luminance values by 10000 to obtain physical units.
+#[derive(Debug, Clone)]
+pub struct MasteringDisplayColourVolume {
+    pub display_primaries_x: [u16; 3],
+    pub display_primaries_y: [u16; 3],
+    pub white_point_x: u16,
+    pub white_point_y: u16,
+    /// In units of 0.0001 cd/m²
+    pub max_display_mastering_luminance: u32,
+    /// In units of 0.0001 cd/m²
+    pub min_display_mastering_luminance: u32,
+}
+
+/// Content light level from a `clli` box (ISO 14496-12).
+#[derive(Debug, Clone)]
+pub struct ContentLightLevel {
+    /// Maximum content light level in cd/m²
+    pub max_content_light_level: u16,
+    /// Maximum picture average light level in cd/m²
+    pub max_pic_average_light_level: u16,
+}
+
 #[derive(Debug)]
 pub struct VideoSampleEntry {
     pub codec_type: CodecType,
@@ -1183,6 +1207,10 @@ pub struct VideoSampleEntry {
     /// Only `ColourInformation::Nclx` is currently surfaced through the C API;
     /// `ColourInformation::Icc` is stored but not exposed to C consumers.
     pub colour_info: Option<ColourInformation>,
+    /// Mastering display colour volume from the `mdcv` box (ISO 14496-12).
+    pub hdr_mastering_display: Option<MasteringDisplayColourVolume>,
+    /// Content light level from the `clli` box (ISO 14496-12).
+    pub hdr_content_light_level: Option<ContentLightLevel>,
 }
 
 /// Represent a Video Partition Codec Configuration 'vpcC' box (aka vp9). The meaning of each
@@ -3701,6 +3729,32 @@ fn read_pasp<T: Read>(src: &mut BMFFBox<T>) -> Result<PixelAspectRatio> {
     })
 }
 
+/// Parse mastering display colour volume box (ISO 14496-12).
+fn read_mdcv<T: Read>(src: &mut BMFFBox<T>) -> Result<MasteringDisplayColourVolume> {
+    let display_primaries_x = [be_u16(src)?, be_u16(src)?, be_u16(src)?];
+    let display_primaries_y = [be_u16(src)?, be_u16(src)?, be_u16(src)?];
+    let white_point_x = be_u16(src)?;
+    let white_point_y = be_u16(src)?;
+    let max_display_mastering_luminance = be_u32(src)?;
+    let min_display_mastering_luminance = be_u32(src)?;
+    Ok(MasteringDisplayColourVolume {
+        display_primaries_x,
+        display_primaries_y,
+        white_point_x,
+        white_point_y,
+        max_display_mastering_luminance,
+        min_display_mastering_luminance,
+    })
+}
+
+/// Parse content light level box (ISO 14496-12).
+fn read_clli<T: Read>(src: &mut BMFFBox<T>) -> Result<ContentLightLevel> {
+    Ok(ContentLightLevel {
+        max_content_light_level: be_u16(src)?,
+        max_pic_average_light_level: be_u16(src)?,
+    })
+}
+
 #[derive(Debug)]
 pub struct PixelInformation {
     bits_per_channel: TryVec<u8>,
@@ -5594,6 +5648,8 @@ fn read_video_sample_entry<T: Read>(
     let mut codec_specific = None;
     let mut pixel_aspect_ratio = None;
     let mut colour_info = None;
+    let mut hdr_mastering_display = None;
+    let mut hdr_content_light_level = None;
     let mut protection_info = TryVec::new();
     let mut iter = src.box_iter();
     while let Some(mut b) = iter.next_box()? {
@@ -5726,6 +5782,16 @@ fn read_video_sample_entry<T: Read>(
                     }
                 }
             }
+            BoxType::MasteringDisplayColourVolumeBox => {
+                let mdcv = read_mdcv(&mut b)?;
+                debug!("Parsed mdcv box: {mdcv:?}");
+                hdr_mastering_display = Some(mdcv);
+            }
+            BoxType::ContentLightLevelBox => {
+                let clli = read_clli(&mut b)?;
+                debug!("Parsed clli box: {clli:?}");
+                hdr_content_light_level = Some(clli);
+            }
             _ => {
                 debug!("Unsupported video codec, box {:?} found", b.head.name);
                 skip_box_content(&mut b)?;
@@ -5745,6 +5811,8 @@ fn read_video_sample_entry<T: Read>(
                 protection_info,
                 pixel_aspect_ratio,
                 colour_info,
+                hdr_mastering_display,
+                hdr_content_light_level,
             })
         }),
     )
