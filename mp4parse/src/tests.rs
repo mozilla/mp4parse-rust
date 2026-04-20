@@ -1389,3 +1389,49 @@ fn read_to_end_oom() {
     let mut src = b"1234567890".take(isize::MAX.try_into().expect("isize < u64"));
     assert!(src.read_into_try_vec().is_err());
 }
+
+#[test]
+fn read_mdcv() {
+    // Synthetic mdcv box: 3 primaries (R, G, B) x/y as u16, white point x/y,
+    // max/min luminance as u32. Values chosen to be distinct and easy to verify.
+    let mut stream = make_box(BoxSize::Auto, b"mdcv", |s| {
+        s // display_primaries_x[0..2] (R, G, B)
+            .B16(35400)
+            .B16(14600)
+            .B16(7500)
+            // display_primaries_y[0..2] (R, G, B)
+            .B16(14600)
+            .B16(59210)
+            .B16(3000)
+            // white_point_x, white_point_y
+            .B16(15635)
+            .B16(16450)
+            // max_display_mastering_luminance, min_display_mastering_luminance
+            .B32(10000000)
+            .B32(50)
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    assert_eq!(
+        stream.head.name,
+        super::BoxType::MasteringDisplayColourVolumeBox
+    );
+    let mdcv = super::read_mdcv(&mut stream).unwrap();
+    assert_eq!(mdcv.display_primaries_x, [35400, 14600, 7500]);
+    assert_eq!(mdcv.display_primaries_y, [14600, 59210, 3000]);
+    assert_eq!(mdcv.white_point_x, 15635);
+    assert_eq!(mdcv.white_point_y, 16450);
+    assert_eq!(mdcv.max_display_mastering_luminance, 10000000);
+    assert_eq!(mdcv.min_display_mastering_luminance, 50);
+}
+
+#[test]
+fn read_clli() {
+    let mut stream = make_box(BoxSize::Auto, b"clli", |s| s.B16(1000).B16(400));
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    assert_eq!(stream.head.name, super::BoxType::ContentLightLevelBox);
+    let clli = super::read_clli(&mut stream).unwrap();
+    assert_eq!(clli.max_content_light_level, 1000);
+    assert_eq!(clli.max_pic_average_light_level, 400);
+}
