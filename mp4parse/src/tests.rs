@@ -1392,17 +1392,16 @@ fn read_to_end_oom() {
 
 #[test]
 fn read_mdcv() {
-    // Synthetic mdcv box: 3 primaries (R, G, B) x/y as u16, white point x/y,
-    // max/min luminance as u32. Values chosen to be distinct and easy to verify.
+    // Synthetic mdcv box. Wire order is G, B, R (x then y for each primary),
+    // remapped by read_mdcv to struct indices R[0], G[1], B[2].
     let mut stream = make_box(BoxSize::Auto, b"mdcv", |s| {
-        s // display_primaries_x[0..2] (R, G, B)
-            .B16(35400)
-            .B16(14600)
-            .B16(7500)
-            // display_primaries_y[0..2] (R, G, B)
-            .B16(14600)
-            .B16(59210)
-            .B16(3000)
+        s // Gx, Gy, Bx, By, Rx, Ry (wire order)
+            .B16(14600) // Gx
+            .B16(59210) // Gy
+            .B16(7500) // Bx
+            .B16(3000) // By
+            .B16(35400) // Rx
+            .B16(14600) // Ry
             // white_point_x, white_point_y
             .B16(15635)
             .B16(16450)
