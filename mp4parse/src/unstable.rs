@@ -239,14 +239,8 @@ pub fn create_sample_table(
 
         let start_decode = decode_time;
 
-        let start_composition_val: i64 = match start_composition {
-            Some(sc) => sc.0,
-            None => return None,
-        };
-        let end_composition_val: i64 = match end_composition {
-            Some(ec) => ec.0,
-            None => return None,
-        };
+        let start_composition_val: i64 = start_composition?.0;
+        let end_composition_val: i64 = end_composition?.0;
 
         let track_offset: i64 = track_offset_time.0;
 

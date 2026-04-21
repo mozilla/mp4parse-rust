@@ -5774,12 +5774,11 @@ fn read_video_sample_entry<T: Read>(
                         Status::ColrBadQuantityBMFF,
                     )?;
                     skip_box_content(&mut b)?;
-                } else {
-                    if let ParsedColourInformation::Supported(colr) = read_colr(&mut b, strictness)?
-                    {
-                        debug!("Parsed colr box: {colr:?}");
-                        colour_info = Some(colr);
-                    }
+                } else if let ParsedColourInformation::Supported(colr) =
+                    read_colr(&mut b, strictness)?
+                {
+                    debug!("Parsed colr box: {colr:?}");
+                    colour_info = Some(colr);
                 }
             }
             BoxType::MasteringDisplayColourVolumeBox => {
