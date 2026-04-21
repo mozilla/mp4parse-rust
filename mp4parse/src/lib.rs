@@ -1171,8 +1171,8 @@ pub enum VideoCodecSpecific {
 }
 
 /// Mastering display colour volume from an `mdcv` box (ISO 14496-12).
-/// Primary indices are R\[0\], G\[1\], B\[2\]. Raw fixed-point values: divide chromaticity
-/// values by 50000 and luminance values by 10000 to obtain physical units.
+/// Primary indices are R\[0\], G\[1\], B\[2\]. Divide chromaticity values by 50000
+/// and luminance values by 10000 to obtain physical units.
 #[derive(Debug, Clone)]
 pub struct MasteringDisplayColourVolume {
     pub display_primaries_x: [u16; 3],
@@ -3731,8 +3731,12 @@ fn read_pasp<T: Read>(src: &mut BMFFBox<T>) -> Result<PixelAspectRatio> {
 
 /// Parse mastering display colour volume box (ISO 14496-12).
 fn read_mdcv<T: Read>(src: &mut BMFFBox<T>) -> Result<MasteringDisplayColourVolume> {
-    let display_primaries_x = [be_u16(src)?, be_u16(src)?, be_u16(src)?];
-    let display_primaries_y = [be_u16(src)?, be_u16(src)?, be_u16(src)?];
+    // Wire order is G, B, R (per ISO 14496-12); remap to R[0], G[1], B[2].
+    let (gx, gy) = (be_u16(src)?, be_u16(src)?);
+    let (bx, by) = (be_u16(src)?, be_u16(src)?);
+    let (rx, ry) = (be_u16(src)?, be_u16(src)?);
+    let display_primaries_x = [rx, gx, bx];
+    let display_primaries_y = [ry, gy, by];
     let white_point_x = be_u16(src)?;
     let white_point_y = be_u16(src)?;
     let max_display_mastering_luminance = be_u32(src)?;
