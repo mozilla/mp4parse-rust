@@ -5151,6 +5151,20 @@ fn read_ds_descriptor(
     esds: &mut ES_Descriptor,
     strictness: ParseStrictness,
 ) -> Result<()> {
+    // Keep the first DecSpecificInfo and ignore subsequent entries in
+    // non-strict mode.  Concatenating raw bytes and/or overwriting the parsed
+    // fields from a second DSI leaves the ES_Descriptor inconsistent (e.g.
+    // sample-rate/channel-count mismatched with the stored DSI bytes) and
+    // produces silent-audio playback.  A single well-formed DSI is always
+    // sufficient.
+    if !esds.decoder_specific_data.is_empty() {
+        fail_with_status_if(
+            strictness == ParseStrictness::Strict,
+            Status::EsdsDecSpecificInfoTagQuantity,
+        )?;
+        return Ok(());
+    }
+
     #[cfg(feature = "mp4v")]
     // Check if we are in a Visual esda Box.
     if esds.video_codec != CodecType::Unknown {
@@ -5253,6 +5267,32 @@ fn read_ds_descriptor(
                 _ => 96000,
             };
 
+            // Map channel_configuration to channel count.  Zero indicates PCE
+            // (program_config_element) signalling, which requires parsing the
+            // trailing GASpecificConfig fields below and so can't be resolved
+            // yet.
+            let channel_count_from_config = match channel_configuration {
+                0 => None,
+                1..=7 => Some(channel_configuration),
+                11 => Some(7),      // 6.1, AAC Amendment 4 (2013)
+                12 | 14 => Some(8), // 7.1 (a/d), ITU BS.2159
+                _ => return Err(Error::Unsupported("invalid channel configuration")),
+            };
+
+            // Record the essential audio fields now, before any further bit
+            // reads that may hit EOF on a truncated DSI.  find_descriptor
+            // swallows BitReaderError in non-strict mode; without recording
+            // here we'd return a playable-looking track with no usable config
+            // (see band-orion.de, where HE-AAC with explicit SBR signalling
+            // omits the GASpecificConfig tail).
+            esds.audio_object_type = Some(audio_object_type);
+            esds.extended_audio_object_type = extended_audio_object_type;
+            esds.audio_sample_rate = Some(sample_frequency_value);
+            if let Some(cc) = channel_count_from_config {
+                esds.audio_channel_count = Some(cc);
+                esds.decoder_specific_data.extend_from_slice(data)?;
+            }
+
             bit_reader.skip(1)?; // frameLengthFlag
             let depend_on_core_order: u8 = ReadInto::read(bit_reader, 1)?;
             if depend_on_core_order > 0 {
@@ -5260,63 +5300,45 @@ fn read_ds_descriptor(
             }
             bit_reader.skip(1)?; // extensionFlag
 
-            let channel_counts = match channel_configuration {
-                0 => {
-                    debug!("Parsing program_config_element for channel counts");
+            if channel_count_from_config.is_none() {
+                // channel_configuration == 0: derive channel count from the
+                // program_config_element.
+                debug!("Parsing program_config_element for channel counts");
 
-                    bit_reader.skip(4)?; // element_instance_tag
-                    bit_reader.skip(2)?; // object_type
-                    bit_reader.skip(4)?; // sampling_frequency_index
-                    let num_front_channel: u8 = ReadInto::read(bit_reader, 4)?;
-                    let num_side_channel: u8 = ReadInto::read(bit_reader, 4)?;
-                    let num_back_channel: u8 = ReadInto::read(bit_reader, 4)?;
-                    let num_lfe_channel: u8 = ReadInto::read(bit_reader, 2)?;
-                    bit_reader.skip(3)?; // num_assoc_data
-                    bit_reader.skip(4)?; // num_valid_cc
+                bit_reader.skip(4)?; // element_instance_tag
+                bit_reader.skip(2)?; // object_type
+                bit_reader.skip(4)?; // sampling_frequency_index
+                let num_front_channel: u8 = ReadInto::read(bit_reader, 4)?;
+                let num_side_channel: u8 = ReadInto::read(bit_reader, 4)?;
+                let num_back_channel: u8 = ReadInto::read(bit_reader, 4)?;
+                let num_lfe_channel: u8 = ReadInto::read(bit_reader, 2)?;
+                bit_reader.skip(3)?; // num_assoc_data
+                bit_reader.skip(4)?; // num_valid_cc
 
-                    let mono_mixdown_present: bool = ReadInto::read(bit_reader, 1)?;
-                    if mono_mixdown_present {
-                        bit_reader.skip(4)?; // mono_mixdown_element_number
-                    }
-
-                    let stereo_mixdown_present: bool = ReadInto::read(bit_reader, 1)?;
-                    if stereo_mixdown_present {
-                        bit_reader.skip(4)?; // stereo_mixdown_element_number
-                    }
-
-                    let matrix_mixdown_idx_present: bool = ReadInto::read(bit_reader, 1)?;
-                    if matrix_mixdown_idx_present {
-                        bit_reader.skip(2)?; // matrix_mixdown_idx
-                        bit_reader.skip(1)?; // pseudo_surround_enable
-                    }
-                    let mut _channel_counts = 0;
-                    _channel_counts += read_surround_channel_count(bit_reader, num_front_channel)?;
-                    _channel_counts += read_surround_channel_count(bit_reader, num_side_channel)?;
-                    _channel_counts += read_surround_channel_count(bit_reader, num_back_channel)?;
-                    _channel_counts += read_surround_channel_count(bit_reader, num_lfe_channel)?;
-                    _channel_counts
+                let mono_mixdown_present: bool = ReadInto::read(bit_reader, 1)?;
+                if mono_mixdown_present {
+                    bit_reader.skip(4)?; // mono_mixdown_element_number
                 }
-                1..=7 => channel_configuration,
-                // Amendment 4 of the AAC standard in 2013 below
-                11 => 7,      // 6.1 Amendment 4 of the AAC standard in 2013
-                12 | 14 => 8, // 7.1 (a/d) of ITU BS.2159
-                _ => {
-                    return Err(Error::Unsupported("invalid channel configuration"));
+
+                let stereo_mixdown_present: bool = ReadInto::read(bit_reader, 1)?;
+                if stereo_mixdown_present {
+                    bit_reader.skip(4)?; // stereo_mixdown_element_number
                 }
-            };
 
-            esds.audio_object_type = Some(audio_object_type);
-            esds.extended_audio_object_type = extended_audio_object_type;
-            esds.audio_sample_rate = Some(sample_frequency_value);
-            esds.audio_channel_count = Some(channel_counts);
+                let matrix_mixdown_idx_present: bool = ReadInto::read(bit_reader, 1)?;
+                if matrix_mixdown_idx_present {
+                    bit_reader.skip(2)?; // matrix_mixdown_idx
+                    bit_reader.skip(1)?; // pseudo_surround_enable
+                }
+                let mut channel_counts = 0;
+                channel_counts += read_surround_channel_count(bit_reader, num_front_channel)?;
+                channel_counts += read_surround_channel_count(bit_reader, num_side_channel)?;
+                channel_counts += read_surround_channel_count(bit_reader, num_back_channel)?;
+                channel_counts += read_surround_channel_count(bit_reader, num_lfe_channel)?;
 
-            if !esds.decoder_specific_data.is_empty() {
-                fail_with_status_if(
-                    strictness == ParseStrictness::Strict,
-                    Status::EsdsDecSpecificInfoTagQuantity,
-                )?;
+                esds.audio_channel_count = Some(channel_counts);
+                esds.decoder_specific_data.extend_from_slice(data)?;
             }
-            esds.decoder_specific_data.extend_from_slice(data)?;
 
             Ok(())
         }
