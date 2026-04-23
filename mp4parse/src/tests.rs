@@ -1121,6 +1121,205 @@ fn read_esds_mpeg2_aac_lc() {
 }
 
 #[test]
+fn read_esds_truncated_dsi() {
+    // HE-AAC DSI truncated so the GASpecificConfig tail (frameLengthFlag /
+    // dependsOnCoreCoder / extensionFlag) runs off the end of the 24-bit
+    // payload, causing the bit reader to hit EOF.  Reduced from band-orion.de
+    // (Firefox bug 2011644).
+    //
+    // DSI `2b 92 08` decodes as:
+    //   AOT=5 (SBR, explicit signalling)
+    //   samplingFrequencyIndex=7 (22050 Hz base)
+    //   channelConfiguration=2 (stereo)
+    //   extensionSamplingFrequencyIndex=4 (44100 Hz extended)
+    //   inner AOT=2 (AAC-LC)
+    // which leaves 2 bits remaining, one short of the extensionFlag.
+    //
+    // Before our fix read_ds_descriptor stored the parsed fields only after
+    // the failing reads, so find_descriptor would swallow the BitReaderError
+    // in non-strict mode and leave the ES_Descriptor with audio_sample_rate,
+    // audio_channel_count and decoder_specific_data all unset — a "playable"
+    // AAC track with no config, producing silent audio.
+    let aac_esds = vec![
+        0x03, 0x1a, // ES_Descriptor tag, len=26
+        0x00, 0x00, 0x00, // ES_ID + flags
+        0x04, 0x12, // DC_Descriptor tag, len=18
+        0x40, 0x15, 0x00, 0x00, 0x00, // objType=AAC, streamType, bufferSize
+        0x00, 0x00, 0x00, 0x00, // maxBitrate
+        0x00, 0x00, 0x00, 0x00, // avgBitrate
+        0x05, 0x03, 0x2b, 0x92, 0x08, // DSI: truncated HE-AAC
+        0x06, 0x01, 0x02, // SL_Descriptor
+    ];
+    let aac_dc_descriptor = &aac_esds[22..25];
+
+    let mut stream = make_box(BoxSize::Auto, b"esds", |s| {
+        s.B32(0) // reserved
+            .append_bytes(aac_esds.as_slice())
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+
+    let es = super::read_esds(&mut stream, ParseStrictness::Normal).unwrap();
+
+    assert_eq!(es.audio_codec, super::CodecType::AAC);
+    assert_eq!(es.audio_object_type, Some(2));
+    assert_eq!(es.extended_audio_object_type, Some(5));
+    assert_eq!(es.audio_sample_rate, Some(22050));
+    assert_eq!(es.audio_channel_count, Some(2));
+    assert_eq!(es.codec_esds, aac_esds);
+    assert_eq!(es.decoder_specific_data, aac_dc_descriptor);
+}
+
+#[test]
+fn read_esds_duplicate_dsi() {
+    // Two DecSpecificInfo descriptors with identical AAC-LC 48 kHz stereo
+    // payload (`11 90`).  Reduced from Firefox bug 1906838.
+    //
+    // In non-strict mode the parser must keep the first DSI and ignore the
+    // second — matching what Chromium (media/formats/mp4/es_descriptor.cc)
+    // and ffmpeg (libavformat/isom.c ff_mp4_read_dec_config_descr) do.
+    // Before our fix the parser concatenated both DSI payloads and
+    // overwrote audio_object_type / audio_sample_rate / audio_channel_count
+    // with the second DSI's parsed values, which left the ES_Descriptor in
+    // an inconsistent state when the two DSIs disagreed.
+    let aac_esds = vec![
+        0x03, 0x1d, // ES_Descriptor tag, len=29
+        0x00, 0x00, 0x00, // ES_ID + flags
+        0x04, 0x15, // DC_Descriptor tag, len=21
+        0x40, 0x15, 0x00, 0x00, 0x00, // objType=AAC, streamType, bufferSize
+        0x00, 0x00, 0x01, 0xf4, // maxBitrate
+        0x00, 0x00, 0x01, 0xf4, // avgBitrate
+        0x05, 0x02, 0x11, 0x90, // DSI #1 (kept)
+        0x05, 0x02, 0x11, 0x90, // DSI #2 (ignored in non-strict)
+        0x06, 0x01, 0x02, // SL_Descriptor
+    ];
+    let aac_dc_descriptor = &aac_esds[22..24];
+
+    let mut stream = make_box(BoxSize::Auto, b"esds", |s| {
+        s.B32(0) // reserved
+            .append_bytes(aac_esds.as_slice())
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+
+    let es = super::read_esds(&mut stream, ParseStrictness::Normal).unwrap();
+
+    assert_eq!(es.audio_codec, super::CodecType::AAC);
+    assert_eq!(es.audio_object_type, Some(2));
+    assert_eq!(es.extended_audio_object_type, None);
+    assert_eq!(es.audio_sample_rate, Some(48000));
+    assert_eq!(es.audio_channel_count, Some(2));
+    assert_eq!(es.codec_esds, aac_esds);
+    // First DSI's bytes only — not the concatenation of both.
+    assert_eq!(es.decoder_specific_data, aac_dc_descriptor);
+}
+
+#[test]
+fn read_esds_duplicate_dsi_strict() {
+    // In strict mode, the duplicate-DSI case is rejected with the
+    // corresponding status rather than silently kept as "first wins".
+    let aac_esds = vec![
+        0x03, 0x1d, 0x00, 0x00, 0x00, 0x04, 0x15, 0x40, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
+        0xf4, 0x00, 0x00, 0x01, 0xf4, 0x05, 0x02, 0x11, 0x90, 0x05, 0x02, 0x11, 0x90, 0x06, 0x01,
+        0x02,
+    ];
+
+    let mut stream = make_box(BoxSize::Auto, b"esds", |s| {
+        s.B32(0) // reserved
+            .append_bytes(aac_esds.as_slice())
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+
+    match super::read_esds(&mut stream, ParseStrictness::Strict) {
+        Err(Error::InvalidData(Status::EsdsDecSpecificInfoTagQuantity)) => {}
+        other => panic!(
+            "expected EsdsDecSpecificInfoTagQuantity in strict mode, got {:?}",
+            other
+        ),
+    }
+}
+
+#[test]
+fn read_esds_duplicate_dsi_disagreeing() {
+    // Two DecSpecificInfo descriptors whose payloads disagree on sample rate
+    // and channel count.  Locks in "first-wins" rather than "second-wins" or
+    // "concatenate":
+    //   DSI #1 `11 90` → AOT=2 (AAC-LC), SFI=3 (48 kHz), chCfg=2 (stereo)
+    //   DSI #2 `12 88` → AOT=2 (AAC-LC), SFI=5 (32 kHz), chCfg=1 (mono)
+    let aac_esds = vec![
+        0x03, 0x1d, // ES_Descriptor tag, len=29
+        0x00, 0x00, 0x00, // ES_ID + flags
+        0x04, 0x15, // DC_Descriptor tag, len=21
+        0x40, 0x15, 0x00, 0x00, 0x00, // objType=AAC, streamType, bufferSize
+        0x00, 0x00, 0x01, 0xf4, // maxBitrate
+        0x00, 0x00, 0x01, 0xf4, // avgBitrate
+        0x05, 0x02, 0x11, 0x90, // DSI #1: 48 kHz stereo (kept)
+        0x05, 0x02, 0x12, 0x88, // DSI #2: 32 kHz mono (ignored in non-strict)
+        0x06, 0x01, 0x02, // SL_Descriptor
+    ];
+    let dsi1 = &aac_esds[22..24];
+
+    let mut stream = make_box(BoxSize::Auto, b"esds", |s| {
+        s.B32(0) // reserved
+            .append_bytes(aac_esds.as_slice())
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+
+    let es = super::read_esds(&mut stream, ParseStrictness::Normal).unwrap();
+
+    assert_eq!(es.audio_codec, super::CodecType::AAC);
+    assert_eq!(es.audio_object_type, Some(2));
+    assert_eq!(es.extended_audio_object_type, None);
+    // First DSI wins — not 32000 / 1 from DSI #2.
+    assert_eq!(es.audio_sample_rate, Some(48000));
+    assert_eq!(es.audio_channel_count, Some(2));
+    assert_eq!(es.decoder_specific_data, dsi1);
+}
+
+#[test]
+fn read_esds_truncated_dsi_pce() {
+    // Truncated DSI with channel_configuration == 0 (program_config_element
+    // signalling).  The PCE tail is needed to derive the channel count, so
+    // the fix's early-store cannot populate audio_channel_count or the DSI
+    // bytes — only AOT / extended_AOT / sample_rate.
+    //
+    // DSI `11 80` decodes as:
+    //   AOT=2 (AAC-LC), SFI=3 (48 kHz), chCfg=0 (PCE)
+    //   frameLengthFlag=1, dependsOnCoreCoder=0, extensionFlag=0
+    // after which the 4-bit element_instance_tag read runs off the end.
+    let aac_esds = vec![
+        0x03, 0x19, // ES_Descriptor tag, len=25
+        0x00, 0x00, 0x00, // ES_ID + flags
+        0x04, 0x11, // DC_Descriptor tag, len=17
+        0x40, 0x15, 0x00, 0x00, 0x00, // objType=AAC, streamType, bufferSize
+        0x00, 0x00, 0x01, 0xf4, // maxBitrate
+        0x00, 0x00, 0x01, 0xf4, // avgBitrate
+        0x05, 0x02, 0x11, 0x80, // DSI: AAC-LC 48 kHz PCE, truncated mid-PCE
+        0x06, 0x01, 0x02, // SL_Descriptor
+    ];
+
+    let mut stream = make_box(BoxSize::Auto, b"esds", |s| {
+        s.B32(0) // reserved
+            .append_bytes(aac_esds.as_slice())
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+
+    let es = super::read_esds(&mut stream, ParseStrictness::Normal).unwrap();
+
+    assert_eq!(es.audio_codec, super::CodecType::AAC);
+    assert_eq!(es.audio_object_type, Some(2));
+    assert_eq!(es.extended_audio_object_type, None);
+    assert_eq!(es.audio_sample_rate, Some(48000));
+    // PCE parsing hits EOF before deriving the channel count, so these stay
+    // unset rather than guessing.
+    assert_eq!(es.audio_channel_count, None);
+    assert!(es.decoder_specific_data.is_empty());
+}
+
+#[test]
 fn read_stsd_mp4v() {
     let mp4v = vec![
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
