@@ -2,7 +2,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 use num_traits::{CheckedAdd, CheckedSub, PrimInt, Zero};
-use std::ops::{Add, Neg, Sub};
+use std::{
+    convert::TryInto,
+    ops::{Add, Neg, Sub},
+};
 
 use super::*;
 
@@ -139,6 +142,7 @@ pub struct Indice {
 pub fn create_sample_table(
     track: &Track,
     track_offset_time: CheckedInteger<i64>,
+    optional_available_size: Option<usize>,
 ) -> Option<TryVec<Indice>> {
     let (stsc, stco, stsz, stts) = match (&track.stsc, &track.stco, &track.stsz, &track.stts) {
         (Some(a), Some(b), Some(c), Some(d)) => (a, b, c, d),
@@ -148,16 +152,48 @@ pub fn create_sample_table(
     // According to spec, no sync table means every sample is sync sample.
     let has_sync_table = track.stss.is_some();
 
-    let mut sample_size_iter = stsz.sample_sizes.iter();
-
     // Get 'stsc' iterator for (chunk_id, chunk_sample_count) and calculate the sample
     // offset address.
 
     // With large numbers of samples, the cost of many allocations dominates,
     // so it's worth iterating twice to allocate sample_table just once.
-    let total_sample_count = sample_to_chunk_iter(&stsc.samples, &stco.offsets)
-        .map(|(_, sample_counts)| sample_counts.to_usize())
-        .try_fold(0usize, usize::checked_add)?;
+    let total_sample_count = {
+        let mut sample_size_iter = stsz.sample_sizes.iter();
+        let mut sample_number: usize = 0;
+        for (chunk_id, sample_counts) in sample_to_chunk_iter(&stsc.samples, &stco.offsets) {
+            match optional_available_size {
+                Some(available_size) => {
+                    let mut end_offset = match stco.offsets.get(chunk_id as usize) {
+                        Some(v) => *v as usize,
+                        None => return None,
+                    };
+                    for _ in 0..sample_counts {
+                        match (stsz.sample_size, sample_size_iter.next()) {
+                            (_, Some(single_sample_size)) => {
+                                end_offset += *single_sample_size as usize
+                            }
+                            (sample_size, _) if sample_size > 0 => {
+                                end_offset += sample_size as usize
+                            }
+                            _ => return None,
+                        }
+                        if end_offset > available_size {
+                            break;
+                        }
+                        sample_number = match sample_number.checked_add(1) {
+                            Some(v) => v,
+                            None => return None,
+                        };
+                    }
+                }
+                None => sample_number += sample_counts as usize,
+            }
+        }
+        sample_number
+    };
+
+    let mut sample_size_iter = stsz.sample_sizes.iter();
+
     let mut sample_table = TryVec::with_capacity(total_sample_count).ok()?;
 
     for i in sample_to_chunk_iter(&stsc.samples, &stco.offsets) {
@@ -169,11 +205,19 @@ pub fn create_sample_table(
         };
         for _ in 0..sample_counts {
             let start_offset = cur_position;
-            let end_offset = match (stsz.sample_size, sample_size_iter.next()) {
+            let end_offset: CheckedInteger<u64> = match (stsz.sample_size, sample_size_iter.next())
+            {
                 (_, Some(t)) => (start_offset + *t)?,
                 (t, _) if t > 0 => (start_offset + t)?,
                 _ => 0.into(),
             };
+            match optional_available_size
+                .map(TryInto::try_into)
+                .and_then(Result::ok)
+            {
+                Some(available_size) if end_offset.0 > available_size => break,
+                _ => (),
+            }
             if end_offset == 0 {
                 return None;
             }
