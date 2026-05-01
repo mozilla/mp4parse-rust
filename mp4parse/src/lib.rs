@@ -3896,8 +3896,10 @@ fn read_colr<T: Read>(
 /// Rotation in the positive (that is, anticlockwise) direction
 /// Visualized in terms of starting with (⥠) UPWARDS HARPOON WITH BARB LEFT FROM BAR
 /// similar to a DIGIT ONE (1)
+#[derive(Default)]
 pub enum ImageRotation {
     /// ⥠ UPWARDS HARPOON WITH BARB LEFT FROM BAR
+    #[default]
     D0,
     /// ⥞ LEFTWARDS HARPOON WITH BARB DOWN FROM BAR
     D90,
