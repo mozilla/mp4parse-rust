@@ -5772,9 +5772,13 @@ fn read_video_sample_entry<T: Read>(
             }
             BoxType::ColourInformationBox => {
                 if colour_info.is_some() {
+                    // ISO/IEC 14496-12:2015 § 12.1.5.1 permits one or more colr boxes
+                    // in a VisualSampleEntry and assigns them no normative behaviour;
+                    // a reader may keep the first (most accurate) and ignore the rest.
+                    // Only reject under Strict.
                     warn!("Multiple colr boxes in video sample entry, keeping first");
                     fail_with_status_if(
-                        strictness != ParseStrictness::Permissive,
+                        strictness == ParseStrictness::Strict,
                         Status::ColrBadQuantityBMFF,
                     )?;
                     skip_box_content(&mut b)?;

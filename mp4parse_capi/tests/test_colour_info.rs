@@ -135,6 +135,32 @@ fn video_colr_nclx_rgb_identity_matrix() {
     }
 }
 
+/// Two adjacent nclx colr boxes in one video sample entry (the backward-compatible
+/// HLG signaling convention). ISO/IEC 14496-12:2015 § 12.1.5.1 permits "one or more"
+/// ColourInformationBoxes and assigns them no normative behaviour; the reader keeps the
+/// first (most accurate) box. The parse must succeed and surface the first box (HLG,
+/// transfer=18), not the second (transfer=14).
+#[test]
+fn video_colr_nclx_two_colr() {
+    unsafe {
+        let parser = open_parser("tests/video_colr_nclx_two_colr.mp4");
+
+        let mut video = Mp4parseTrackVideoInfo::default();
+        let rv = mp4parse_get_track_video_info(parser, 0, &mut video);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+
+        assert_eq!(video.sample_info_count, 1);
+        let sample = &*video.sample_info;
+        assert!(sample.has_colour_info);
+        assert_eq!(sample.colour_primaries, 9);
+        assert_eq!(sample.transfer_characteristics, 18); // first box (HLG) wins
+        assert_eq!(sample.matrix_coefficients, 9);
+        assert!(!sample.full_range_flag);
+
+        mp4parse_free(parser);
+    }
+}
+
 /// No colr box: has_colour_info=false, CICP fields are zero
 #[test]
 fn video_no_colr_box() {
