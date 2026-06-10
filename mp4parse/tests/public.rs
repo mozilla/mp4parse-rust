@@ -237,6 +237,15 @@ static VIDEO_MP4V_MP4: &str = "tests/bbb_sunflower_QCIF_30fps_mp4v_noaudio_1f.mp
 // ffmpeg -f lavfi -i color=c=white:s=640x480 -c:v libx264 -frames:v 1 -pix_fmt yuv420p -vf "setsar=16/9" h264_white_frame_sar_16_9.mp4
 static VIDEO_H264_PASP_MP4: &str = "tests/h264_white_frame_sar_16_9.mp4";
 
+// An h264 video sample entry with two nclx colr boxes (HLG transfer=18 followed
+// by a BT.2020 transfer=14 fallback), the backward-compatible HLG signaling
+// convention. Copy of mp4parse_capi/tests/video_colr_nclx_two_colr.mp4.
+static VIDEO_TWO_NCLX_COLR_MP4: &str = "tests/video_colr_nclx_two_colr.mp4";
+// As above, but with the second colr box's colour_type patched from nclx to
+// rICC, giving one colr box of each colour_type as intended by
+// ISOBMFF (ISO 14496-12:2020) § 12.1.5.
+static VIDEO_NCLX_AND_ICC_COLR_MP4: &str = "tests/video_colr_nclx_and_icc.mp4";
+
 // Adapted from https://github.com/GuillaumeGomez/audio-video-metadata/blob/9dff40f565af71d5502e03a2e78ae63df95cfd40/src/metadata.rs#L53
 #[test]
 fn public_api() {
@@ -888,6 +897,59 @@ fn public_mp4_ctts_overflow() {
         Status::from(mp4::read_mp4(input, ParseStrictness::Normal)),
         Status::CttsBadSize
     );
+}
+
+fn assert_video_nclx_colour_info(
+    result: mp4::Result<mp4::MediaContext>,
+    expected_transfer_characteristics: u8,
+) {
+    let context = result.expect("read_mp4 failed");
+    let track = context.tracks.first().expect("expected a track");
+    let stsd = track.stsd.as_ref().expect("expected an stsd");
+    let v = match stsd.descriptions.first().expect("expected a SampleEntry") {
+        mp4::SampleEntry::Video(v) => v,
+        _ => panic!("expected a VideoSampleEntry"),
+    };
+    match &v.colour_info {
+        Some(mp4::ColourInformation::Nclx(nclx)) => {
+            assert_eq!(
+                nclx.transfer_characteristics,
+                expected_transfer_characteristics
+            );
+        }
+        other => panic!("expected nclx colour info, got {:?}", other),
+    }
+}
+
+/// Two colr boxes with the same colour_type in a video sample entry are
+/// accepted (keeping the first) except under Strict parsing, which yields
+/// ColrBadQuantityBMFF; see ISOBMFF (ISO 14496-12:2020) § 12.1.5.
+#[test]
+fn public_video_two_nclx_colr_boxes() {
+    for strictness in [ParseStrictness::Permissive, ParseStrictness::Normal] {
+        let input = &mut File::open(VIDEO_TWO_NCLX_COLR_MP4).expect("Unknown file");
+        assert_video_nclx_colour_info(mp4::read_mp4(input, strictness), 18);
+    }
+    let input = &mut File::open(VIDEO_TWO_NCLX_COLR_MP4).expect("Unknown file");
+    assert_eq!(
+        Status::from(mp4::read_mp4(input, ParseStrictness::Strict)),
+        Status::ColrBadQuantityBMFF
+    );
+}
+
+/// One colr box of each colour_type (nclx and rICC) in a video sample entry
+/// is valid per ISOBMFF (ISO 14496-12:2020) § 12.1.5 and accepted at all
+/// strictness levels, surfacing the first box.
+#[test]
+fn public_video_nclx_and_icc_colr_boxes() {
+    for strictness in [
+        ParseStrictness::Permissive,
+        ParseStrictness::Normal,
+        ParseStrictness::Strict,
+    ] {
+        let input = &mut File::open(VIDEO_NCLX_AND_ICC_COLR_MP4).expect("Unknown file");
+        assert_video_nclx_colour_info(mp4::read_mp4(input, strictness), 18);
+    }
 }
 
 #[test]

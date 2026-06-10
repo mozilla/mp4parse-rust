@@ -467,8 +467,8 @@ impl From<Status> for &str {
                  per HEIF (ISO/IEC DIS 23008-12) § 6.5.5.1"
             }
             Status::ColrBadQuantityBMFF => {
-                "Each sample entry shall have at most one ColourInformationBox (colr) \
-                 per ISOBMFF (ISO 14496-12:2020) § 12.1.5"
+                "Each sample entry should have at most one ColourInformationBox (colr) \
+                 for a given value of colour_type per ISOBMFF (ISO 14496-12:2020) § 12.1.5"
             }
             Status::ColrBadSize => {
                 "Unexpected size for colr box"
@@ -3636,13 +3636,16 @@ fn read_ipco<T: Read>(
         let property = match b.head.name {
             BoxType::AuxiliaryTypeProperty => ItemProperty::AuxiliaryType(read_auxc(&mut b)?),
             BoxType::AV1CodecConfigurationBox => ItemProperty::AV1Config(read_av1c(&mut b)?),
-            BoxType::ColourInformationBox => match read_colr(&mut b, strictness)? {
-                ParsedColourInformation::Supported(colr) => ItemProperty::Colour(colr),
-                ParsedColourInformation::Unsupported(colour_type) => {
-                    error!("read_colr colour_type: {colour_type:?}");
-                    return Status::ColrBadType.into();
+            BoxType::ColourInformationBox => {
+                let colour_type = be_u32(&mut b)?.to_be_bytes();
+                match read_colr(&mut b, colour_type, strictness)? {
+                    ParsedColourInformation::Supported(colr) => ItemProperty::Colour(colr),
+                    ParsedColourInformation::Unsupported(colour_type) => {
+                        error!("read_colr colour_type: {colour_type:?}");
+                        return Status::ColrBadType.into();
+                    }
                 }
-            },
+            }
             BoxType::ImageMirror => ItemProperty::Mirroring(read_imir(&mut b)?),
             BoxType::ImageRotation => ItemProperty::Rotation(read_irot(&mut b)?),
             BoxType::ImageSpatialExtentsProperty => {
@@ -3837,12 +3840,12 @@ enum ParsedColourInformation {
 
 /// Parse colour information
 /// See ISOBMFF (ISO 14496-12:2020) § 12.1.5
+/// The caller is expected to have already read the colour_type field.
 fn read_colr<T: Read>(
     src: &mut BMFFBox<T>,
+    colour_type: [u8; 4],
     strictness: ParseStrictness,
 ) -> Result<ParsedColourInformation> {
-    let colour_type = be_u32(src)?.to_be_bytes();
-
     match &colour_type {
         b"nclx" => {
             const NUM_RESERVED_BITS: u8 = 7;
@@ -5652,6 +5655,7 @@ fn read_video_sample_entry<T: Read>(
     let mut codec_specific = None;
     let mut pixel_aspect_ratio = None;
     let mut colour_info = None;
+    let mut colr_types_seen = TryVec::<FourCC>::new();
     let mut hdr_mastering_display = None;
     let mut hdr_content_light_level = None;
     let mut protection_info = TryVec::new();
@@ -5771,22 +5775,32 @@ fn read_video_sample_entry<T: Read>(
                 debug!("Parsed pasp box: {pasp:?}, PAR {pixel_aspect_ratio:?}");
             }
             BoxType::ColourInformationBox => {
-                if colour_info.is_some() {
-                    // ISO/IEC 14496-12:2015 § 12.1.5.1 permits one or more colr boxes
-                    // in a VisualSampleEntry and assigns them no normative behaviour;
-                    // a reader may keep the first (most accurate) and ignore the rest.
-                    // Only reject under Strict.
-                    warn!("Multiple colr boxes in video sample entry, keeping first");
+                // ISO/IEC 14496-12:2015 § 12.1.5.1 permits one or more colr boxes
+                // in a VisualSampleEntry (at most one for a given colour_type) and
+                // assigns them no normative behaviour; a reader may keep the first
+                // (most accurate) and ignore the rest. Only reject a repeated
+                // colour_type, and only under Strict.
+                let colour_type = FourCC::from(be_u32(&mut b)?.to_be_bytes());
+                if colr_types_seen.contains(&colour_type) {
+                    warn!(
+                        "Multiple {colour_type:?} colr boxes in video sample entry, keeping first"
+                    );
                     fail_with_status_if(
                         strictness == ParseStrictness::Strict,
                         Status::ColrBadQuantityBMFF,
                     )?;
-                    skip_box_content(&mut b)?;
-                } else if let ParsedColourInformation::Supported(colr) =
-                    read_colr(&mut b, strictness)?
-                {
-                    debug!("Parsed colr box: {colr:?}");
-                    colour_info = Some(colr);
+                    skip_box_remain(&mut b)?;
+                } else {
+                    colr_types_seen.push(colour_type.clone())?;
+                    if colour_info.is_some() {
+                        debug!("Already have colour info, skipping {colour_type:?} colr box");
+                        skip_box_remain(&mut b)?;
+                    } else if let ParsedColourInformation::Supported(colr) =
+                        read_colr(&mut b, colour_type.value, strictness)?
+                    {
+                        debug!("Parsed colr box: {colr:?}");
+                        colour_info = Some(colr);
+                    }
                 }
             }
             BoxType::MasteringDisplayColourVolumeBox => {
