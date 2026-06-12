@@ -3850,22 +3850,31 @@ fn read_colr<T: Read>(
             let transfer_characteristics = be_u16(src)?.try_into()?;
             let matrix_coefficients = be_u16(src)?.try_into()?;
             let bytes = src.read_into_try_vec()?;
-            let mut bit_reader = BitReader::new(&bytes);
-            let full_range_flag = bit_reader.read_bool()?;
-            if bit_reader.remaining() != NUM_RESERVED_BITS.into() {
-                error!(
-                    "read_colr expected {} reserved bits, found {}",
-                    NUM_RESERVED_BITS,
-                    bit_reader.remaining()
-                );
-                return Status::ColrBadSize.into();
-            }
-            if bit_reader.read_u8(NUM_RESERVED_BITS)? != 0 {
-                fail_with_status_if(
-                    strictness != ParseStrictness::Permissive,
-                    Status::ColrReservedNonzero,
-                )?;
-            }
+            // Tolerate an nclx box truncated before full_range_flag;
+            // treat it as unset (limited range).
+            let full_range_flag = if bytes.is_empty() {
+                warn!("read_colr: nclx missing full_range_flag, assuming limited range");
+                fail_with_status_if(strictness == ParseStrictness::Strict, Status::ColrBadSize)?;
+                false
+            } else {
+                let mut bit_reader = BitReader::new(&bytes);
+                let full_range_flag = bit_reader.read_bool()?;
+                if bit_reader.remaining() != NUM_RESERVED_BITS.into() {
+                    error!(
+                        "read_colr expected {} reserved bits, found {}",
+                        NUM_RESERVED_BITS,
+                        bit_reader.remaining()
+                    );
+                    return Status::ColrBadSize.into();
+                }
+                if bit_reader.read_u8(NUM_RESERVED_BITS)? != 0 {
+                    fail_with_status_if(
+                        strictness != ParseStrictness::Permissive,
+                        Status::ColrReservedNonzero,
+                    )?;
+                }
+                full_range_flag
+            };
 
             Ok(ParsedColourInformation::Supported(ColourInformation::Nclx(
                 NclxColourInformation {

@@ -1434,3 +1434,60 @@ fn read_clli() {
     assert_eq!(clli.max_content_light_level, 1000);
     assert_eq!(clli.max_pic_average_light_level, 400);
 }
+
+#[test]
+fn read_colr_nclx() {
+    let mut stream = make_box(BoxSize::Auto, b"colr", |s| {
+        s.append_bytes(b"nclx").B16(1).B16(1).B16(1).B8(0x80)
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    assert_eq!(stream.head.name, super::BoxType::ColourInformationBox);
+    match super::read_colr(&mut stream, ParseStrictness::Strict).unwrap() {
+        super::ParsedColourInformation::Supported(super::ColourInformation::Nclx(nclx)) => {
+            assert_eq!(nclx.colour_primaries, 1);
+            assert_eq!(nclx.transfer_characteristics, 1);
+            assert_eq!(nclx.matrix_coefficients, 1);
+            assert!(nclx.full_range_flag);
+        }
+        _ => panic!("expected nclx colour information"),
+    }
+}
+
+#[test]
+fn read_colr_nclx_missing_full_range_flag() {
+    // An 18-byte nclx colr box omitting the trailing full_range_flag/reserved
+    // byte, as found in the wild (bug 2047239). The layout matches the QTFF
+    // 'nclc' colour type.
+    let make_stream = || {
+        make_box(BoxSize::Auto, b"colr", |s| {
+            s.append_bytes(b"nclx").B16(1).B16(1).B16(1)
+        })
+    };
+
+    for strictness in [ParseStrictness::Permissive, ParseStrictness::Normal] {
+        let mut stream = make_stream();
+        let mut iter = super::BoxIter::new(&mut stream);
+        let mut stream = iter.next_box().unwrap().unwrap();
+        let colr = super::read_colr(&mut stream, strictness)
+            .expect("nclx missing full_range_flag should parse outside Strict");
+        match colr {
+            super::ParsedColourInformation::Supported(super::ColourInformation::Nclx(nclx)) => {
+                assert!(
+                    !nclx.full_range_flag,
+                    "missing full_range_flag should default to limited range"
+                );
+            }
+            _ => panic!("expected nclx colour information"),
+        }
+    }
+
+    let mut stream = make_stream();
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    match super::read_colr(&mut stream, ParseStrictness::Strict) {
+        Err(Error::InvalidData(s)) => assert_eq!(s, Status::ColrBadSize),
+        Ok(_) => panic!("nclx missing full_range_flag should be rejected under Strict"),
+        Err(e) => panic!("unexpected error {:?}", e),
+    }
+}
