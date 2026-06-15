@@ -345,6 +345,11 @@ pub struct Mp4parseFragmentInfo {
 
 /// Parser state for MP4 files, exposed to C callers via raw pointer.
 ///
+/// # Thread safety
+///
+/// A parser instance must not be accessed from multiple threads
+/// concurrently. The caller is responsible for serializing all access.
+///
 /// # Pointer stability
 ///
 /// Several C API functions return raw pointers into data cached on this
@@ -385,7 +390,7 @@ pub enum Mp4parseAvifLoopMode {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Mp4parseAvifInfo {
     pub premultiplied_alpha: bool,
     pub major_brand: [u8; 4],
@@ -427,7 +432,7 @@ pub struct Mp4parseAvifInfo {
 }
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Mp4parseAvifImage {
     pub primary_image: Mp4parseByteData,
     /// If no alpha item exists, members' `.length` will be 0 and `.data` will be null
@@ -475,6 +480,12 @@ impl ContextParser for Mp4parseParser {
     }
 }
 
+/// Parser state for AVIF files, exposed to C callers via raw pointer.
+///
+/// # Thread safety
+///
+/// A parser instance must not be accessed from multiple threads
+/// concurrently. The caller is responsible for serializing all access.
 #[derive(Default)]
 pub struct Mp4parseAvifParser {
     context: AvifContext,
@@ -543,6 +554,10 @@ impl Read for Mp4parseIo {
         }
         let rv = self.read.unwrap()(buf.as_mut_ptr(), buf.len(), self.userdata);
         if rv >= 0 {
+            assert!(
+                rv as usize <= buf.len(),
+                "read callback returned more bytes than buffer size"
+            );
             Ok(rv as usize)
         } else {
             Err(std::io::Error::other("I/O error in Mp4parseIo Read impl"))
@@ -724,7 +739,10 @@ pub unsafe extern "C" fn mp4parse_get_track_info(
     let track = &context.tracks[track_index];
 
     if let (Some(timescale), Some(context_timescale)) = (track.timescale, context.timescale) {
-        info.time_scale = timescale.0 as u32;
+        info.time_scale = match timescale.0.try_into() {
+            Ok(v) => v,
+            Err(_) => return Mp4parseStatus::Invalid,
+        };
         let media_time: CheckedInteger<u64> = track
             .media_time
             .map_or(0.into(), |media_time| media_time.0.into());
@@ -875,8 +893,12 @@ fn get_track_audio_info(
                 }
             }
         };
-        sample_info.channels = audio.channelcount as u16;
+        sample_info.channels =
+            u16::try_from(audio.channelcount).map_err(|_| Mp4parseStatus::Invalid)?;
         sample_info.bit_depth = audio.samplesize;
+        if audio.samplerate < 0.0 || audio.samplerate > u32::MAX as f64 {
+            return Err(Mp4parseStatus::Invalid);
+        }
         sample_info.sample_rate = audio.samplerate as u32;
         // sample_info.profile is handled below on a per case basis
 
@@ -1236,6 +1258,9 @@ pub unsafe extern "C" fn mp4parse_avif_get_info(
         return Mp4parseStatus::BadArg;
     }
 
+    // Initialize fields to default values to ensure all fields are always valid.
+    *avif_info = Default::default();
+
     if let Ok(info) = mp4parse_avif_get_info_safe((*parser).context()) {
         *avif_info = info;
         Mp4parseStatus::Ok
@@ -1418,6 +1443,9 @@ pub unsafe extern "C" fn mp4parse_avif_get_image(
         return Mp4parseStatus::BadArg;
     }
 
+    // Initialize fields to default values to ensure all fields are always valid.
+    *avif_image = Default::default();
+
     if let Ok(image) = mp4parse_avif_get_image_safe(&*parser) {
         *avif_image = image;
         Mp4parseStatus::Ok
@@ -1452,7 +1480,7 @@ pub unsafe extern "C" fn mp4parse_get_indice_table(
     track_id: u32,
     indices: *mut Mp4parseByteData,
 ) -> Mp4parseStatus {
-    if parser.is_null() {
+    if parser.is_null() || indices.is_null() {
         return Mp4parseStatus::BadArg;
     }
 
@@ -1631,7 +1659,7 @@ pub unsafe extern "C" fn mp4parse_is_fragmented(
     track_id: u32,
     fragmented: *mut u8,
 ) -> Mp4parseStatus {
-    if parser.is_null() {
+    if parser.is_null() || fragmented.is_null() {
         return Mp4parseStatus::BadArg;
     }
 
