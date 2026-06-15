@@ -1642,7 +1642,8 @@ fn read_colr_nclx() {
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, super::BoxType::ColourInformationBox);
-    match super::read_colr(&mut stream, ParseStrictness::Strict).unwrap() {
+    let colour_type = super::be_u32(&mut stream).unwrap().to_be_bytes();
+    match super::read_colr(&mut stream, colour_type, ParseStrictness::Strict).unwrap() {
         super::ParsedColourInformation::Supported(super::ColourInformation::Nclx(nclx)) => {
             assert_eq!(nclx.colour_primaries, 1);
             assert_eq!(nclx.transfer_characteristics, 1);
@@ -1668,7 +1669,8 @@ fn read_colr_nclx_missing_full_range_flag() {
         let mut stream = make_stream();
         let mut iter = super::BoxIter::new(&mut stream);
         let mut stream = iter.next_box().unwrap().unwrap();
-        let colr = super::read_colr(&mut stream, strictness)
+        let colour_type = super::be_u32(&mut stream).unwrap().to_be_bytes();
+        let colr = super::read_colr(&mut stream, colour_type, strictness)
             .expect("nclx missing full_range_flag should parse outside Strict");
         match colr {
             super::ParsedColourInformation::Supported(super::ColourInformation::Nclx(nclx)) => {
@@ -1684,7 +1686,8 @@ fn read_colr_nclx_missing_full_range_flag() {
     let mut stream = make_stream();
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
-    match super::read_colr(&mut stream, ParseStrictness::Strict) {
+    let colour_type = super::be_u32(&mut stream).unwrap().to_be_bytes();
+    match super::read_colr(&mut stream, colour_type, ParseStrictness::Strict) {
         Err(Error::InvalidData(s)) => assert_eq!(s, Status::ColrBadSize),
         Ok(_) => panic!("nclx missing full_range_flag should be rejected under Strict"),
         Err(e) => panic!("unexpected error {:?}", e),
