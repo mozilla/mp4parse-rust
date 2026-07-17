@@ -324,7 +324,7 @@ impl TryFrom<&ItemProperty> for Feature {
             ItemProperty::Colour(_) => Self::Colr,
             ItemProperty::ImageSpatialExtents(_) => Self::Ispe,
             ItemProperty::LayeredImageIndexing => Self::A1lx,
-            ItemProperty::LayerSelection => Self::Lsel,
+            ItemProperty::LayerSelection(_) => Self::Lsel,
             ItemProperty::Mirroring(_) => Self::Imir,
             ItemProperty::OperatingPointSelector => Self::A1op,
             ItemProperty::PixelAspectRatio(_) => Self::Pasp,
@@ -3024,6 +3024,14 @@ fn read_iprp<T: Read>(
     let mut association_entries = TryVec::<ItemPropertyAssociationEntry>::new();
     let mut forbidden_items = TryVec::new();
 
+    // A LayerSelectorProperty with this layer_id enables, but does not require,
+    // progressive rendering: a client may render progressively or just show the
+    // final image (which is also what ignoring the property does), so no client
+    // can get this wrong. It therefore does not need to be treated as an
+    // unsupported essential property, and its item is accepted and processed.
+    // See <https://aomediacodec.github.io/av1-avif/#layer-selector-property>
+    const LSEL_LAYER_ID_NO_SELECTION: u16 = 0xffff;
+
     while let Some(mut b) = iter.next_box()? {
         if b.head.name != BoxType::ItemPropertyAssociationBox {
             return Status::IprpBadChild.into();
@@ -3089,16 +3097,25 @@ fn read_iprp<T: Read>(
                     assert!(brand == MIF1_BRAND);
 
                     let feature = Feature::try_from(property);
-                    let property_supported = match feature {
-                        Ok(feature) => {
-                            if feature.supported() {
-                                true
-                            } else {
-                                unsupported_features.insert(feature);
-                                false
+                    let property_supported = if matches!(
+                        property,
+                        ItemProperty::LayerSelection(layer_id)
+                            if *layer_id == LSEL_LAYER_ID_NO_SELECTION
+                    ) {
+                        // Not an unsupported feature; see LSEL_LAYER_ID_NO_SELECTION.
+                        true
+                    } else {
+                        match feature {
+                            Ok(feature) => {
+                                if feature.supported() {
+                                    true
+                                } else {
+                                    unsupported_features.insert(feature);
+                                    false
+                                }
                             }
+                            Err(_) => false,
                         }
-                        Err(_) => false,
                     };
 
                     if !property_supported {
@@ -3169,18 +3186,22 @@ fn read_iprp<T: Read>(
                             }
                         }
 
-                        ItemProperty::LayerSelection => {
-                            assert!(feature.is_ok() && unsupported_features.contains(feature?));
-                            if a.essential {
-                                assert!(
-                                    forbidden_items.contains(&association_entry.item_id)
-                                        || strictness == ParseStrictness::Permissive
-                                );
-                            } else {
+                        ItemProperty::LayerSelection(layer_id) => {
+                            if !a.essential {
+                                // lsel shall be marked as essential regardless of its
+                                // layer_id.
                                 fail_with_status_if(
                                     strictness != ParseStrictness::Permissive,
                                     Status::LselNoEssential,
                                 )?;
+                            } else if *layer_id != LSEL_LAYER_ID_NO_SELECTION {
+                                // A specific layer was requested; selecting a layer is
+                                // unsupported, so the item shall not be processed.
+                                assert!(feature.is_ok() && unsupported_features.contains(feature?));
+                                assert!(
+                                    forbidden_items.contains(&association_entry.item_id)
+                                        || strictness == ParseStrictness::Permissive
+                                );
                             }
                         }
 
@@ -3266,7 +3287,7 @@ pub enum ItemProperty {
     Colour(ColourInformation),
     ImageSpatialExtents(ImageSpatialExtentsProperty),
     LayeredImageIndexing,
-    LayerSelection,
+    LayerSelection(u16),
     Mirroring(ImageMirror),
     OperatingPointSelector,
     PixelAspectRatio(PixelAspectRatio),
@@ -3283,7 +3304,7 @@ impl From<&ItemProperty> for BoxType {
             ItemProperty::CleanAperture => BoxType::CleanApertureBox,
             ItemProperty::Colour(_) => BoxType::ColourInformationBox,
             ItemProperty::LayeredImageIndexing => BoxType::AV1LayeredImageIndexingProperty,
-            ItemProperty::LayerSelection => BoxType::LayerSelectorProperty,
+            ItemProperty::LayerSelection(_) => BoxType::LayerSelectorProperty,
             ItemProperty::Mirroring(_) => BoxType::ImageMirror,
             ItemProperty::OperatingPointSelector => BoxType::OperatingPointSelectorProperty,
             ItemProperty::PixelAspectRatio(_) => BoxType::PixelAspectRatioBox,
@@ -3653,6 +3674,7 @@ fn read_ipco<T: Read>(
             }
             BoxType::PixelAspectRatioBox => ItemProperty::PixelAspectRatio(read_pasp(&mut b)?),
             BoxType::PixelInformationBox => ItemProperty::Channels(read_pixi(&mut b)?),
+            BoxType::LayerSelectorProperty => ItemProperty::LayerSelection(read_lsel(&mut b)?),
 
             other_box_type => {
                 // Even if we didn't do anything with other property types, we still store
@@ -3661,7 +3683,6 @@ fn read_ipco<T: Read>(
                 let item_property = match other_box_type {
                     BoxType::AV1LayeredImageIndexingProperty => ItemProperty::LayeredImageIndexing,
                     BoxType::CleanApertureBox => ItemProperty::CleanAperture,
-                    BoxType::LayerSelectorProperty => ItemProperty::LayerSelection,
                     BoxType::OperatingPointSelectorProperty => ItemProperty::OperatingPointSelector,
                     _ => {
                         warn!("No ItemProperty variant for {other_box_type:?}");
@@ -3685,6 +3706,14 @@ fn read_ipco<T: Read>(
     }
 
     Ok(properties)
+}
+
+/// Parse a LayerSelectorProperty, returning its layer_id.
+///
+/// See <https://aomediacodec.github.io/av1-avif/#layer-selector-property>
+fn read_lsel<T: Read>(src: &mut BMFFBox<T>) -> Result<u16> {
+    let layer_id = be_u16(src)?;
+    Ok(layer_id)
 }
 
 #[repr(C)]
