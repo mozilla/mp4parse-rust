@@ -1295,19 +1295,22 @@ fn public_avif_lsel_missing_essential() {
 // feature) regardless of strictness.
 #[test]
 fn public_avif_lsel_no_layer_selection() {
-    for_strictness_result(AVIF_LSEL_LAYER_ID_FFFF, |_strictness, result| match result {
-        Ok(context) => {
-            assert!(
-                !context.unsupported_features.contains(mp4::Feature::Lsel),
-                "lsel with layer_id 0xffff should not be an unsupported feature"
-            );
-            assert!(
-                context.primary_item_coded_data().is_some(),
-                "primary item associated with an lsel of layer_id 0xffff should be decodable"
-            );
-        }
-        r => panic!("Expected Ok, found {:?}", r),
-    });
+    for_strictness_result(
+        AVIF_LSEL_LAYER_ID_FFFF,
+        |_strictness, result| match result {
+            Ok(context) => {
+                assert!(
+                    !context.unsupported_features.contains(mp4::Feature::Lsel),
+                    "lsel with layer_id 0xffff should not be an unsupported feature"
+                );
+                assert!(
+                    context.primary_item_coded_data().is_some(),
+                    "primary item associated with an lsel of layer_id 0xffff should be decodable"
+                );
+            }
+            r => panic!("Expected Ok, found {:?}", r),
+        },
+    );
 }
 
 #[test]
