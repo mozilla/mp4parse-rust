@@ -82,6 +82,11 @@ static AVIF_TEST_DIRS: &[&str] = &["tests", "av1-avif/testFiles", "link-u-avif-s
 static AVIF_A1OP: &str = "tests/a1op.avif";
 static AVIF_A1LX: &str = "tests/a1lx.avif";
 static AVIF_LSEL: &str = "tests/lsel.avif";
+// This is tests/valid.avif with an essential lsel property whose layer_id is
+// 0xffff added to the primary item. That layer_id selects no particular layer,
+// so the item is still accepted rather than treated as having an unsupported
+// essential property.
+static AVIF_LSEL_LAYER_ID_FFFF: &str = "tests/lsel-layer-id-ffff.avif";
 
 static AVIF_CLAP: &str = "tests/clap-basic-1_3x3-to-1x1.avif";
 static AVIF_GRID: &str = "av1-avif/testFiles/Microsoft/Summer_in_Tomsk_720p_5x4_grid.avif";
@@ -1283,6 +1288,26 @@ fn public_avif_lsel() {
 #[test]
 fn public_avif_lsel_missing_essential() {
     assert_avif_shall(IMAGE_AVIF_LSEL_MISSING_ESSENTIAL, Status::LselNoEssential);
+}
+
+// An lsel property with layer_id 0xffff does not select a specific layer, so the
+// item is still accepted (decodable, and lsel not reported as an unsupported
+// feature) regardless of strictness.
+#[test]
+fn public_avif_lsel_no_layer_selection() {
+    for_strictness_result(AVIF_LSEL_LAYER_ID_FFFF, |_strictness, result| match result {
+        Ok(context) => {
+            assert!(
+                !context.unsupported_features.contains(mp4::Feature::Lsel),
+                "lsel with layer_id 0xffff should not be an unsupported feature"
+            );
+            assert!(
+                context.primary_item_coded_data().is_some(),
+                "primary item associated with an lsel of layer_id 0xffff should be decodable"
+            );
+        }
+        r => panic!("Expected Ok, found {:?}", r),
+    });
 }
 
 #[test]
