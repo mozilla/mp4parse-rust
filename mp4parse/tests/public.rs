@@ -350,6 +350,9 @@ fn public_api() {
                             assert!(!flac.blocks.is_empty());
                             assert_eq!(flac.blocks[0].block_type, 0);
                             assert_eq!(flac.blocks[0].data.len(), 34);
+                            let _sample_rate: u32 = flac.stream_info.sample_rate;
+                            let _channel_count: u8 = flac.stream_info.channel_count;
+                            let _bits_per_sample: u8 = flac.stream_info.bits_per_sample;
                             "FLAC"
                         }
                         mp4::AudioCodecSpecific::OpusSpecificBox(ref opus) => {

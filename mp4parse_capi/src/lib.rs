@@ -232,6 +232,8 @@ pub struct Mp4parseTrackAudioSampleInfo {
     pub codec_type: Mp4parseCodec,
     pub channels: u16,
     pub bit_depth: u16,
+    /// Effective sample rate after applying codec-specific configuration.
+    /// This may differ from the raw ISOBMFF `AudioSampleEntry` value.
     pub sample_rate: u32,
     pub profile: u16,
     pub extended_profile: u16,
@@ -797,6 +799,17 @@ pub unsafe extern "C" fn mp4parse_get_track_audio_info(
     get_track_audio_info(&mut *parser, track_index, &mut *info).into()
 }
 
+fn apply_flac_stream_info(
+    sample_info: &mut Mp4parseTrackAudioSampleInfo,
+    stream_info: &mp4parse::FLACStreamInfo,
+) {
+    // The FLAC-in-ISOBMFF mapping requires readers to use the native sample
+    // rate from STREAMINFO. The AudioSampleEntry field is only a constrained
+    // 16.16 representation and may contain a regular division for rates above
+    // 65535 Hz.
+    sample_info.sample_rate = stream_info.sample_rate;
+}
+
 fn get_track_audio_info(
     parser: &mut Mp4parseParser,
     track_index: u32,
@@ -910,6 +923,7 @@ fn get_track_audio_info(
                     return Err(Mp4parseStatus::Invalid);
                 }
                 sample_info.codec_specific_config.set_data(&streaminfo.data);
+                apply_flac_stream_info(&mut sample_info, &flac.stream_info);
             }
             AudioCodecSpecific::OpusSpecificBox(ref opus) => {
                 let mut v = TryVec::new();
@@ -1979,6 +1993,27 @@ fn minimal_mp4_get_track_audio_info() {
     unsafe {
         mp4parse_free(parser);
     }
+}
+
+#[test]
+fn flac_streaminfo_sample_rate_overrides_sample_entry_rate() {
+    let mut sample_info = Mp4parseTrackAudioSampleInfo {
+        channels: 2,
+        bit_depth: 24,
+        sample_rate: 48000,
+        ..Default::default()
+    };
+    let stream_info = mp4parse::FLACStreamInfo {
+        sample_rate: 96000,
+        channel_count: 2,
+        bits_per_sample: 24,
+    };
+
+    apply_flac_stream_info(&mut sample_info, &stream_info);
+
+    assert_eq!(sample_info.sample_rate, 96000);
+    assert_eq!(sample_info.channels, 2);
+    assert_eq!(sample_info.bit_depth, 24);
 }
 
 #[test]

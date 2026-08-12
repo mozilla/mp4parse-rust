@@ -623,6 +623,15 @@ fn flac_streaminfo() -> Vec<u8> {
     ]
 }
 
+fn flac_streaminfo_with_sample_rate(sample_rate: u32) -> Vec<u8> {
+    assert!(sample_rate < 1 << 20);
+    let mut stream_info = flac_streaminfo();
+    stream_info[10] = (sample_rate >> 12) as u8;
+    stream_info[11] = (sample_rate >> 4) as u8;
+    stream_info[12] = (stream_info[12] & 0x0f) | ((sample_rate as u8 & 0x0f) << 4);
+    stream_info
+}
+
 #[test]
 fn read_flac() {
     let mut stream = make_box(BoxSize::Auto, b"fLaC", |s| {
@@ -649,6 +658,45 @@ fn read_flac() {
     let mut stream = iter.next_box().unwrap().unwrap();
     let r = super::read_audio_sample_entry(&mut stream, ParseStrictness::Normal);
     assert!(r.is_ok());
+}
+
+#[test]
+fn read_high_rate_flac_preserves_sample_entry_rate() {
+    let mut stream = make_box(BoxSize::Auto, b"fLaC", |s| {
+        s.append_repeated(0, 6) // reserved
+            .B16(1) // data reference index
+            .B32(0) // reserved
+            .B32(0) // reserved
+            .B16(2) // channel count
+            .B16(16) // bits per sample
+            .B16(0) // pre_defined
+            .B16(0) // reserved
+            .B32(48000 << 16) // Greatest expressible division of 96 kHz.
+            .append_bytes(
+                &make_dfla(
+                    FlacBlockType::StreamInfo,
+                    true,
+                    &flac_streaminfo_with_sample_rate(96000),
+                    FlacBlockLength::Correct,
+                )
+                .into_inner(),
+            )
+    });
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    let sample_entry =
+        super::read_audio_sample_entry(&mut stream, ParseStrictness::Normal).unwrap();
+
+    let super::SampleEntry::Audio(audio) = sample_entry else {
+        panic!("expected an audio sample entry");
+    };
+    assert_eq!(audio.samplerate, 48000.0);
+    let super::AudioCodecSpecific::FLACSpecificBox(flac) = audio.codec_specific else {
+        panic!("expected FLAC codec-specific metadata");
+    };
+    assert_eq!(flac.stream_info.sample_rate, 96000);
+    assert_eq!(flac.stream_info.channel_count, 2);
+    assert_eq!(flac.stream_info.bits_per_sample, 16);
 }
 
 #[derive(Clone, Copy)]
@@ -704,6 +752,9 @@ fn read_dfla() {
     assert_eq!(stream.head.name, BoxType::FLACSpecificBox);
     let dfla = super::read_dfla(&mut stream).unwrap();
     assert_eq!(dfla.version, 0);
+    assert_eq!(dfla.stream_info.sample_rate, 44100);
+    assert_eq!(dfla.stream_info.channel_count, 2);
+    assert_eq!(dfla.stream_info.bits_per_sample, 16);
 }
 
 #[test]

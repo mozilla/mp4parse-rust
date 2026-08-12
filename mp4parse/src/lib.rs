@@ -1155,6 +1155,11 @@ pub struct AudioSampleEntry {
     data_reference_index: u16,
     pub channelcount: u32,
     pub samplesize: u16,
+    /// Sample rate stored in the ISOBMFF `AudioSampleEntry`.
+    ///
+    /// Codec-specific metadata can define a different effective sample rate;
+    /// for example, high-rate FLAC uses a constrained value here and carries
+    /// its native rate in [`FLACSpecificBox::stream_info`].
     pub samplerate: f64,
     pub codec_specific: AudioCodecSpecific,
     pub protection_info: TryVec<ProtectionSchemeInfoBox>,
@@ -1278,12 +1283,46 @@ pub struct FLACMetadataBlock {
     pub data: TryVec<u8>,
 }
 
+/// Audio properties parsed from a FLAC `METADATA_BLOCK_STREAMINFO` block.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FLACStreamInfo {
+    /// Native sample rate of the FLAC bitstream.
+    pub sample_rate: u32,
+    /// Number of channels in the FLAC bitstream.
+    pub channel_count: u8,
+    /// Number of bits per sample in the FLAC bitstream.
+    pub bits_per_sample: u8,
+}
+
+impl FLACStreamInfo {
+    fn parse(data: &[u8]) -> Result<Self> {
+        if data.len() != 34 {
+            return Status::DflaStreamInfoBadSize.into();
+        }
+
+        // FLAC format § METADATA_BLOCK_STREAMINFO packs these fields into
+        // bytes 10 through 13 of the fixed-size 34-byte structure.
+        let sample_rate =
+            u32::from(data[10]) << 12 | u32::from(data[11]) << 4 | u32::from(data[12] >> 4);
+        let channel_count = ((data[12] >> 1) & 0x07) + 1;
+        let bits_per_sample = (((data[12] & 0x01) << 4) | (data[13] >> 4)) + 1;
+
+        Ok(Self {
+            sample_rate,
+            channel_count,
+            bits_per_sample,
+        })
+    }
+}
+
 /// Represents a FLACSpecificBox 'dfLa'
 #[derive(Debug)]
 pub struct FLACSpecificBox {
     #[allow(dead_code)] // See https://github.com/mozilla/mp4parse-rust/issues/340
     version: u8,
     pub blocks: TryVec<FLACMetadataBlock>,
+    /// Parsed audio properties from the first, mandatory STREAMINFO block.
+    pub stream_info: FLACStreamInfo,
 }
 
 #[derive(Debug)]
@@ -5510,16 +5549,19 @@ fn read_dfla<T: Read>(src: &mut BMFFBox<T>) -> Result<FLACSpecificBox> {
         let block = read_flac_metadata(src)?;
         blocks.push(block)?;
     }
-    // The box must have at least one meta block, and the first block
-    // must be the METADATA_BLOCK_STREAMINFO
-    if blocks.is_empty() {
-        return Status::DflaMissingMetadata.into();
-    } else if blocks[0].block_type != 0 {
-        return Status::DflaStreamInfoNotFirst.into();
-    } else if blocks[0].data.len() != 34 {
-        return Status::DflaStreamInfoBadSize.into();
-    }
-    Ok(FLACSpecificBox { version, blocks })
+    // The box must have at least one metadata block, and the first block
+    // must be METADATA_BLOCK_STREAMINFO.
+    let stream_info = match blocks.first() {
+        None => return Status::DflaMissingMetadata.into(),
+        Some(block) if block.block_type != 0 => return Status::DflaStreamInfoNotFirst.into(),
+        Some(block) => FLACStreamInfo::parse(&block.data)?,
+    };
+
+    Ok(FLACSpecificBox {
+        version,
+        blocks,
+        stream_info,
+    })
 }
 
 /// Parse `OpusSpecificBox`.
