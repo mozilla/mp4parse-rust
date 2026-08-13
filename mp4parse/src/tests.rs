@@ -739,6 +739,24 @@ fn make_dfla(
     })
 }
 
+fn make_dfla_with_trailing_bytes(trailing: &[u8]) -> Cursor<Vec<u8>> {
+    make_fullbox(BoxSize::Auto, b"dfLa", 0, |s| {
+        s.B32(flac_streaminfo().len() as u32)
+            .append_bytes(&flac_streaminfo())
+            .append_bytes(trailing)
+    })
+}
+
+fn read_test_dfla(
+    mut stream: Cursor<Vec<u8>>,
+    strictness: ParseStrictness,
+) -> super::Result<super::FLACSpecificBox> {
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box()?.unwrap();
+    assert_eq!(stream.head.name, BoxType::FLACSpecificBox);
+    super::read_dfla(&mut stream, strictness)
+}
+
 #[test]
 fn read_dfla() {
     let mut stream = make_dfla(
@@ -750,7 +768,7 @@ fn read_dfla() {
     let mut iter = super::BoxIter::new(&mut stream);
     let mut stream = iter.next_box().unwrap().unwrap();
     assert_eq!(stream.head.name, BoxType::FLACSpecificBox);
-    let dfla = super::read_dfla(&mut stream).unwrap();
+    let dfla = super::read_dfla(&mut stream, ParseStrictness::Normal).unwrap();
     assert_eq!(dfla.version, 0);
     assert_eq!(dfla.stream_info.sample_rate, 44100);
     assert_eq!(dfla.stream_info.channel_count, 2);
@@ -760,17 +778,80 @@ fn read_dfla() {
 #[test]
 fn long_flac_metadata() {
     let streaminfo = flac_streaminfo();
-    let mut stream = make_dfla(
-        FlacBlockType::StreamInfo,
-        true,
-        &streaminfo,
-        FlacBlockLength::Incorrect(streaminfo.len() + 4),
-    );
-    let mut iter = super::BoxIter::new(&mut stream);
-    let mut stream = iter.next_box().unwrap().unwrap();
-    assert_eq!(stream.head.name, BoxType::FLACSpecificBox);
-    let r = super::read_dfla(&mut stream);
-    assert!(r.is_err());
+    for strictness in [
+        ParseStrictness::Permissive,
+        ParseStrictness::Normal,
+        ParseStrictness::Strict,
+    ] {
+        let stream = make_dfla(
+            FlacBlockType::StreamInfo,
+            true,
+            &streaminfo,
+            FlacBlockLength::Incorrect(streaminfo.len() + 4),
+        );
+        assert!(matches!(
+            read_test_dfla(stream, strictness),
+            Err(Error::InvalidData(Status::DflaBadMetadataBlockSize))
+        ));
+    }
+}
+
+#[test]
+fn oversized_trailing_flac_metadata_respects_strictness() {
+    // A padding block declares four payload bytes but contains only two.
+    let trailing = [0x81, 0x00, 0x00, 0x04, 0x00, 0x00];
+
+    for strictness in [ParseStrictness::Permissive, ParseStrictness::Normal] {
+        let dfla = read_test_dfla(make_dfla_with_trailing_bytes(&trailing), strictness).unwrap();
+        assert_eq!(dfla.blocks.len(), 1);
+        assert_eq!(dfla.stream_info.sample_rate, 44100);
+    }
+
+    assert!(matches!(
+        read_test_dfla(
+            make_dfla_with_trailing_bytes(&trailing),
+            ParseStrictness::Strict
+        ),
+        Err(Error::InvalidData(Status::DflaBadMetadataBlockSize))
+    ));
+}
+
+#[test]
+fn short_trailing_flac_metadata_header_respects_strictness() {
+    // A second metadata block begins but its four-byte header is incomplete.
+    let trailing = [0x81, 0x00];
+
+    for strictness in [ParseStrictness::Permissive, ParseStrictness::Normal] {
+        let dfla = read_test_dfla(make_dfla_with_trailing_bytes(&trailing), strictness).unwrap();
+        assert_eq!(dfla.blocks.len(), 1);
+        assert_eq!(dfla.stream_info.sample_rate, 44100);
+    }
+
+    assert!(matches!(
+        read_test_dfla(
+            make_dfla_with_trailing_bytes(&trailing),
+            ParseStrictness::Strict
+        ),
+        Err(Error::UnexpectedEOF)
+    ));
+}
+
+#[test]
+fn physically_truncated_trailing_flac_metadata_is_rejected() {
+    // The second block declares four payload bytes and the dfLa box claims
+    // they are present, but the underlying stream ends after two bytes.
+    let trailing = [0x81, 0x00, 0x00, 0x04, 0x00, 0x00];
+
+    for strictness in [
+        ParseStrictness::Permissive,
+        ParseStrictness::Normal,
+        ParseStrictness::Strict,
+    ] {
+        let mut stream = make_dfla_with_trailing_bytes(&trailing);
+        let declared_size = u32::from_be_bytes(stream.get_ref()[0..4].try_into().unwrap()) + 2;
+        stream.get_mut()[0..4].copy_from_slice(&declared_size.to_be_bytes());
+        assert!(read_test_dfla(stream, strictness).is_err());
+    }
 }
 
 #[test]
