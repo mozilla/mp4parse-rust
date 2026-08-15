@@ -1,5 +1,5 @@
 use mp4parse_capi::*;
-use std::io::Read;
+use std::{io::Read, ptr::null};
 
 extern "C" fn buf_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw::c_void) -> isize {
     let input: &mut std::fs::File = unsafe { &mut *(userdata as *mut _) };
@@ -47,7 +47,19 @@ fn parse_fragment() {
         assert_eq!((*audio.sample_info).channels, 2);
         assert_eq!((*audio.sample_info).bit_depth, 16);
         assert_eq!((*audio.sample_info).sample_rate, 22050);
-        assert_eq!((*audio.sample_info).extra_data.length, 27);
+
+        // Check that extra data binary blob.
+        let expected_extra_data: [u8; 27] = [
+            0x03, 0x19, 0x00, 0x01, 0x00, 0x04, 0x11, 0x40, 0x15, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x11, 0x51, 0x00, 0x00, 0x11, 0x51, 0x05, 0x02, 0x13, 0x90, 0x06, 0x01, 0x02,
+        ];
+        let extra_data = &(*audio.sample_info).extra_data;
+        assert_ne!(extra_data.data, null());
+        assert_eq!(extra_data.length, 27);
+        for (i, expected_byte) in expected_extra_data.iter().enumerate() {
+            assert_eq!(&(*extra_data.data.add(i)), expected_byte);
+        }
+
         assert_eq!((*audio.sample_info).codec_specific_config.length, 2);
 
         let mut is_fragmented_file: u8 = 0;
