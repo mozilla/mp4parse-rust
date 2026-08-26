@@ -327,3 +327,63 @@ fn parse_sample_table_with_negative_ctts() {
         mp4parse_free(parser);
     }
 }
+
+/// A file whose 'stco' declares more chunks than the samples in 'stsz' can
+/// fill leaves trailing chunks that no sample maps into. The surplus chunk
+/// offset is bogus (past the end of the file), but since nothing references
+/// it the track is still decodable, so parse it rather than rejecting it.
+/// See https://bugzilla.mozilla.org/show_bug.cgi?id=2026607
+#[test]
+fn parse_sample_table_with_surplus_stco_entry() {
+    let mut file = std::fs::File::open("tests/stco_extra_chunk.mp4").expect("Unknown file");
+    let io = Mp4parseIo {
+        read: Some(buf_read),
+        userdata: &mut file as *mut _ as *mut std::os::raw::c_void,
+    };
+
+    unsafe {
+        let mut parser = std::ptr::null_mut();
+        let rv = mp4parse_new(&io, &mut parser);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert!(!parser.is_null());
+
+        let mut track_info = Mp4parseTrackInfo::default();
+        let rv = mp4parse_get_track_info(parser, 0, &mut track_info);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(track_info.track_type, Mp4parseTrackType::Video);
+
+        let mut indice = Mp4parseByteData::default();
+        let rv = mp4parse_get_indice_table(parser, track_info.track_id, &mut indice);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+
+        // 'stsc' maps 3 samples per chunk and 'stco' declares 2 chunks, but
+        // 'stsz' only describes 3 samples, so only the first chunk is used.
+        // The table matches the one from the well formed video_colr_nclx_hdr10.mp4
+        // this file was derived from.
+        assert_eq!(indice.length, 3);
+        assert_eq!(
+            *indice.indices.offset(0),
+            Indice {
+                start_offset: 48.into(),
+                end_offset: 757.into(),
+                start_composition: 0.into(),
+                end_composition: 512.into(),
+                start_decode: 0.into(),
+                sync: true,
+            }
+        );
+        assert_eq!(
+            *indice.indices.offset(2),
+            Indice {
+                start_offset: 769.into(),
+                end_offset: 781.into(),
+                start_composition: 512.into(),
+                end_composition: 1024.into(),
+                start_decode: 1024.into(),
+                sync: false,
+            }
+        );
+
+        mp4parse_free(parser);
+    }
+}
