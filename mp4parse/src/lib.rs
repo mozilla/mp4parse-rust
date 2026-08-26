@@ -1044,6 +1044,9 @@ pub struct SampleToChunk {
 #[derive(Debug)]
 pub struct SampleSizeBox {
     pub sample_size: u32,
+    /// The number of samples in the track. When `sample_size` is zero, this
+    /// is also the length of `sample_sizes`.
+    pub sample_count: u32,
     pub sample_sizes: TryVec<u32>,
 }
 
@@ -4984,6 +4987,7 @@ fn read_stsz<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleSizeBox> {
 
     Ok(SampleSizeBox {
         sample_size,
+        sample_count,
         sample_sizes,
     })
 }
