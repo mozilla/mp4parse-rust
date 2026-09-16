@@ -104,14 +104,12 @@ static AVIF_AVIS_NO_LOOP: &str = "tests/loop_none.avif";
 static AVIF_AVIS_LOOP_FOREVER: &str = "tests/loop_forever.avif";
 static AVIF_NO_PIXI_IMAGES: &[&str] = &[IMAGE_AVIF_NO_PIXI, IMAGE_AVIF_NO_ALPHA_PIXI];
 static AVIF_UNSUPPORTED_IMAGES: &[&str] = &[
-    AVIF_A1LX,
     AVIF_A1OP,
     AVIF_CLAP,
     IMAGE_AVIF_CLAP_MISSING_ESSENTIAL,
     AVIF_GRID,
     AVIF_GRID_A1LX,
     AVIF_LSEL,
-    "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_a1lx.avif",
     "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_a1op.avif",
     "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_a1op_lsel.avif",
     "av1-avif/testFiles/Apple/multilayer_examples/animals_00_multilayer_lsel.avif",
@@ -121,11 +119,7 @@ static AVIF_UNSUPPORTED_IMAGES: &[&str] = &[
     "av1-avif/testFiles/Microsoft/Chimera_10bit_cropped_to_1920x1008.avif",
     "av1-avif/testFiles/Microsoft/Chimera_10bit_cropped_to_1920x1008_with_HDR_metadata.avif",
     "av1-avif/testFiles/Microsoft/Chimera_8bit_cropped_480x256.avif",
-    "av1-avif/testFiles/Xiph/abandoned_filmgrain.avif",
-    "av1-avif/testFiles/Xiph/fruits_2layer_thumbsize.avif",
     "av1-avif/testFiles/Xiph/quebec_3layer_op2.avif",
-    "av1-avif/testFiles/Xiph/tiger_3layer_1res.avif",
-    "av1-avif/testFiles/Xiph/tiger_3layer_3res.avif",
     "link-u-avif-sample-images/kimono.crop.avif",
     "link-u-avif-sample-images/kimono.mirror-vertical.rotate270.crop.avif",
 ];
@@ -1255,17 +1249,45 @@ fn assert_unsupported(path: &str, feature: mp4::Feature, essential: bool) {
     });
 }
 
-fn assert_unsupported_nonessential(path: &str, feature: mp4::Feature) {
-    assert_unsupported(path, feature, false);
-}
-
 fn assert_unsupported_essential(path: &str, feature: mp4::Feature) {
     assert_unsupported(path, feature, true);
 }
 
 #[test]
 fn public_avif_a1lx() {
-    assert_unsupported_nonessential(AVIF_A1LX, mp4::Feature::A1lx);
+    // `a1lx` is parsed rather than recorded as unsupported: its layer sizes are
+    // what lets a caller work out the byte ranges of a layered item's layers,
+    // which is what the property is for per
+    // <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-description>.
+    for_strictness_result(AVIF_A1LX, |strictness, result| {
+        let context = result.unwrap_or_else(|e| {
+            panic!(
+                "{} failed to parse with {:?} strictness: {:?}",
+                AVIF_A1LX, strictness, e
+            )
+        });
+        assert!(!context.unsupported_features.contains(mp4::Feature::A1lx));
+
+        // A single layer boundary, i.e. the `[X,0,0]` shape the spec gives for a
+        // 2-layer item: the first layer is X bytes and the second is
+        // ItemSize - X. See
+        // <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-semantics>.
+        let a1lx = context
+            .primary_item_a1lx()
+            .expect("primary item should have an a1lx");
+        assert_eq!(a1lx.layer_sizes, [122336, 0, 0]);
+
+        // No `lsel`, so nothing pins the item to one layer.
+        assert_eq!(context.primary_item_lsel(), None);
+
+        // The extents are where the layer payloads are cut from.
+        assert!(context.primary_item_is_file_construction());
+        let extents = context
+            .primary_item_extents()
+            .expect("primary item should be present");
+        assert!(!extents.is_empty());
+        assert!(extents.iter().all(|e| !e.to_end && e.len > 0));
+    });
 }
 
 #[test]

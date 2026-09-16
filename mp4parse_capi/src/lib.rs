@@ -157,6 +157,42 @@ impl Mp4parseByteData {
     }
 }
 
+/// A borrowed slice of [`mp4parse::ItemExtent`], valid for the lifetime of the
+/// parser it was obtained from.
+///
+/// The extents are in payload order, which is what a caller cutting the payload
+/// at `a1lx` layer boundaries needs; see ISOBMFF (ISO 14496-12:2020) § 8.11.3
+/// and
+/// <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-semantics>.
+#[repr(C)]
+#[derive(Debug)]
+pub struct Mp4parseItemExtents {
+    pub length: usize,
+    pub extents: *const mp4parse::ItemExtent,
+}
+
+impl Mp4parseItemExtents {
+    fn with_extents(slice: &[mp4parse::ItemExtent]) -> Self {
+        Self {
+            length: slice.len(),
+            extents: if slice.is_empty() {
+                std::ptr::null()
+            } else {
+                slice.as_ptr()
+            },
+        }
+    }
+}
+
+impl Default for Mp4parseItemExtents {
+    fn default() -> Self {
+        Self {
+            length: 0,
+            extents: std::ptr::null(),
+        }
+    }
+}
+
 impl Default for Mp4parseByteData {
     fn default() -> Self {
         Self {
@@ -409,6 +445,36 @@ pub struct Mp4parseAvifInfo {
     pub has_alpha_item: bool,
     /// Bit depth for the alpha item used by the `pitm`, or 0 if values are inconsistent.
     pub alpha_item_bit_depth: u8,
+
+    /// The layer sizes from the primary item's `a1lx`, or null if it has none.
+    ///
+    /// An `a1lx` "should not be associated with AV1 Image Items consisting of
+    /// only one layer", so a non-null value here means the item is layered. See
+    /// <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-description>.
+    pub primary_item_a1lx: *const mp4parse::AV1LayeredImageIndexing,
+    /// As `primary_item_a1lx`, but for the alpha item.
+    pub alpha_item_a1lx: *const mp4parse::AV1LayeredImageIndexing,
+    /// The primary item's `lsel` layer_id, or 0xFFFF if it has no
+    /// LayerSelectorProperty.
+    ///
+    /// Collapsing the two cases is deliberate: per
+    /// <https://aomediacodec.github.io/av1-avif/#layer-selector-property> a
+    /// value in 0..=3 names the single `spatial_id` to render, while 0xFFFF
+    /// means progressive decoding is allowed -- the same freedom a caller has
+    /// when no `lsel` is associated at all.
+    pub primary_item_lsel_layer_id: u16,
+    /// The `iloc` extents making up the primary item's payload, in payload
+    /// order. Only meaningful when `primary_item_is_file_construction` is true.
+    pub primary_item_extents: Mp4parseItemExtents,
+    /// As `primary_item_extents`, but for the alpha item.
+    pub alpha_item_extents: Mp4parseItemExtents,
+    /// Whether the primary item's extents are offsets into the file rather
+    /// than into an `idat` box or another item, i.e. whether
+    /// `construction_method` is 0. See ISOBMFF (ISO 14496-12:2020) § 8.11.3 and
+    /// MIAF (ISO 23000-22:2019) § 7.2.1.7.
+    pub primary_item_is_file_construction: bool,
+    /// As `primary_item_is_file_construction`, but for the alpha item.
+    pub alpha_item_is_file_construction: bool,
 
     /// Whether there is a sequence. Can be true with no primary image.
     pub has_sequence: bool,
@@ -1278,6 +1344,22 @@ fn mp4parse_avif_get_info_safe(context: &AvifContext) -> mp4parse::Result<Mp4par
         primary_item_bit_depth: 0,
         has_alpha_item: context.alpha_item_is_present(),
         alpha_item_bit_depth: 0,
+
+        primary_item_a1lx: context
+            .primary_item_a1lx()
+            .map_or(std::ptr::null(), |a1lx| a1lx as *const _),
+        alpha_item_a1lx: context
+            .alpha_item_a1lx()
+            .map_or(std::ptr::null(), |a1lx| a1lx as *const _),
+        primary_item_lsel_layer_id: context.primary_item_lsel().unwrap_or(0xffff),
+        primary_item_extents: Mp4parseItemExtents::with_extents(
+            context.primary_item_extents().unwrap_or(&[]),
+        ),
+        alpha_item_extents: Mp4parseItemExtents::with_extents(
+            context.alpha_item_extents().unwrap_or(&[]),
+        ),
+        primary_item_is_file_construction: context.primary_item_is_file_construction(),
+        alpha_item_is_file_construction: context.alpha_item_is_file_construction(),
 
         has_sequence: false,
         loop_mode: Mp4parseAvifLoopMode::NoEdits,
