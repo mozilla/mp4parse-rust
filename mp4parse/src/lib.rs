@@ -298,7 +298,8 @@ pub enum Feature {
 impl Feature {
     fn supported(self) -> bool {
         match self {
-            Self::Auxc
+            Self::A1lx
+            | Self::Auxc
             | Self::Av1c
             | Self::Avis
             | Self::Colr
@@ -307,7 +308,7 @@ impl Feature {
             | Self::Ispe
             | Self::Pasp
             | Self::Pixi => true,
-            Self::A1lx | Self::A1op | Self::Clap | Self::Grid | Self::Ipro | Self::Lsel => false,
+            Self::A1op | Self::Clap | Self::Grid | Self::Ipro | Self::Lsel => false,
         }
     }
 }
@@ -323,7 +324,7 @@ impl TryFrom<&ItemProperty> for Feature {
             ItemProperty::CleanAperture => Self::Clap,
             ItemProperty::Colour(_) => Self::Colr,
             ItemProperty::ImageSpatialExtents(_) => Self::Ispe,
-            ItemProperty::LayeredImageIndexing => Self::A1lx,
+            ItemProperty::LayeredImageIndexing(_) => Self::A1lx,
             ItemProperty::LayerSelection(_) => Self::Lsel,
             ItemProperty::Mirroring(_) => Self::Imir,
             ItemProperty::OperatingPointSelector => Self::A1op,
@@ -1624,6 +1625,43 @@ impl fmt::Debug for IsobmffItem {
     }
 }
 
+/// A region of the file holding part of an item's payload, as given by the
+/// `extent_offset` and `extent_length` of an `iloc` entry.
+///
+/// `offset` already has the entry's `base_offset` added, so for
+/// [`ConstructionMethod::File`] it is an absolute file offset. See ISOBMFF
+/// (ISO 14496-12:2020) § 8.11.3.
+///
+/// This is the `repr(C)`-friendly form of [`Extent`], retained so that callers
+/// which need to know *where* an item's bytes live (rather than just reading
+/// them) can be told. `extent_length` may be zero, which per § 8.11.3.3 means
+/// the extent runs to the end of the enclosing box; that is reported as
+/// `len == 0` with `to_end == true`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ItemExtent {
+    pub offset: u64,
+    pub len: u64,
+    pub to_end: bool,
+}
+
+impl From<&Extent> for ItemExtent {
+    fn from(extent: &Extent) -> Self {
+        match extent {
+            Extent::WithLength { offset, len } => Self {
+                offset: *offset,
+                len: *len as u64,
+                to_end: false,
+            },
+            Extent::ToEnd { offset } => Self {
+                offset: *offset,
+                len: 0,
+                to_end: true,
+            },
+        }
+    }
+}
+
 #[derive(Debug)]
 struct AvifItem {
     /// The `item_ID` from ISOBMFF (ISO 14496-12:2020) § 8.11.3
@@ -1633,6 +1671,21 @@ struct AvifItem {
 
     /// AV1 Image Item per <https://aomediacodec.github.io/av1-avif/#image-item>
     image_data: IsobmffItem,
+
+    /// The `construction_method` from ISOBMFF (ISO 14496-12:2020) § 8.11.3,
+    /// which says whether `extents` index the file, the `idat` box or another
+    /// item. See [`ConstructionMethod`].
+    construction_method: ConstructionMethod,
+
+    /// The `iloc` extents making up this item's payload, in payload order.
+    /// Retained (rather than being folded into `image_data`) so that callers
+    /// decoding an item incrementally can tell which of its bytes have arrived,
+    /// and so that they can cut the payload at the layer boundaries an `a1lx`
+    /// describes -- which is what the property is for, per
+    /// <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-description>:
+    /// it "enables determining the byte ranges required to process one or more
+    /// layers of an Operating Point".
+    extents: TryVec<ItemExtent>,
 }
 
 impl AvifItem {
@@ -1640,6 +1693,8 @@ impl AvifItem {
         Self {
             id,
             image_data: IsobmffItem::Data(TryVec::new()),
+            construction_method: ConstructionMethod::File,
+            extents: TryVec::new(),
         }
     }
 }
@@ -1705,6 +1760,86 @@ impl AvifContext {
         self.alpha_item
             .as_ref()
             .map(|item| self.image_bits_per_channel(item.id))
+    }
+
+    /// The layer sizes from the item's AV1LayeredImageIndexingProperty, or
+    /// `None` if the item has no `a1lx`.
+    ///
+    /// An `a1lx` "should not be associated with AV1 Image Items consisting of
+    /// only one layer", so its presence is the practical signal that an item is
+    /// layered. See
+    /// <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-description>.
+    pub fn primary_item_a1lx(&self) -> Option<&AV1LayeredImageIndexing> {
+        self.item_a1lx(self.primary_item.as_ref()?)
+    }
+
+    pub fn alpha_item_a1lx(&self) -> Option<&AV1LayeredImageIndexing> {
+        self.item_a1lx(self.alpha_item.as_ref()?)
+    }
+
+    fn item_a1lx(&self, item: &AvifItem) -> Option<&AV1LayeredImageIndexing> {
+        match self
+            .item_properties
+            .get(item.id, BoxType::AV1LayeredImageIndexingProperty)
+        {
+            Ok(Some(ItemProperty::LayeredImageIndexing(a1lx))) => Some(a1lx),
+            _ => None,
+        }
+    }
+
+    /// The `lsel` layer_id for the primary item, or `None` if it has no
+    /// LayerSelectorProperty.
+    ///
+    /// Per <https://aomediacodec.github.io/av1-avif/#layer-selector-property>
+    /// the value "shall be between 0 and 3, or the special value 0xFFFF", and a
+    /// value in 0..=3 "indicates the value of the spatial_id to render", which
+    /// pins the item to one layer. `0xFFFF` instead means progressive decoding
+    /// is allowed, so an absent `lsel` and an `lsel` of `0xFFFF` are equivalent
+    /// to a caller looking for a progressively renderable item.
+    pub fn primary_item_lsel(&self) -> Option<u16> {
+        match self.item_properties.get(
+            self.primary_item.as_ref()?.id,
+            BoxType::LayerSelectorProperty,
+        ) {
+            Ok(Some(ItemProperty::LayerSelection(layer_id))) => Some(*layer_id),
+            _ => None,
+        }
+    }
+
+    /// The `iloc` extents making up the item's payload, in payload order, or
+    /// `None` if the item isn't present.
+    ///
+    /// The order matters: an `a1lx` documents layer sizes "in increasing order
+    /// of spatial_id" within the item payload, so cutting the payload at those
+    /// sizes means walking the extents in this order. See
+    /// <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-semantics>.
+    ///
+    /// Only meaningful for items whose `construction_method` is `File`; see
+    /// `primary_item_is_file_construction`.
+    pub fn primary_item_extents(&self) -> Option<&[ItemExtent]> {
+        Some(self.primary_item.as_ref()?.extents.as_slice())
+    }
+
+    pub fn alpha_item_extents(&self) -> Option<&[ItemExtent]> {
+        Some(self.alpha_item.as_ref()?.extents.as_slice())
+    }
+
+    /// Whether the item's extents are offsets into the file, rather than into
+    /// the `idat` box or another item.
+    ///
+    /// MIAF (ISO 23000-22:2019) § 7.2.1.7 restricts `construction_method` to 0
+    /// (file) or 1 (idat), but only the former lets a caller map an extent onto
+    /// a file offset it can wait for.
+    pub fn primary_item_is_file_construction(&self) -> bool {
+        self.primary_item
+            .as_ref()
+            .is_some_and(|item| item.construction_method == ConstructionMethod::File)
+    }
+
+    pub fn alpha_item_is_file_construction(&self) -> bool {
+        self.alpha_item
+            .as_ref()
+            .is_some_and(|item| item.construction_method == ConstructionMethod::File)
     }
 
     fn image_bits_per_channel(&self, item_id: ItemId) -> Result<&[u8]> {
@@ -2605,69 +2740,85 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
             loc.construction_method
         );
 
-        // Generalize the process of connecting items to their data; returns
-        // true if the extent is successfully added to the AvifItem
-        let mut find_and_add_to_item = |extent: &Extent, dat: &DataBox| -> Result<bool> {
-            if let Some(extent_slice) = dat.get(extent) {
-                match item {
-                    None => {
-                        trace!("Using IsobmffItem::Location");
-                        *item = Some(AvifItem {
-                            id: item_id,
-                            image_data: dat.location(extent),
-                        });
-                    }
-                    Some(AvifItem {
-                        image_data: IsobmffItem::Data(bytes),
-                        ..
-                    }) => {
-                        trace!("Using IsobmffItem::Data");
-                        // We could potentially optimize memory usage by trying to avoid reading
-                        // or storing dat boxes which aren't used by our API, but for now it seems
-                        // like unnecessary complexity
-                        bytes.extend_from_slice(extent_slice)?;
-                    }
-                    _ => unreachable!(),
-                }
-                return Ok(true);
-            }
-            Ok(false)
-        };
-
-        match loc.construction_method {
-            ConstructionMethod::File => {
-                for extent in loc.extents {
-                    let mut found = false;
-                    // try to find an mdat which contains the extent
-                    for mdat in media_storage.iter() {
-                        if find_and_add_to_item(&extent, mdat)? {
-                            found = true;
-                            break;
+        // Scoped so the closure's mutable borrow of `item` ends before we
+        // record where the item's bytes came from, below.
+        {
+            // Generalize the process of connecting items to their data; returns
+            // true if the extent is successfully added to the AvifItem
+            let mut find_and_add_to_item = |extent: &Extent, dat: &DataBox| -> Result<bool> {
+                if let Some(extent_slice) = dat.get(extent) {
+                    match item {
+                        None => {
+                            trace!("Using IsobmffItem::Location");
+                            *item = Some(AvifItem {
+                                id: item_id,
+                                image_data: dat.location(extent),
+                                // Both filled in by the caller once every extent
+                                // has been located.
+                                construction_method: ConstructionMethod::File,
+                                extents: TryVec::new(),
+                            });
                         }
+                        Some(AvifItem {
+                            image_data: IsobmffItem::Data(bytes),
+                            ..
+                        }) => {
+                            trace!("Using IsobmffItem::Data");
+                            // We could potentially optimize memory usage by trying to avoid reading
+                            // or storing dat boxes which aren't used by our API, but for now it seems
+                            // like unnecessary complexity
+                            bytes.extend_from_slice(extent_slice)?;
+                        }
+                        _ => unreachable!(),
                     }
-
-                    if !found {
-                        return Status::IlocNotFound.into();
-                    }
+                    return Ok(true);
                 }
-            }
-            ConstructionMethod::Idat => {
-                if let Some(idat) = &item_data_box {
-                    for extent in loc.extents {
-                        let found = find_and_add_to_item(&extent, idat)?;
+                Ok(false)
+            };
+
+            match loc.construction_method {
+                ConstructionMethod::File => {
+                    for extent in &loc.extents {
+                        let mut found = false;
+                        // try to find an mdat which contains the extent
+                        for mdat in media_storage.iter() {
+                            if find_and_add_to_item(extent, mdat)? {
+                                found = true;
+                                break;
+                            }
+                        }
+
                         if !found {
                             return Status::IlocNotFound.into();
                         }
                     }
-                } else {
-                    return Status::IdatMissing.into();
+                }
+                ConstructionMethod::Idat => {
+                    if let Some(idat) = &item_data_box {
+                        for extent in &loc.extents {
+                            let found = find_and_add_to_item(extent, idat)?;
+                            if !found {
+                                return Status::IlocNotFound.into();
+                            }
+                        }
+                    } else {
+                        return Status::IdatMissing.into();
+                    }
+                }
+                ConstructionMethod::Item => {
+                    fail_with_status_if(
+                        strictness != ParseStrictness::Permissive,
+                        Status::ConstructionMethod,
+                    )?;
                 }
             }
-            ConstructionMethod::Item => {
-                fail_with_status_if(
-                    strictness != ParseStrictness::Permissive,
-                    Status::ConstructionMethod,
-                )?;
+        }
+
+        if let Some(item) = item {
+            item.construction_method = loc.construction_method;
+            item.extents = TryVec::with_capacity(loc.extents.len())?;
+            for extent in &loc.extents {
+                item.extents.push(ItemExtent::from(extent))?;
             }
         }
 
@@ -3216,10 +3367,7 @@ fn read_iprp<T: Read>(
                             }
                         }
 
-                        // The following properties are unsupported, but we still enforce that
-                        // they've been correctly marked as essential or not.
-                        ItemProperty::LayeredImageIndexing => {
-                            assert!(feature.is_ok() && unsupported_features.contains(feature?));
+                        ItemProperty::LayeredImageIndexing(_) => {
                             if a.essential {
                                 fail_with_status_if(
                                     strictness != ParseStrictness::Permissive,
@@ -3228,6 +3376,8 @@ fn read_iprp<T: Read>(
                             }
                         }
 
+                        // The following properties are unsupported, but we still enforce that
+                        // they've been correctly marked as essential or not.
                         ItemProperty::LayerSelection(layer_id) => {
                             if !a.essential {
                                 // lsel shall be marked as essential regardless of its
@@ -3328,7 +3478,7 @@ pub enum ItemProperty {
     CleanAperture,
     Colour(ColourInformation),
     ImageSpatialExtents(ImageSpatialExtentsProperty),
-    LayeredImageIndexing,
+    LayeredImageIndexing(AV1LayeredImageIndexing),
     LayerSelection(u16),
     Mirroring(ImageMirror),
     OperatingPointSelector,
@@ -3345,7 +3495,7 @@ impl From<&ItemProperty> for BoxType {
             ItemProperty::AV1Config(_) => BoxType::AV1CodecConfigurationBox,
             ItemProperty::CleanAperture => BoxType::CleanApertureBox,
             ItemProperty::Colour(_) => BoxType::ColourInformationBox,
-            ItemProperty::LayeredImageIndexing => BoxType::AV1LayeredImageIndexingProperty,
+            ItemProperty::LayeredImageIndexing(_) => BoxType::AV1LayeredImageIndexingProperty,
             ItemProperty::LayerSelection(_) => BoxType::LayerSelectorProperty,
             ItemProperty::Mirroring(_) => BoxType::ImageMirror,
             ItemProperty::OperatingPointSelector => BoxType::OperatingPointSelectorProperty,
@@ -3717,13 +3867,27 @@ fn read_ipco<T: Read>(
             BoxType::PixelAspectRatioBox => ItemProperty::PixelAspectRatio(read_pasp(&mut b)?),
             BoxType::PixelInformationBox => ItemProperty::Channels(read_pixi(&mut b)?),
             BoxType::LayerSelectorProperty => ItemProperty::LayerSelection(read_lsel(&mut b)?),
+            BoxType::AV1LayeredImageIndexingProperty => {
+                // Trouble reading the property leaves it recorded as present
+                // but with no layer sizes, which callers read as "not a layered
+                // image". An `a1lx` that is truncated, overlong, or has garbage
+                // in its reserved bits is no reason to fail an image which
+                // would otherwise decode: the property "shall not be marked as
+                // essential" per
+                // <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-description>,
+                // so a reader is entitled to ignore it entirely and still
+                // render the item -- it only ever documents where the layers
+                // are, never how to decode them.
+                let a1lx = read_a1lx(&mut b).unwrap_or_default();
+                skip_box_remain(&mut b)?;
+                ItemProperty::LayeredImageIndexing(a1lx)
+            }
 
             other_box_type => {
                 // Even if we didn't do anything with other property types, we still store
                 // a record at the index to identify invalid indices in ipma boxes
                 skip_box_remain(&mut b)?;
                 let item_property = match other_box_type {
-                    BoxType::AV1LayeredImageIndexingProperty => ItemProperty::LayeredImageIndexing,
                     BoxType::CleanApertureBox => ItemProperty::CleanAperture,
                     BoxType::OperatingPointSelectorProperty => ItemProperty::OperatingPointSelector,
                     _ => {
@@ -3756,6 +3920,70 @@ fn read_ipco<T: Read>(
 fn read_lsel<T: Read>(src: &mut BMFFBox<T>) -> Result<u16> {
     let layer_id = be_u16(src)?;
     Ok(layer_id)
+}
+
+/// The sizes, in bytes, of the layers making up a layered (progressive) AV1
+/// image item, as given by its AV1LayeredImageIndexingProperty.
+///
+/// `layer_sizes` documents every layer except the last, in increasing order of
+/// `spatial_id`, so an item holds at most 4 layers. The last one occupies
+/// whatever remains of the item: "the size of the last layer can be determined
+/// by subtracting the sum of the sizes of all layers indicated in this property
+/// from the entire item size".
+///
+/// A zero entry terminates the list -- "a value of zero means that all the
+/// layers except the last one have been documented and following values shall
+/// be 0" -- so a 2-layer item reports `[size_of_layer_0, 0, 0]` and an all-zero
+/// property describes a single layer, i.e. nothing layered at all.
+///
+/// Note that an index into `layer_sizes` is not a `spatial_id`: "the spatial_id
+/// for the first layer does not necessarily match the index in the array that
+/// provides the size".
+///
+/// See
+/// <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-semantics>.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AV1LayeredImageIndexing {
+    pub layer_sizes: [u32; 3],
+}
+
+/// Parse an AV1LayeredImageIndexingProperty.
+///
+/// Not a FullBox, so there is no version or flags field to read before the
+/// payload:
+///
+/// ```text
+/// class AV1LayeredImageIndexingProperty extends ItemProperty('a1lx') {
+///   unsigned int(7) reserved = 0;
+///   unsigned int(1) large_size;
+///   FieldLength = (large_size + 1) * 16;
+///   unsigned int(FieldLength) layer_size[3];
+/// }
+/// ```
+///
+/// See <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-syntax>
+fn read_a1lx<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1LayeredImageIndexing> {
+    let flags = src.read_u8()?;
+    // unsigned int(7) reserved = 0; warned about rather than rejected, since
+    // the property is non-essential and this is the only field we would be
+    // guessing about.
+    if flags & 0xfe != 0 {
+        warn!("a1lx reserved bits are not zero: {flags:#x}");
+    }
+    // unsigned int(1) large_size; FieldLength = (large_size + 1) * 16
+    let large_size = flags & 1 == 1;
+
+    let mut layer_sizes = [0u32; 3];
+    for layer_size in &mut layer_sizes {
+        *layer_size = if large_size {
+            be_u32(src)?
+        } else {
+            be_u16(src)?.into()
+        };
+    }
+
+    Ok(AV1LayeredImageIndexing { layer_sizes })
 }
 
 #[repr(C)]
