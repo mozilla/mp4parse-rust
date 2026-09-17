@@ -44,4 +44,3 @@ include = ["Status", "Feature"]
 "Indice" = "Mp4parseIndice"
 "NclxColourInformation" = "Mp4parseNclxColourInformation"
 "AV1LayeredImageIndexing" = "Mp4parseA1lx"
-"ItemExtent" = "Mp4parseItemExtent"

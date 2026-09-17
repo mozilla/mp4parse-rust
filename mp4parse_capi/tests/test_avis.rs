@@ -259,6 +259,80 @@ fn repeated_get_indice_table_returns_stable_pointer() {
     }
 }
 
+/// The extents are flattened out of `mp4parse::Extent` into the `repr(C)`
+/// `Mp4parseItemExtent` when the parser is created, so the pointer handed to C
+/// has to stay valid and identical for the life of the parser.
+#[test]
+fn repeated_get_info_returns_stable_item_extents() {
+    let (parser, info1) = unsafe { parse_file_and_get_info("tests/no_edts.avif") };
+
+    unsafe {
+        assert!(info1.has_primary_item);
+        assert!(info1.primary_item_is_file_construction);
+        assert!(info1.primary_item_extents.length > 0);
+        assert!(!info1.primary_item_extents.extents.is_null());
+        assert_slice_pointer_is_readable(
+            info1.primary_item_extents.extents,
+            info1.primary_item_extents.length,
+        );
+
+        // No alpha item, so no extents; empty slices use null pointers.
+        assert!(!info1.has_alpha_item);
+        assert_eq!(info1.alpha_item_extents.length, 0);
+        assert!(info1.alpha_item_extents.extents.is_null());
+
+        let extents1: &[Mp4parseItemExtent] = std::slice::from_raw_parts(
+            info1.primary_item_extents.extents,
+            info1.primary_item_extents.length,
+        );
+        // This file's extents are all bounded, i.e. `Extent::WithLength`.
+        assert!(extents1.iter().all(|e| !e.to_end && e.len > 0));
+
+        let mut info2 = default_avif_info();
+        let rv = mp4parse_avif_get_info(parser, &mut info2);
+        assert_eq!(rv, Mp4parseStatus::Ok);
+        assert_eq!(
+            info1.primary_item_extents.length,
+            info2.primary_item_extents.length
+        );
+        assert_eq!(
+            info1.primary_item_extents.extents,
+            info2.primary_item_extents.extents
+        );
+
+        let extents2: &[Mp4parseItemExtent] = std::slice::from_raw_parts(
+            info2.primary_item_extents.extents,
+            info2.primary_item_extents.length,
+        );
+        assert_eq!(extents1, extents2);
+
+        mp4parse_avif_free(parser);
+    }
+}
+
+/// Both `mp4parse::Extent` variants flatten into exactly one of the two states
+/// `Mp4parseItemExtent` is documented to take. No test file produces a
+/// zero-`extent_length` `iloc` entry, so cover the mapping directly.
+#[test]
+fn item_extents_flatten_both_extent_variants() {
+    assert_eq!(
+        Mp4parseItemExtent::from(mp4parse::Extent::WithLength { offset: 42, len: 7 }),
+        Mp4parseItemExtent {
+            offset: 42,
+            len: 7,
+            to_end: false,
+        }
+    );
+    assert_eq!(
+        Mp4parseItemExtent::from(mp4parse::Extent::ToEnd { offset: 42 }),
+        Mp4parseItemExtent {
+            offset: 42,
+            len: 0,
+            to_end: true,
+        }
+    );
+}
+
 #[test]
 fn empty_avif_byte_slices_use_null_pointers() {
     let (parser, info) = unsafe { parse_file_and_get_info("tests/no_edts.avif") };

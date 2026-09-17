@@ -157,7 +157,48 @@ impl Mp4parseByteData {
     }
 }
 
-/// A borrowed slice of [`mp4parse::ItemExtent`], valid for the lifetime of the
+/// A region of the file holding part of an item's payload, as given by the
+/// `extent_offset` and `extent_length` of an `iloc` entry.
+///
+/// `offset` already has the entry's `base_offset` added, so when the item's
+/// `construction_method` is 0 it is an absolute file offset. See ISOBMFF
+/// (ISO 14496-12:2020) § 8.11.3.
+///
+/// This is the flattened, `repr(C)` form of [`mp4parse::Extent`], which cannot
+/// cross the FFI boundary as the enum it is. Only two of the representable
+/// states occur: `to_end == false` with `len > 0`, and `to_end == true` with
+/// `len == 0`.
+///
+/// `to_end` is an `extent_length` of zero, which per § 8.11.3.1 means "the
+/// entire length of the source is implied". The parser resolves that against
+/// the enclosing `mdat` or `idat`, whose end this struct cannot name, so a
+/// caller cutting byte ranges gets a start but no end for such an extent.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Mp4parseItemExtent {
+    pub offset: u64,
+    pub len: u64,
+    pub to_end: bool,
+}
+
+impl From<mp4parse::Extent> for Mp4parseItemExtent {
+    fn from(extent: mp4parse::Extent) -> Self {
+        match extent {
+            mp4parse::Extent::WithLength { offset, len } => Self {
+                offset,
+                len: len as u64,
+                to_end: false,
+            },
+            mp4parse::Extent::ToEnd { offset } => Self {
+                offset,
+                len: 0,
+                to_end: true,
+            },
+        }
+    }
+}
+
+/// A borrowed slice of [`Mp4parseItemExtent`], valid for the lifetime of the
 /// parser it was obtained from.
 ///
 /// The extents are in payload order, which is what a caller cutting the payload
@@ -168,11 +209,11 @@ impl Mp4parseByteData {
 #[derive(Debug)]
 pub struct Mp4parseItemExtents {
     pub length: usize,
-    pub extents: *const mp4parse::ItemExtent,
+    pub extents: *const Mp4parseItemExtent,
 }
 
 impl Mp4parseItemExtents {
-    fn with_extents(slice: &[mp4parse::ItemExtent]) -> Self {
+    fn with_extents(slice: &[Mp4parseItemExtent]) -> Self {
         Self {
             length: slice.len(),
             extents: if slice.is_empty() {
@@ -191,6 +232,25 @@ impl Default for Mp4parseItemExtents {
             extents: std::ptr::null(),
         }
     }
+}
+
+/// Whether an item's extents are offsets into the file rather than into an
+/// `idat` box or another item. Absent items report false, matching the
+/// `has_primary_item`/`has_alpha_item` flags the caller checks first.
+fn is_file_construction(method: Option<mp4parse::ConstructionMethod>) -> bool {
+    matches!(method, Some(mp4parse::ConstructionMethod::File))
+}
+
+/// Flatten an item's extents into the `repr(C)` form the C API exposes.
+fn flatten_extents(
+    extents: Option<&[mp4parse::Extent]>,
+) -> mp4parse::Result<TryVec<Mp4parseItemExtent>> {
+    let extents = extents.unwrap_or(&[]);
+    let mut flattened = TryVec::with_capacity(extents.len())?;
+    for &extent in extents {
+        flattened.push(Mp4parseItemExtent::from(extent))?;
+    }
+    Ok(flattened)
 }
 
 impl Default for Mp4parseByteData {
@@ -448,8 +508,15 @@ pub struct Mp4parseAvifInfo {
 
     /// The layer sizes from the primary item's `a1lx`, or null if it has none.
     ///
+    /// Non-null means only that the property is *present*. It gives no layer
+    /// boundary when `layer_sizes[0] == 0`, which covers both a spec-legal
+    /// single-layer `a1lx` and a malformed one, since a malformed `a1lx` is
+    /// recorded as present with no sizes rather than failing the parse. A
+    /// caller asking "is this item layered" therefore has to check
+    /// `layer_sizes[0] != 0` too.
+    ///
     /// An `a1lx` "should not be associated with AV1 Image Items consisting of
-    /// only one layer", so a non-null value here means the item is layered. See
+    /// only one layer". See
     /// <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-description>.
     pub primary_item_a1lx: *const mp4parse::AV1LayeredImageIndexing,
     /// As `primary_item_a1lx`, but for the alpha item.
@@ -511,7 +578,7 @@ where
 {
     type Context;
 
-    fn with_context(context: Self::Context) -> Self;
+    fn with_context(context: Self::Context) -> mp4parse::Result<Self>;
 
     fn read<T: Read>(io: &mut T, strictness: ParseStrictness) -> mp4parse::Result<Self::Context>;
 }
@@ -529,11 +596,11 @@ impl Mp4parseParser {
 impl ContextParser for Mp4parseParser {
     type Context = MediaContext;
 
-    fn with_context(context: Self::Context) -> Self {
-        Self {
+    fn with_context(context: Self::Context) -> mp4parse::Result<Self> {
+        Ok(Self {
             context,
             ..Default::default()
-        }
+        })
     }
 
     fn read<T: Read>(io: &mut T, strictness: ParseStrictness) -> mp4parse::Result<Self::Context> {
@@ -547,6 +614,12 @@ impl ContextParser for Mp4parseParser {
 pub struct Mp4parseAvifParser {
     context: AvifContext,
     sample_table: TryHashMap<u32, TryVec<Indice>>,
+    // `mp4parse::Extent` is an enum, so it can't be handed to C as-is. The
+    // flattened form is built once here rather than per `mp4parse_avif_get_info`
+    // call, because the pointers `Mp4parseAvifInfo` exposes have to stay valid
+    // for as long as the parser does.
+    primary_item_extents: TryVec<Mp4parseItemExtent>,
+    alpha_item_extents: TryVec<Mp4parseItemExtent>,
 }
 
 trait CacheInsertExt<K, V> {
@@ -576,11 +649,13 @@ impl Mp4parseAvifParser {
 impl ContextParser for Mp4parseAvifParser {
     type Context = AvifContext;
 
-    fn with_context(context: Self::Context) -> Self {
-        Self {
+    fn with_context(context: Self::Context) -> mp4parse::Result<Self> {
+        Ok(Self {
+            primary_item_extents: flatten_extents(context.primary_item_extents())?,
+            alpha_item_extents: flatten_extents(context.alpha_item_extents())?,
             context,
             ..Default::default()
-        }
+        })
     }
 
     fn read<T: Read>(io: &mut T, strictness: ParseStrictness) -> mp4parse::Result<Self::Context> {
@@ -692,7 +767,7 @@ fn mp4parse_new_common_safe<T: Read, P: ContextParser>(
     strictness: ParseStrictness,
 ) -> Result<*mut P, Mp4parseStatus> {
     P::read(io, strictness)
-        .map(P::with_context)
+        .and_then(P::with_context)
         .and_then(|x| TryBox::try_new(x).map_err(mp4parse::Error::from))
         .map(TryBox::into_raw)
         .map_err(Mp4parseStatus::from)
@@ -1316,7 +1391,7 @@ pub unsafe extern "C" fn mp4parse_avif_get_info(
         return Mp4parseStatus::BadArg;
     }
 
-    if let Ok(info) = mp4parse_avif_get_info_safe((*parser).context()) {
+    if let Ok(info) = mp4parse_avif_get_info_safe(&*parser) {
         *avif_info = info;
         Mp4parseStatus::Ok
     } else {
@@ -1324,7 +1399,8 @@ pub unsafe extern "C" fn mp4parse_avif_get_info(
     }
 }
 
-fn mp4parse_avif_get_info_safe(context: &AvifContext) -> mp4parse::Result<Mp4parseAvifInfo> {
+fn mp4parse_avif_get_info_safe(parser: &Mp4parseAvifParser) -> mp4parse::Result<Mp4parseAvifInfo> {
+    let context = parser.context();
     let info = Mp4parseAvifInfo {
         premultiplied_alpha: context.premultiplied_alpha,
         major_brand: context.major_brand.value,
@@ -1352,14 +1428,14 @@ fn mp4parse_avif_get_info_safe(context: &AvifContext) -> mp4parse::Result<Mp4par
             .alpha_item_a1lx()
             .map_or(std::ptr::null(), |a1lx| a1lx as *const _),
         primary_item_lsel_layer_id: context.primary_item_lsel().unwrap_or(0xffff),
-        primary_item_extents: Mp4parseItemExtents::with_extents(
-            context.primary_item_extents().unwrap_or(&[]),
+        primary_item_extents: Mp4parseItemExtents::with_extents(&parser.primary_item_extents),
+        alpha_item_extents: Mp4parseItemExtents::with_extents(&parser.alpha_item_extents),
+        primary_item_is_file_construction: is_file_construction(
+            context.primary_item_construction_method(),
         ),
-        alpha_item_extents: Mp4parseItemExtents::with_extents(
-            context.alpha_item_extents().unwrap_or(&[]),
+        alpha_item_is_file_construction: is_file_construction(
+            context.alpha_item_construction_method(),
         ),
-        primary_item_is_file_construction: context.primary_item_is_file_construction(),
-        alpha_item_is_file_construction: context.alpha_item_is_file_construction(),
 
         has_sequence: false,
         loop_mode: Mp4parseAvifLoopMode::NoEdits,

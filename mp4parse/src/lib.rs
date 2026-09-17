@@ -1625,43 +1625,6 @@ impl fmt::Debug for IsobmffItem {
     }
 }
 
-/// A region of the file holding part of an item's payload, as given by the
-/// `extent_offset` and `extent_length` of an `iloc` entry.
-///
-/// `offset` already has the entry's `base_offset` added, so for
-/// [`ConstructionMethod::File`] it is an absolute file offset. See ISOBMFF
-/// (ISO 14496-12:2020) § 8.11.3.
-///
-/// This is the `repr(C)`-friendly form of [`Extent`], retained so that callers
-/// which need to know *where* an item's bytes live (rather than just reading
-/// them) can be told. `extent_length` may be zero, which per § 8.11.3.3 means
-/// the extent runs to the end of the enclosing box; that is reported as
-/// `len == 0` with `to_end == true`.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct ItemExtent {
-    pub offset: u64,
-    pub len: u64,
-    pub to_end: bool,
-}
-
-impl From<&Extent> for ItemExtent {
-    fn from(extent: &Extent) -> Self {
-        match extent {
-            Extent::WithLength { offset, len } => Self {
-                offset: *offset,
-                len: *len as u64,
-                to_end: false,
-            },
-            Extent::ToEnd { offset } => Self {
-                offset: *offset,
-                len: 0,
-                to_end: true,
-            },
-        }
-    }
-}
-
 #[derive(Debug)]
 struct AvifItem {
     /// The `item_ID` from ISOBMFF (ISO 14496-12:2020) § 8.11.3
@@ -1685,7 +1648,7 @@ struct AvifItem {
     /// <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-description>:
     /// it "enables determining the byte ranges required to process one or more
     /// layers of an Operating Point".
-    extents: TryVec<ItemExtent>,
+    extents: TryVec<Extent>,
 }
 
 impl AvifItem {
@@ -1814,32 +1777,29 @@ impl AvifContext {
     /// sizes means walking the extents in this order. See
     /// <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-semantics>.
     ///
-    /// Only meaningful for items whose `construction_method` is `File`; see
-    /// `primary_item_is_file_construction`.
-    pub fn primary_item_extents(&self) -> Option<&[ItemExtent]> {
+    /// What the offsets are relative to depends on
+    /// [`AvifContext::primary_item_construction_method`].
+    pub fn primary_item_extents(&self) -> Option<&[Extent]> {
         Some(self.primary_item.as_ref()?.extents.as_slice())
     }
 
-    pub fn alpha_item_extents(&self) -> Option<&[ItemExtent]> {
+    pub fn alpha_item_extents(&self) -> Option<&[Extent]> {
         Some(self.alpha_item.as_ref()?.extents.as_slice())
     }
 
-    /// Whether the item's extents are offsets into the file, rather than into
-    /// the `idat` box or another item.
+    /// What the item's extents are offsets into, or `None` if the item isn't
+    /// present.
     ///
-    /// MIAF (ISO 23000-22:2019) § 7.2.1.7 restricts `construction_method` to 0
-    /// (file) or 1 (idat), but only the former lets a caller map an extent onto
-    /// a file offset it can wait for.
-    pub fn primary_item_is_file_construction(&self) -> bool {
-        self.primary_item
-            .as_ref()
-            .is_some_and(|item| item.construction_method == ConstructionMethod::File)
+    /// MIAF (ISO 23000-22:2019) § 7.2.1.7 restricts `construction_method` to
+    /// [`ConstructionMethod::File`] or [`ConstructionMethod::Idat`], but only
+    /// the former lets a caller map an extent onto a file offset it can wait
+    /// for.
+    pub fn primary_item_construction_method(&self) -> Option<ConstructionMethod> {
+        Some(self.primary_item.as_ref()?.construction_method)
     }
 
-    pub fn alpha_item_is_file_construction(&self) -> bool {
-        self.alpha_item
-            .as_ref()
-            .is_some_and(|item| item.construction_method == ConstructionMethod::File)
+    pub fn alpha_item_construction_method(&self) -> Option<ConstructionMethod> {
+        Some(self.alpha_item.as_ref()?.construction_method)
     }
 
     fn image_bits_per_channel(&self, item_id: ItemId) -> Result<&[u8]> {
@@ -2077,8 +2037,8 @@ impl DataBox {
     /// referencing data within this type of box.
     fn location(&self, extent: &Extent) -> IsobmffItem {
         match self.metadata {
-            DataBoxMetadata::Idat => IsobmffItem::IdatLocation(extent.clone()),
-            DataBoxMetadata::Mdat { .. } => IsobmffItem::MdatLocation(extent.clone()),
+            DataBoxMetadata::Idat => IsobmffItem::IdatLocation(*extent),
+            DataBoxMetadata::Mdat { .. } => IsobmffItem::MdatLocation(*extent),
         }
     }
 
@@ -2206,9 +2166,14 @@ struct ItemLocationBoxItem {
 /// > — `construction_method` shall be equal to 0 for MIAF image items that are coded image items.<br />
 /// > — `construction_method` shall be equal to 0 or 1 for MIAF image items that are derived image items.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ConstructionMethod {
+pub enum ConstructionMethod {
+    /// The extents are offsets into the file, so a caller can map an extent
+    /// onto a file offset it can read or wait for.
     File = 0,
+    /// The extents are offsets into the `idat` box, whose bytes this crate has
+    /// already read.
     Idat = 1,
+    /// The extents name other items; not implemented, see [`Status::ConstructionMethod`].
     Item = 2,
 }
 
@@ -2220,9 +2185,23 @@ enum ConstructionMethod {
 /// `usize::MAX` can be used in a successful indexing operation in rust.
 /// `extent_index` is omitted since it's only used for ConstructionMethod::Item which
 /// is currently not implemented.
-#[derive(Clone, Debug)]
-enum Extent {
-    WithLength { offset: u64, len: usize },
+///
+/// `offset` in either variant already has the `iloc` entry's `base_offset`
+/// added, so for [`ConstructionMethod::File`] it is an absolute file offset.
+/// See ISOBMFF (ISO 14496-12:2020) § 8.11.3.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Extent {
+    WithLength {
+        offset: u64,
+        /// Never zero: an `extent_length` of zero means "the entire length of
+        /// the source is implied" per § 8.11.3.1, which is [`Extent::ToEnd`].
+        len: usize,
+    },
+    /// The `iloc` entry gave no length, which per § 8.11.3.1 means "the entire
+    /// length of the source is implied". This crate resolves that against
+    /// whichever box the bytes were found in, so the extent ends at the end of
+    /// the enclosing `idat` or `mdat` -- not at the end of the file, even for
+    /// [`ConstructionMethod::File`].
     ToEnd { offset: u64 },
 }
 
@@ -2818,7 +2797,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
             item.construction_method = loc.construction_method;
             item.extents = TryVec::with_capacity(loc.extents.len())?;
             for extent in &loc.extents {
-                item.extents.push(ItemExtent::from(extent))?;
+                item.extents.push(*extent)?;
             }
         }
 
@@ -3964,15 +3943,17 @@ pub struct AV1LayeredImageIndexing {
 ///
 /// See <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-syntax>
 fn read_a1lx<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1LayeredImageIndexing> {
-    let flags = src.read_u8()?;
+    // Not a FullBox, so this leading byte is the reserved bits and large_size,
+    // not a version/flags word.
+    let reserved_and_large_size = src.read_u8()?;
     // unsigned int(7) reserved = 0; warned about rather than rejected, since
     // the property is non-essential and this is the only field we would be
     // guessing about.
-    if flags & 0xfe != 0 {
-        warn!("a1lx reserved bits are not zero: {flags:#x}");
+    if reserved_and_large_size & 0xfe != 0 {
+        warn!("a1lx reserved bits are not zero: {reserved_and_large_size:#x}");
     }
     // unsigned int(1) large_size; FieldLength = (large_size + 1) * 16
-    let large_size = flags & 1 == 1;
+    let large_size = reserved_and_large_size & 1 == 1;
 
     let mut layer_sizes = [0u32; 3];
     for layer_size in &mut layer_sizes {
