@@ -1281,12 +1281,17 @@ fn public_avif_a1lx() {
         assert_eq!(context.primary_item_lsel(), None);
 
         // The extents are where the layer payloads are cut from.
-        assert!(context.primary_item_is_file_construction());
+        assert_eq!(
+            context.primary_item_construction_method(),
+            Some(mp4::ConstructionMethod::File)
+        );
         let extents = context
             .primary_item_extents()
             .expect("primary item should be present");
         assert!(!extents.is_empty());
-        assert!(extents.iter().all(|e| !e.to_end && e.len > 0));
+        assert!(extents
+            .iter()
+            .all(|e| matches!(e, mp4::Extent::WithLength { .. })));
     });
 }
 
