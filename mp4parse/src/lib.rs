@@ -1726,11 +1726,19 @@ impl AvifContext {
     }
 
     /// The layer sizes from the item's AV1LayeredImageIndexingProperty, or
-    /// `None` if the item has no `a1lx`.
+    /// `None` if the item has no `a1lx` or has one which can't describe this
+    /// item's payload.
+    ///
+    /// `Some` means only that the property is *present and usable*, not that
+    /// the item is layered: the layer sizes may all be zero, which describes a
+    /// single layer and so gives no layer boundary. That is both what a
+    /// spec-legal single-layer `a1lx` looks like and what a malformed one is
+    /// reported as, since a malformed `a1lx` is discarded rather than failing
+    /// the parse. A caller asking "is this item layered" has to check
+    /// `layer_sizes[0] != 0` as well.
     ///
     /// An `a1lx` "should not be associated with AV1 Image Items consisting of
-    /// only one layer", so its presence is the practical signal that an item is
-    /// layered. See
+    /// only one layer". See
     /// <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-description>.
     pub fn primary_item_a1lx(&self) -> Option<&AV1LayeredImageIndexing> {
         self.item_a1lx(self.primary_item.as_ref()?)
@@ -1741,13 +1749,31 @@ impl AvifContext {
     }
 
     fn item_a1lx(&self, item: &AvifItem) -> Option<&AV1LayeredImageIndexing> {
-        match self
+        let a1lx = match self
             .item_properties
             .get(item.id, BoxType::AV1LayeredImageIndexingProperty)
         {
-            Ok(Some(ItemProperty::LayeredImageIndexing(a1lx))) => Some(a1lx),
-            _ => None,
+            Ok(Some(ItemProperty::LayeredImageIndexing(a1lx))) => a1lx,
+            _ => return None,
+        };
+
+        // The documented layers have to leave room for the undocumented last
+        // one, since "the size of the last layer can be determined by
+        // subtracting the sum of the sizes of all layers indicated in this
+        // property from the entire item size". Checked here rather than at
+        // parse time because one property can be associated with several
+        // items, whose payloads differ in length.
+        let documented: u64 = a1lx.layer_sizes.iter().copied().map(u64::from).sum();
+        let item_size = self.item_as_slice(item).len().to_u64();
+        if documented >= item_size {
+            warn!(
+                "a1lx layer sizes {:?} leave no last layer in the {item_size} bytes of {:?}; ignoring it",
+                a1lx.layer_sizes, item.id
+            );
+            return None;
         }
+
+        Some(a1lx)
     }
 
     /// The `lsel` layer_id for the primary item, or `None` if it has no

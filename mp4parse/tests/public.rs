@@ -1295,6 +1295,59 @@ fn public_avif_a1lx() {
     });
 }
 
+/// [`AVIF_A1LX`] with the first `layer_size` of its `a1lx` replaced by `size`.
+fn a1lx_with_first_layer_size(size: u32) -> Vec<u8> {
+    let mut buf = Vec::new();
+    File::open(AVIF_A1LX)
+        .expect("Unknown file")
+        .read_to_end(&mut buf)
+        .expect("File error");
+
+    let a1lx = buf
+        .windows(4)
+        .position(|window| window == b"a1lx")
+        .expect("a1lx box");
+    // The box is 8 bytes of header, then 1 byte of reserved/large_size, then
+    // three 32-bit layer_size fields.
+    assert_eq!(&buf[a1lx - 4..a1lx], &21u32.to_be_bytes());
+    assert_eq!(buf[a1lx + 4] & 1, 1, "expected large_size");
+    buf[a1lx + 5..a1lx + 9].copy_from_slice(&size.to_be_bytes());
+    buf
+}
+
+#[test]
+fn public_avif_a1lx_leaving_no_last_layer_is_ignored() {
+    // The documented layers have to leave room for the last, undocumented one,
+    // so an `a1lx` accounting for the whole item payload describes nothing and
+    // is ignored. That isn't fatal: the property is non-essential, and the
+    // item decodes as a single layer just as it did before `a1lx` was parsed
+    // at all.
+    let item_size: u32 = {
+        let input = &mut File::open(AVIF_A1LX).expect("Unknown file");
+        let context = mp4::read_avif(input, ParseStrictness::Normal).expect("read_avif failed");
+        context
+            .primary_item_coded_data()
+            .expect("primary item should be present")
+            .len()
+            .try_into()
+            .expect("item size should fit a layer_size")
+    };
+
+    for (size, expected) in [
+        (item_size, None),
+        (item_size - 1, Some([item_size - 1, 0, 0])),
+    ] {
+        let buf = a1lx_with_first_layer_size(size);
+        let context = mp4::read_avif(&mut Cursor::new(&buf), ParseStrictness::Normal)
+            .expect("an unusable a1lx should not fail the parse");
+        assert_eq!(
+            context.primary_item_a1lx().map(|a1lx| a1lx.layer_sizes),
+            expected,
+            "first layer_size of {size} in a {item_size} byte item"
+        );
+    }
+}
+
 #[test]
 fn public_avif_a1lx_marked_essential() {
     assert_avif_shall(IMAGE_AVIF_A1LX_MARKED_ESSENTIAL, Status::A1lxEssential);
