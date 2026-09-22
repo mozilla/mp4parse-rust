@@ -506,12 +506,13 @@ pub struct Mp4parseAvifInfo {
     /// Bit depth for the alpha item used by the `pitm`, or 0 if values are inconsistent.
     pub alpha_item_bit_depth: u8,
 
-    /// The layer sizes from the primary item's `a1lx`, or null if it has none.
+    /// The layer sizes from the primary item's `a1lx`, or null if it has none
+    /// or has one which can't describe the item's payload.
     ///
-    /// Non-null means only that the property is *present*. It gives no layer
-    /// boundary when `layer_sizes[0] == 0`, which covers both a spec-legal
-    /// single-layer `a1lx` and a malformed one, since a malformed `a1lx` is
-    /// recorded as present with no sizes rather than failing the parse. A
+    /// Non-null means only that the property is *present and usable*. It gives
+    /// no layer boundary when `layer_sizes[0] == 0`, which covers both a
+    /// spec-legal single-layer `a1lx` and a malformed one, since a malformed
+    /// `a1lx` is recorded with no sizes rather than failing the parse. A
     /// caller asking "is this item layered" therefore has to check
     /// `layer_sizes[0] != 0` too.
     ///
