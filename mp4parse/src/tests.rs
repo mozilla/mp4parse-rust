@@ -1825,3 +1825,64 @@ fn read_colr_nclx_missing_full_range_flag() {
         Err(e) => panic!("unexpected error {:?}", e),
     }
 }
+
+/// Parse the body of an `a1lx` box built from `bytes`.
+fn read_a1lx_bytes(bytes: &[u8]) -> super::AV1LayeredImageIndexing {
+    let mut stream = make_box(BoxSize::Auto, b"a1lx", |s| s.append_bytes(bytes));
+    let mut iter = super::BoxIter::new(&mut stream);
+    let mut stream = iter.next_box().unwrap().unwrap();
+    super::read_a1lx(&mut stream).expect("a1lx should never fail the parse")
+}
+
+#[test]
+fn read_a1lx_16_bit_sizes() {
+    // large_size = 0, so each layer_size is 16 bits.
+    assert_eq!(
+        read_a1lx_bytes(&[0x00, 0x00, 0x0a, 0x00, 0x14, 0x00, 0x00]).layer_sizes,
+        [10, 20, 0]
+    );
+}
+
+#[test]
+fn read_a1lx_32_bit_sizes() {
+    // large_size = 1, so each layer_size is 32 bits.
+    assert_eq!(
+        read_a1lx_bytes(&[
+            0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+        ])
+        .layer_sizes,
+        [0x0001_0000, 0, 0]
+    );
+}
+
+#[test]
+fn read_a1lx_malformed_is_ignored() {
+    // Each of these is discarded rather than failing the parse, and so is
+    // reported with no layer sizes, which reads as "not a layered image".
+    let cases: &[(&str, &[u8])] = &[
+        ("empty", &[]),
+        ("truncated", &[0x00, 0x00, 0x0a, 0x00]),
+        (
+            "overlong",
+            &[0x00, 0x00, 0x0a, 0x00, 0x14, 0x00, 0x00, 0x00],
+        ),
+        // unsigned int(7) reserved = 0
+        (
+            "non-zero reserved bits",
+            &[0x80, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00],
+        ),
+        // "a value of zero means that all the layers except the last one have
+        // been documented and following values shall be 0"
+        (
+            "size after a zero size",
+            &[0x00, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00],
+        ),
+    ];
+    for (description, bytes) in cases {
+        assert_eq!(
+            read_a1lx_bytes(bytes).layer_sizes,
+            [0, 0, 0],
+            "a1lx with {description} should be ignored"
+        );
+    }
+}

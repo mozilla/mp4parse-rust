@@ -3847,17 +3847,10 @@ fn read_ipco<T: Read>(
             BoxType::PixelInformationBox => ItemProperty::Channels(read_pixi(&mut b)?),
             BoxType::LayerSelectorProperty => ItemProperty::LayerSelection(read_lsel(&mut b)?),
             BoxType::AV1LayeredImageIndexingProperty => {
-                // Trouble reading the property leaves it recorded as present
-                // but with no layer sizes, which callers read as "not a layered
-                // image". An `a1lx` that is truncated, overlong, or has garbage
-                // in its reserved bits is no reason to fail an image which
-                // would otherwise decode: the property "shall not be marked as
-                // essential" per
-                // <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-description>,
-                // so a reader is entitled to ignore it entirely and still
-                // render the item -- it only ever documents where the layers
-                // are, never how to decode them.
-                let a1lx = read_a1lx(&mut b).unwrap_or_default();
+                // A malformed `a1lx` is reported by `read_a1lx` as a property
+                // with no layer sizes rather than as an error, so there may be
+                // unread bytes left in the box.
+                let a1lx = read_a1lx(&mut b)?;
                 skip_box_remain(&mut b)?;
                 ItemProperty::LayeredImageIndexing(a1lx)
             }
@@ -3919,6 +3912,12 @@ fn read_lsel<T: Read>(src: &mut BMFFBox<T>) -> Result<u16> {
 /// for the first layer does not necessarily match the index in the array that
 /// provides the size".
 ///
+/// An `a1lx` whose content doesn't make sense -- truncated, overlong, with
+/// non-zero reserved bits, or with a non-zero size following a zero one -- is
+/// discarded when parsed rather than failing the parse, and so is reported
+/// with all-zero `layer_sizes`, i.e. indistinguishable from a legal
+/// single-layer one.
+///
 /// See
 /// <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-semantics>.
 #[repr(C)]
@@ -3943,17 +3942,43 @@ pub struct AV1LayeredImageIndexing {
 ///
 /// See <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-syntax>
 fn read_a1lx<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1LayeredImageIndexing> {
+    // A property whose content doesn't make sense is discarded rather than
+    // fatal: an empty `AV1LayeredImageIndexing` is returned, which reads as
+    // "not a layered image". The property "shall not be marked as essential"
+    // per
+    // <https://aomediacodec.github.io/av1-avif/#layered-image-indexing-property-description>,
+    // so a reader is entitled to ignore it entirely and still render the item
+    // -- it only ever documents where the layers are, never how to decode
+    // them, and such a file decoded fine before this box was parsed at all.
+    // Errors reading the underlying source still propagate, so the size of the
+    // box is checked before reading rather than recovering from a short read.
+    if src.bytes_left() < 1 {
+        warn!("a1lx is empty; ignoring it");
+        return Ok(AV1LayeredImageIndexing::default());
+    }
     // Not a FullBox, so this leading byte is the reserved bits and large_size,
     // not a version/flags word.
     let reserved_and_large_size = src.read_u8()?;
-    // unsigned int(7) reserved = 0; warned about rather than rejected, since
-    // the property is non-essential and this is the only field we would be
-    // guessing about.
+    // unsigned int(7) reserved = 0
     if reserved_and_large_size & 0xfe != 0 {
-        warn!("a1lx reserved bits are not zero: {reserved_and_large_size:#x}");
+        warn!("a1lx reserved bits are not zero ({reserved_and_large_size:#x}); ignoring it");
+        return Ok(AV1LayeredImageIndexing::default());
     }
     // unsigned int(1) large_size; FieldLength = (large_size + 1) * 16
     let large_size = reserved_and_large_size & 1 == 1;
+    let field_len = if large_size { 4 } else { 2 };
+
+    // unsigned int(FieldLength) layer_size[3]; the box holds exactly these
+    // three fields and nothing else, so anything shorter is truncated and
+    // anything longer isn't an `a1lx` we understand.
+    let expected = 3 * field_len;
+    if src.bytes_left() != expected {
+        warn!(
+            "a1lx has {} bytes of layer_size, expected {expected}; ignoring it",
+            src.bytes_left()
+        );
+        return Ok(AV1LayeredImageIndexing::default());
+    }
 
     let mut layer_sizes = [0u32; 3];
     for layer_size in &mut layer_sizes {
@@ -3962,6 +3987,16 @@ fn read_a1lx<T: Read>(src: &mut BMFFBox<T>) -> Result<AV1LayeredImageIndexing> {
         } else {
             be_u16(src)?.into()
         };
+    }
+
+    // "a value of zero means that all the layers except the last one have been
+    // documented and following values shall be 0", so a non-zero size after a
+    // zero one leaves no way to tell which entries are layer boundaries.
+    if let Some(first_zero) = layer_sizes.iter().position(|&size| size == 0) {
+        if layer_sizes[first_zero..].iter().any(|&size| size != 0) {
+            warn!("a1lx has a non-zero layer_size after a zero one ({layer_sizes:?}); ignoring it");
+            return Ok(AV1LayeredImageIndexing::default());
+        }
     }
 
     Ok(AV1LayeredImageIndexing { layer_sizes })
