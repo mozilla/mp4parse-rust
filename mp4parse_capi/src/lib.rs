@@ -686,11 +686,20 @@ impl Read for Mp4parseIo {
             ));
         }
         let rv = self.read.unwrap()(buf.as_mut_ptr(), buf.len(), self.userdata);
-        if rv >= 0 {
-            Ok(rv as usize)
-        } else {
-            Err(std::io::Error::other("I/O error in Mp4parseIo Read impl"))
+        if rv < 0 {
+            return Err(std::io::Error::other("I/O error in Mp4parseIo Read impl"));
         }
+        // The callback can only have written into the `buf.len()` bytes we
+        // handed it, so a larger count is a broken callback. Returning it would
+        // break the `Read` contract that the count never exceeds `buf.len()`,
+        // which `read_exact`/`read_to_end`/`Take` rely on to stay within the
+        // buffer.
+        if rv as usize > buf.len() {
+            return Err(std::io::Error::other(
+                "read count exceeds buffer length in Mp4parseIo Read impl",
+            ));
+        }
+        Ok(rv as usize)
     }
 }
 
@@ -1910,6 +1919,25 @@ extern "C" fn valid_read(buf: *mut u8, size: usize, userdata: *mut std::os::raw:
         Ok(n) => n as isize,
         Err(_) => -1,
     }
+}
+
+#[cfg(test)]
+extern "C" fn overreporting_read(_: *mut u8, size: usize, _: *mut std::os::raw::c_void) -> isize {
+    // A misbehaving callback that claims to have produced more bytes than the
+    // buffer it was given can hold.
+    (size + 1) as isize
+}
+
+#[test]
+fn io_read_rejects_count_past_buffer() {
+    let mut io = Mp4parseIo {
+        read: Some(overreporting_read),
+        userdata: std::ptr::null_mut(),
+    };
+    let mut buf = [0u8; 8];
+    // A count larger than buf.len() would break the Read contract downstream
+    // consumers depend on, so it must surface as an error rather than Ok(9).
+    assert!(io.read(&mut buf).is_err());
 }
 
 #[test]
