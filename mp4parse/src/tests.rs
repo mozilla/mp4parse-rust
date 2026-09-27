@@ -1068,6 +1068,42 @@ fn skip_padding_in_boxes() {
 }
 
 #[test]
+fn reject_oversized_entry_count_in_stbl_boxes() {
+    // A tiny sample table box that declares an entry count far larger than its
+    // size can hold must be rejected before the count is used to preallocate,
+    // matching the guard read_ctts already has. Each box carries only its
+    // count field (0xffff_ffff) and no entries.
+    fn assert_bad_entry_count(result: super::Result<impl std::fmt::Debug>) {
+        match result {
+            Err(Error::InvalidData(s)) => assert_eq!(s, Status::StblBadEntryCount),
+            other => panic!("expected StblBadEntryCount, got {:?}", other),
+        }
+    }
+
+    macro_rules! read_box {
+        ($name:expr, $count_field:expr, $read:expr) => {{
+            let mut stream = make_fullbox(BoxSize::Auto, $name, 1, $count_field);
+            let mut iter = super::BoxIter::new(&mut stream);
+            let mut stream = iter.next_box().unwrap().unwrap();
+            assert_bad_entry_count($read(&mut stream));
+        }};
+    }
+
+    read_box!(b"stco", |s: Section| s.B32(0xffff_ffff), super::read_stco);
+    read_box!(b"co64", |s: Section| s.B32(0xffff_ffff), super::read_co64);
+    read_box!(b"stss", |s: Section| s.B32(0xffff_ffff), super::read_stss);
+    read_box!(b"stsc", |s: Section| s.B32(0xffff_ffff), super::read_stsc);
+    read_box!(b"stts", |s: Section| s.B32(0xffff_ffff), super::read_stts);
+    // stsz reads sample_size first; a zero sample_size means per-sample sizes
+    // follow, so the sample_count is what drives the allocation.
+    read_box!(
+        b"stsz",
+        |s: Section| s.B32(0).B32(0xffff_ffff),
+        super::read_stsz
+    );
+}
+
+#[test]
 fn skip_padding_in_stsd() {
     // Padding data could be added in the end of stsd boxes. Parser needs to skip
     // them instead of returning error.
