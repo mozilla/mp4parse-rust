@@ -1727,9 +1727,19 @@ fn get_indice_table(
         _ => None,
     };
 
-    let empty_duration: Option<CheckedInteger<_>> = match &track.empty_duration {
-        &Some(e) => i64::try_from(e.0).ok().map(Into::into),
-        _ => None,
+    let empty_duration: Option<CheckedInteger<_>> = match track.empty_duration {
+        Some(duration) => {
+            let movie_timescale = context.timescale.ok_or(Mp4parseStatus::Invalid)?;
+            let track_timescale = track.timescale.ok_or(Mp4parseStatus::Invalid)?;
+            let duration = rational_scale(duration.0, movie_timescale.0, track_timescale.0)
+                .ok_or(Mp4parseStatus::Invalid)?;
+            Some(
+                i64::try_from(duration)
+                    .map_err(|_| Mp4parseStatus::Invalid)?
+                    .into(),
+            )
+        }
+        None => None,
     };
 
     // Find the track start offset time from 'elst'.
@@ -2375,4 +2385,75 @@ fn parse_no_timescale() {
         rv = mp4parse_get_track_info(parser, 0, &mut track_info);
         assert_eq!(rv, Mp4parseStatus::Invalid);
     };
+}
+
+#[cfg(test)]
+mod edit_list_tests {
+    use super::*;
+    use mp4parse::{MediaScaledTime, MediaTimeScale, TrackScaledTime, TrackTimeScale};
+
+    fn context() -> MediaContext {
+        let mut file = std::fs::File::open("tests/video_colr_nclx_hdr10.mp4").unwrap();
+        let mut context = mp4parse::read_mp4(&mut file, ParseStrictness::Normal).unwrap();
+        context.tracks[0].ctts = None;
+        context.tracks[0].media_time = Some(TrackScaledTime(0, 0));
+        context
+    }
+
+    #[test]
+    fn empty_edit_uses_movie_timescale() {
+        for (movie_scale, track_scale, duration, media_time, expected) in [
+            (57600, 60, 960, 0, 1),
+            (60, 57600, 960, 0, 921600),
+            (60, 60, 960, 0, 960),
+            (57600, 60, 960, 2, -1),
+            (4, 1, u64::MAX - 3, 0, (u64::MAX / 4) as i64),
+        ] {
+            let mut context = context();
+            context.timescale = Some(MediaTimeScale(movie_scale));
+            let track = &mut context.tracks[0];
+            track.timescale = Some(TrackTimeScale(track_scale, 0));
+            track.empty_duration = Some(MediaScaledTime(duration));
+            track.media_time = Some(TrackScaledTime(media_time, 0));
+            let track_id = track.track_id.unwrap();
+            let mut cache = TryHashMap::default();
+            let mut indices = Mp4parseByteData::default();
+            assert_eq!(
+                get_indice_table(&context, &mut cache, track_id, &mut indices),
+                Ok(())
+            );
+            assert!(indices.length > 0);
+            assert!(!indices.indices.is_null());
+            let first = unsafe { &*indices.indices };
+            assert_eq!(first.start_composition.0, expected);
+            assert_eq!(first.start_decode.0, 0);
+        }
+    }
+
+    #[test]
+    fn invalid_empty_edit_timescale() {
+        for (movie_scale, track_scale, duration) in [
+            (None, Some(60), 960),
+            (Some(57600), None, 960),
+            (Some(0), Some(60), 960),
+            (Some(1), Some(2), u64::MAX),
+            (Some(1), Some(1), u64::MAX),
+        ] {
+            let mut context = context();
+            context.timescale = movie_scale.map(MediaTimeScale);
+            let track = &mut context.tracks[0];
+            track.timescale = track_scale.map(|scale| TrackTimeScale(scale, 0));
+            track.empty_duration = Some(MediaScaledTime(duration));
+            let track_id = track.track_id.unwrap();
+            assert_eq!(
+                get_indice_table(
+                    &context,
+                    &mut TryHashMap::default(),
+                    track_id,
+                    &mut Mp4parseByteData::default()
+                ),
+                Err(Mp4parseStatus::Invalid)
+            );
+        }
+    }
 }

@@ -81,20 +81,20 @@ fn parse_sample_table() {
         rv = mp4parse_get_indice_table(parser, track_info.track_id, &mut indice);
         assert_eq!(rv, Mp4parseStatus::Ok);
 
-        // Compare the last few data from stagefright.
+        // The 95-tick empty edit at 1000 Hz adds 8550 ticks at 90000 Hz.
         let video_indice_291 = Indice {
             start_offset: 280_226.into(),
             end_offset: 280_855.into(),
-            start_composition: 876995.into(),
-            end_composition: 879996.into(),
+            start_composition: 885450.into(),
+            end_composition: 888451.into(),
             start_decode: 873900.into(),
             sync: false,
         };
         let video_indice_292 = Indice {
             start_offset: 280_855.into(),
             end_offset: 281_297.into(),
-            start_composition: 873996.into(),
-            end_composition: 876995.into(),
+            start_composition: 882451.into(),
+            end_composition: 885450.into(),
             start_decode: 873901.into(),
             sync: false,
         };
@@ -105,16 +105,16 @@ fn parse_sample_table() {
         let video_indice_295 = Indice {
             start_offset: 282_391.into(),
             end_offset: 283_032.into(),
-            start_composition: 888995.into(),
-            end_composition: 888996.into(),
+            start_composition: 897450.into(),
+            end_composition: 897451.into(),
             start_decode: 885900.into(),
             sync: false,
         };
         let video_indice_296 = Indice {
             start_offset: 283_092.into(),
             end_offset: 283_526.into(),
-            start_composition: 885996.into(),
-            end_composition: 888995.into(),
+            start_composition: 894451.into(),
+            end_composition: 897450.into(),
             start_decode: 885901.into(),
             sync: false,
         };
