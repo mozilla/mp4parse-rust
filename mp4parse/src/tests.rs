@@ -1629,6 +1629,38 @@ fn read_esds_invalid_descriptor() {
 }
 
 #[test]
+fn find_descriptor_respects_depth_limit() {
+    let aac_esds = [
+        0x03, 0x16, 0x00, 0x01, 0x00, // ES descriptor
+        0x04, 0x11, 0x40, 0x15, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // Decoder config
+        0x05, 0x02, 0x11, 0x90, // Decoder-specific info
+    ];
+
+    for strictness in [
+        ParseStrictness::Permissive,
+        ParseStrictness::Normal,
+        ParseStrictness::Strict,
+    ] {
+        for remaining_depth in [1, 2] {
+            let result = super::find_descriptor(
+                &aac_esds,
+                &mut super::ES_Descriptor::default(),
+                strictness,
+                remaining_depth,
+            );
+            assert!(matches!(
+                result,
+                Err(Error::InvalidData(Status::EsdsBadDescriptor))
+            ));
+        }
+
+        let mut esds = super::ES_Descriptor::default();
+        super::find_descriptor(&aac_esds, &mut esds, strictness, 3).unwrap();
+        assert_eq!(esds.audio_codec, super::CodecType::AAC);
+    }
+}
+
+#[test]
 fn read_esds_redundant_descriptor() {
     // the '2' at the end is redundant data.
     let esds = vec![

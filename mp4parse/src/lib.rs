@@ -5420,6 +5420,7 @@ fn find_descriptor(
     data: &[u8],
     esds: &mut ES_Descriptor,
     strictness: ParseStrictness,
+    remaining_depth: u8,
 ) -> Result<()> {
     // Tags for elementary stream description
     const ESDESCR_TAG: u8 = 0x03;
@@ -5430,6 +5431,9 @@ fn find_descriptor(
 
     // Descriptor length should be more than 2 bytes.
     while remains.len() > 2 {
+        let remaining_depth = remaining_depth
+            .checked_sub(1)
+            .ok_or(Status::EsdsBadDescriptor)?;
         let des = &mut Cursor::new(remains);
         let tag = des.read_u8()?;
 
@@ -5460,10 +5464,10 @@ fn find_descriptor(
 
         match tag {
             ESDESCR_TAG => {
-                read_es_descriptor(descriptor, esds, strictness)?;
+                read_es_descriptor(descriptor, esds, strictness, remaining_depth)?;
             }
             DECODER_CONFIG_TAG => {
-                read_dc_descriptor(descriptor, esds, strictness)?;
+                read_dc_descriptor(descriptor, esds, strictness, remaining_depth)?;
             }
             DECODER_SPECIFIC_TAG => match read_ds_descriptor(descriptor, esds, strictness) {
                 Ok(()) => {}
@@ -5715,6 +5719,7 @@ fn read_dc_descriptor(
     data: &[u8],
     esds: &mut ES_Descriptor,
     strictness: ParseStrictness,
+    remaining_depth: u8,
 ) -> Result<()> {
     let des = &mut Cursor::new(data);
     let object_profile = des.read_u8()?;
@@ -5735,6 +5740,7 @@ fn read_dc_descriptor(
             &data[des.position().try_into()?..data.len()],
             esds,
             strictness,
+            remaining_depth,
         )?;
     }
 
@@ -5763,6 +5769,7 @@ fn read_es_descriptor(
     data: &[u8],
     esds: &mut ES_Descriptor,
     strictness: ParseStrictness,
+    remaining_depth: u8,
 ) -> Result<()> {
     let des = &mut Cursor::new(data);
 
@@ -5788,6 +5795,7 @@ fn read_es_descriptor(
             &data[des.position().try_into()?..data.len()],
             esds,
             strictness,
+            remaining_depth,
         )?;
     }
 
@@ -5796,12 +5804,16 @@ fn read_es_descriptor(
 
 /// See MP4 (ISO 14496-14:2020) § 6.7.2
 fn read_esds<T: Read>(src: &mut BMFFBox<T>, strictness: ParseStrictness) -> Result<ES_Descriptor> {
+    // A typical decoder configuration uses three descriptor levels. Leave room
+    // for unusual files while bounding native stack usage.
+    const MAX_DESCRIPTOR_DEPTH: u8 = 16;
+
     let (_, _) = read_fullbox_extra(src)?;
 
     let esds_array = read_buf(src, src.bytes_left())?;
 
     let mut es_data = ES_Descriptor::default();
-    find_descriptor(&esds_array, &mut es_data, strictness)?;
+    find_descriptor(&esds_array, &mut es_data, strictness, MAX_DESCRIPTOR_DEPTH)?;
 
     es_data.codec_esds = esds_array;
 
