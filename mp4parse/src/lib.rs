@@ -2811,10 +2811,7 @@ pub fn read_avif<T: Read>(f: &mut T, strictness: ParseStrictness) -> Result<Avif
                     }
                 }
                 ConstructionMethod::Item => {
-                    fail_with_status_if(
-                        strictness != ParseStrictness::Permissive,
-                        Status::ConstructionMethod,
-                    )?;
+                    return Status::ConstructionMethod.into();
                 }
             }
         }
