@@ -267,6 +267,7 @@ pub enum Status {
     PsshSizeOverflow,
     ReadBufErr,
     SchiQuantity,
+    StblBadEntryCount,
     StsdBadAudioSampleEntry,
     StsdBadVideoSampleEntry,
     TkhdBadVersion,
@@ -755,6 +756,9 @@ impl From<Status> for &str {
             }
             Status::SchiQuantity => {
                 "tenc box should be only one at most in sinf box"
+            }
+            Status::StblBadEntryCount => {
+                "sample table box declares more entries than its size can hold"
             }
             Status::StsdBadAudioSampleEntry => {
                 "malformed audio sample entry"
@@ -5124,6 +5128,12 @@ fn read_mdhd<T: Read>(src: &mut BMFFBox<T>) -> Result<MediaHeaderBox> {
 fn read_stco<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let offset_count = be_u32(src)?;
+    if offset_count
+        .checked_mul(4)
+        .is_none_or(|bytes| u64::from(bytes) > src.bytes_left())
+    {
+        return Status::StblBadEntryCount.into();
+    }
     let mut offsets = TryVec::with_capacity(offset_count.to_usize())?;
     for _ in 0..offset_count {
         offsets.push(be_u32(src)?.into())?;
@@ -5140,6 +5150,12 @@ fn read_stco<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
 fn read_co64<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let offset_count = be_u32(src)?;
+    if offset_count
+        .checked_mul(8)
+        .is_none_or(|bytes| u64::from(bytes) > src.bytes_left())
+    {
+        return Status::StblBadEntryCount.into();
+    }
     let mut offsets = TryVec::with_capacity(offset_count.to_usize())?;
     for _ in 0..offset_count {
         offsets.push(be_u64(src)?)?;
@@ -5156,6 +5172,12 @@ fn read_co64<T: Read>(src: &mut BMFFBox<T>) -> Result<ChunkOffsetBox> {
 fn read_stss<T: Read>(src: &mut BMFFBox<T>) -> Result<SyncSampleBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let sample_count = be_u32(src)?;
+    if sample_count
+        .checked_mul(4)
+        .is_none_or(|bytes| u64::from(bytes) > src.bytes_left())
+    {
+        return Status::StblBadEntryCount.into();
+    }
     let mut samples = TryVec::with_capacity(sample_count.to_usize())?;
     for _ in 0..sample_count {
         samples.push(be_u32(src)?)?;
@@ -5172,6 +5194,12 @@ fn read_stss<T: Read>(src: &mut BMFFBox<T>) -> Result<SyncSampleBox> {
 fn read_stsc<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleToChunkBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let sample_count = be_u32(src)?;
+    if sample_count
+        .checked_mul(12)
+        .is_none_or(|bytes| u64::from(bytes) > src.bytes_left())
+    {
+        return Status::StblBadEntryCount.into();
+    }
     let mut samples = TryVec::with_capacity(sample_count.to_usize())?;
     for _ in 0..sample_count {
         let first_chunk = be_u32(src)?;
@@ -5246,6 +5274,12 @@ fn read_stsz<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleSizeBox> {
     let sample_count = be_u32(src)?;
     let mut sample_sizes = TryVec::new();
     if sample_size == 0 {
+        if sample_count
+            .checked_mul(4)
+            .is_none_or(|bytes| u64::from(bytes) > src.bytes_left())
+        {
+            return Status::StblBadEntryCount.into();
+        }
         sample_sizes.reserve(sample_count.to_usize())?;
         for _ in 0..sample_count {
             sample_sizes.push(be_u32(src)?)?;
@@ -5267,6 +5301,12 @@ fn read_stsz<T: Read>(src: &mut BMFFBox<T>) -> Result<SampleSizeBox> {
 fn read_stts<T: Read>(src: &mut BMFFBox<T>) -> Result<TimeToSampleBox> {
     let (_, _) = read_fullbox_extra(src)?;
     let sample_count = be_u32(src)?;
+    if sample_count
+        .checked_mul(8)
+        .is_none_or(|bytes| u64::from(bytes) > src.bytes_left())
+    {
+        return Status::StblBadEntryCount.into();
+    }
     let mut samples = TryVec::with_capacity(sample_count.to_usize())?;
     for _ in 0..sample_count {
         let sample_count = be_u32(src)?;
