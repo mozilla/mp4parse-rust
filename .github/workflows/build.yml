@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2025, macos-14]
+        os: [ubuntu-24.04, windows-2025, macos-15]
         rust: [stable]
         release: [true, false]
         experimental: [false]
@@ -30,7 +30,7 @@ jobs:
             rust: nightly
             release: false
             experimental: false
-          - os: macos-14
+          - os: macos-15
             rust: nightly
             release: false
             experimental: false
